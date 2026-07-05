@@ -1,5 +1,7 @@
 # kestra-build / kestra-run — TDD-locked workflow pipeline
 
+*[อ่านเป็นภาษาไทย](README-th.md)*
+
 These two skills work together as a **generator + orchestrator** for building and running a
 "stage machine" that actually enforces TDD (not just asking the AI nicely to write tests first).
 It freezes tests once written, restricts which files each stage may touch, and commits per stage
