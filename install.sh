@@ -11,6 +11,7 @@
 #   ./install.sh --project <path>   # install into <path>/.claude/skills
 #   ./install.sh --link             # symlink instead of copy (tracks repo updates)
 #   ./install.sh --force            # overwrite an existing install
+#   ./install.sh --update           # pull latest + refresh an existing install in place
 #   ./install.sh --uninstall        # remove a previous install (global by default)
 #   ./install.sh -h | --help
 #
@@ -18,7 +19,17 @@
 #   ./install.sh                                # ~/.claude/skills/kestra-build, kestra-run
 #   ./install.sh --project ~/code/my-app         # ~/code/my-app/.claude/skills/...
 #   ./install.sh --link                          # symlink so `git pull` here updates the skill everywhere
+#   ./install.sh --update                        # git pull this repo, then refresh the global copy install
+#   ./install.sh --update --project ~/code/my-app  # same, for a project-scoped install
 #   ./install.sh --uninstall --project ~/code/my-app
+#
+# --update vs --link:
+#   A --link install already stays current — `git pull` in this repo is enough,
+#   nothing to re-copy. --update exists for a *copy* install: it pulls this repo
+#   (if it's a clean git checkout) and then re-copies kestra-build/kestra-run over
+#   the existing install. Running --update against a --link install just verifies
+#   the symlink still points here (or fixes it if the repo moved) — it will not
+#   silently turn your symlink into a copy.
 
 set -euo pipefail
 
@@ -30,9 +41,10 @@ SCOPE="global"        # global | project
 PROJECT_DIR=""
 FORCE=0
 UNINSTALL=0
+UPDATE=0
 
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -56,6 +68,10 @@ while [ $# -gt 0 ]; do
       ;;
     --uninstall)
       UNINSTALL=1
+      shift
+      ;;
+    --update)
+      UPDATE=1
       shift
       ;;
     -h|--help)
@@ -98,6 +114,17 @@ if [ "$UNINSTALL" = "1" ]; then
   exit 0
 fi
 
+if [ "$UPDATE" = "1" ] && [ -d "$SCRIPT_DIR/.git" ]; then
+  if git -C "$SCRIPT_DIR" diff --quiet 2>/dev/null && git -C "$SCRIPT_DIR" diff --cached --quiet 2>/dev/null; then
+    echo "pulling latest changes in $SCRIPT_DIR ..."
+    if ! git -C "$SCRIPT_DIR" pull --ff-only; then
+      echo "warn: git pull failed — continuing with the local working tree as-is" >&2
+    fi
+  else
+    echo "note: $SCRIPT_DIR has local changes — skipping git pull, updating from the working tree as-is"
+  fi
+fi
+
 mkdir -p "$TARGET_DIR"
 
 for skill in "${SKILLS[@]}"; do
@@ -109,11 +136,27 @@ for skill in "${SKILLS[@]}"; do
     exit 1
   fi
 
-  if [ -e "$dest" ] || [ -L "$dest" ]; then
-    if [ "$FORCE" = "1" ]; then
+  existing="none"
+  if [ -L "$dest" ]; then
+    existing="link"
+  elif [ -e "$dest" ]; then
+    existing="copy"
+  fi
+
+  if [ "$existing" != "none" ]; then
+    if [ "$UPDATE" = "1" ]; then
+      # A symlink install already tracks this repo live — nothing to re-copy,
+      # unless the user explicitly asked to switch modes (--link on a copy
+      # install, or the reverse) or the link is stale (repo moved).
+      if [ "$existing" = "link" ] && [ "$MODE" = "copy" ] && [ "$(readlink "$dest")" = "$src" ]; then
+        echo "up to date (symlink): $dest -> $src"
+        continue
+      fi
+      rm -rf "$dest"
+    elif [ "$FORCE" = "1" ]; then
       rm -rf "$dest"
     else
-      echo "error: $dest already exists — pass --force to overwrite, or --uninstall first" >&2
+      echo "error: $dest already exists — pass --force or --update to refresh it, or --uninstall first" >&2
       exit 1
     fi
   fi
@@ -137,7 +180,11 @@ else
 fi
 
 echo
-echo "Installed kestra-build and kestra-run under: $TARGET_DIR"
+if [ "$UPDATE" = "1" ]; then
+  echo "Updated kestra-build and kestra-run under: $TARGET_DIR"
+else
+  echo "Installed kestra-build and kestra-run under: $TARGET_DIR"
+fi
 if [ "$SCOPE" = "global" ]; then
   echo "Available in every project. Restart Claude Code (or start a new session) to pick them up."
 else

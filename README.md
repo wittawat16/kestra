@@ -36,8 +36,19 @@ cd kestra-workflow-skills
 ./install.sh --project ~/code/app   # ติดตั้งเฉพาะโปรเจกต์เดียว (<path>/.claude/skills/)
 ./install.sh --link                 # symlink แทนการ copy — เวลา git pull repo นี้ skill จะอัปเดตตามทันที
 ./install.sh --force                # เขียนทับถ้ามีติดตั้งอยู่แล้ว
+./install.sh --update               # ดึงโค้ดล่าสุด (git pull ใน repo นี้) แล้ว refresh ของที่ติดตั้งไว้
 ./install.sh --uninstall            # ถอนการติดตั้ง (ใส่ --project เดียวกับตอนติดตั้ง ถ้าไม่ใช่ global)
 ```
+
+### อัปเดต skill ให้เป็นเวอร์ชันล่าสุด
+
+ถ้าติดตั้งแบบ **`--link`** ไว้ — ไม่ต้องทำอะไรเพิ่ม แค่ `git pull` ใน repo นี้ก็พอ เพราะ symlink
+ชี้ตรงมาที่นี่อยู่แล้ว
+
+ถ้าติดตั้งแบบ **copy** (ค่า default) — รัน `./install.sh --update` (ใส่ `--project <path>` ด้วย
+ถ้าติดตั้งแบบ project-scoped): สคริปต์จะ `git pull` โค้ดล่าสุดใน repo นี้ก่อน (ข้ามให้ถ้า repo
+มีการแก้ไขค้างอยู่ที่ยังไม่ commit เพื่อไม่ไปทับงานที่ทำค้างไว้) แล้วค่อย copy ทับของเดิมที่ติดตั้งไว้
+ให้ตรงกับเวอร์ชันล่าสุด — ไม่ต้องใส่ `--force` เพิ่ม และไม่ต้อง uninstall ก่อน
 
 รันแล้ว restart Claude Code (หรือเปิด session ใหม่) เพื่อให้ skill ใหม่ถูกโหลด ไม่มี dependency
 ภายนอกอะไรต้องติดตั้งเพิ่ม — สคริปต์ dry-run ของ kestra-build (`validate_workflow.py`) ใช้แค่
