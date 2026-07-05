@@ -24,9 +24,24 @@ spec (0-spec.md)
 
 ## การติดตั้ง
 
-Repo นี้คือตัว skill เอง — clone แล้ววางโฟลเดอร์ `kestra-build/` และ `kestra-run/` ไว้ใต้
-`.claude/skills/` ของโปรเจกต์ (หรือ `~/.claude/skills/` สำหรับใช้ทุกโปรเจกต์) แล้ว Claude Code
-จะ auto-discover ให้เอง ไม่ต้องตั้งค่าอะไรเพิ่ม
+Repo นี้คือตัว skill เอง — clone แล้วรัน `install.sh` เพื่อคัดลอก (หรือ symlink) โฟลเดอร์
+`kestra-build/` และ `kestra-run/` ไปวางไว้ในตำแหน่งที่ Claude Code auto-discover skill ให้เอง
+ไม่ต้องแก้ config อะไรเพิ่ม:
+
+```bash
+git clone <this-repo-url> kestra-workflow-skills
+cd kestra-workflow-skills
+
+./install.sh                        # ติดตั้งแบบ global — ใช้ได้ทุกโปรเจกต์ (~/.claude/skills/)
+./install.sh --project ~/code/app   # ติดตั้งเฉพาะโปรเจกต์เดียว (<path>/.claude/skills/)
+./install.sh --link                 # symlink แทนการ copy — เวลา git pull repo นี้ skill จะอัปเดตตามทันที
+./install.sh --force                # เขียนทับถ้ามีติดตั้งอยู่แล้ว
+./install.sh --uninstall            # ถอนการติดตั้ง (ใส่ --project เดียวกับตอนติดตั้ง ถ้าไม่ใช่ global)
+```
+
+รันแล้ว restart Claude Code (หรือเปิด session ใหม่) เพื่อให้ skill ใหม่ถูกโหลด ไม่มี dependency
+ภายนอกอะไรต้องติดตั้งเพิ่ม — สคริปต์ dry-run ของ kestra-build (`validate_workflow.py`) ใช้แค่
+`python3` มาตรฐาน (ไม่ต้องมี PyYAML หรือ third-party package ใด ๆ)
 
 ---
 
