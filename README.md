@@ -1,6 +1,12 @@
-# kestra-build / kestra-run — TDD-locked workflow pipeline
+# Claude Code skills — TDD-locked workflow pipeline + productivity helpers
 
 *[อ่านเป็นภาษาไทย](README-th.md)*
+
+This repo hosts a small collection of Claude Code skills, grouped by folder: `workflow/`
+(`kestra-build` + `kestra-run`, detailed below) and `productivity/` (`givename` — see
+[its own README](productivity/givename/README.md)). One `install.sh` installs all of them.
+
+## workflow/ — kestra-build & kestra-run
 
 These two skills work together as a **generator + orchestrator** for building and running a
 "stage machine" that actually enforces TDD (not just asking the AI nicely to write tests first).
@@ -28,8 +34,15 @@ if that skill isn't installed.
 
 ## Installation
 
-This repo *is* the skill — clone it and run `install.sh` to copy (or symlink) the `kestra-build/`
-and `kestra-run/` folders into wherever Claude Code auto-discovers skills. No extra config needed:
+This repo *is* the skills — clone it and run `install.sh` to copy (or symlink) every skill folder
+(`workflow/kestra-build/`, `workflow/kestra-run/`, `productivity/givename/`, ...) into wherever
+Claude Code auto-discovers skills. No extra config needed, and no way to install just one — it
+installs the whole set in one go:
+
+The repo groups skills by folder (`workflow/`, `productivity/`; future groups get their own
+top-level folder the same way) — `install.sh` installs each skill flat by its own name under the
+target skills dir regardless of which group folder it came from, since that's the layout Claude
+Code actually discovers.
 
 ```bash
 git clone <this-repo-url> kestra-workflow-skills
@@ -61,7 +74,7 @@ needs a plain `python3`, no PyYAML or any third-party package.
 
 ## kestra-build — the workflow generator
 
-**Location:** [`kestra-build/`](kestra-build/) · more detail: [`kestra-build/README.md`](kestra-build/README.md), [`kestra-build/SKILL.md`](kestra-build/SKILL.md)
+**Location:** [`kestra-build/`](workflow/kestra-build/) · more detail: [`kestra-build/README.md`](workflow/kestra-build/README.md), [`kestra-build/SKILL.md`](workflow/kestra-build/SKILL.md)
 
 ### What it does
 
@@ -123,7 +136,7 @@ regenerating tests, re-freezing, and resetting the attempt counter.
 4. Fill in every stage's fields: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
    `on_fail`, `freeze_after`.
 5. Write `workflow.yaml` + `state.json`.
-6. **Always dry-run first**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` — a
+6. **Always dry-run first**: `python3 workflow/kestra-build/scripts/validate_workflow.py <output-dir>` — a
    zero-LLM structural check (no PyYAML, no AI judgment) that catches 7 main things:
    - Missing `on_fail.target` on a `write_scope: []` + `action: fixing` stage
    - `write_scope` overlapping a path that was already frozen as a test path
@@ -148,7 +161,7 @@ regenerating tests, re-freezing, and resetting the attempt counter.
 
 ## kestra-run — the orchestrator that runs the workflow
 
-**Location:** [`kestra-run/`](kestra-run/) · more detail: [`kestra-run/README.md`](kestra-run/README.md), [`kestra-run/SKILL.md`](kestra-run/SKILL.md)
+**Location:** [`kestra-run/`](workflow/kestra-run/) · more detail: [`kestra-run/README.md`](workflow/kestra-run/README.md), [`kestra-run/SKILL.md`](workflow/kestra-run/SKILL.md)
 
 ### What it does
 
@@ -223,11 +236,11 @@ time.
 
 | File | Contents |
 |---|---|
-| [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | Where every state/transition comes from, the "Default HITL posture," why there's no mid-workflow replanning |
-| [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | Full field reference for `workflow.yaml`, with a complete worked example (csv-export) |
-| [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | Field reference for `state.json` |
-| [`kestra-run/references/enforcement.md`](kestra-run/references/enforcement.md) | The exact real commands used for every check (write_scope diff, test-hash, commit-per-stage, rollback) |
-| [`kestra-run/references/efficiency-notes.md`](kestra-run/references/efficiency-notes.md) | Why each efficiency shortcut is safe (not spawning a fresh agent every stage, resuming instead of respawning, etc.) |
+| [`kestra-build/references/design-principles.md`](workflow/kestra-build/references/design-principles.md) | Where every state/transition comes from, the "Default HITL posture," why there's no mid-workflow replanning |
+| [`kestra-build/references/workflow-schema.md`](workflow/kestra-build/references/workflow-schema.md) | Full field reference for `workflow.yaml`, with a complete worked example (csv-export) |
+| [`kestra-build/references/state-schema.md`](workflow/kestra-build/references/state-schema.md) | Field reference for `state.json` |
+| [`kestra-run/references/enforcement.md`](workflow/kestra-run/references/enforcement.md) | The exact real commands used for every check (write_scope diff, test-hash, commit-per-stage, rollback) |
+| [`kestra-run/references/efficiency-notes.md`](workflow/kestra-run/references/efficiency-notes.md) | Why each efficiency shortcut is safe (not spawning a fresh agent every stage, resuming instead of respawning, etc.) |
 
 ## What's intentionally "not done"
 
@@ -238,6 +251,20 @@ time.
   might be suggested in a stage's `brief` is only ever a suggestion ("try it if it's there"), never
   a requirement, so a generated `workflow.yaml` can move to a different machine/session with a
   different skill set and keep working.
+
+---
+
+## productivity/ — givename
+
+A small, standalone skill — no relation to the workflow pipeline above beyond living in the same
+repo. Ask it to name a variable, function, file, git branch, commit, or new project/feature/skill,
+and it reads the actual naming convention nearby (casing, sibling names, `git log`/`git branch`
+history) before answering, instead of reciting generic naming advice.
+
+Always returns exactly 5 candidates, ordered shortest to longest, as a numbered list — each with a
+one-line reason tied to real evidence it looked at. See
+[`productivity/givename/README.md`](productivity/givename/README.md) for examples and
+[`productivity/givename/SKILL.md`](productivity/givename/SKILL.md) for the full process.
 
 ## License
 
