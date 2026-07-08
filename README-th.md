@@ -11,7 +11,7 @@ clone แล้วรัน `install.sh` ครั้งเดียวเพื
 | กลุ่ม | Skill | ใช้ทำอะไร |
 |---|---|---|
 | [`workflow/`](workflow/README-th.md) | `kestra-build`, `kestra-run` | ตัวสร้าง + ตัวรัน "stage machine" แบบล็อก TDD — แปลง spec ของฟีเจอร์เป็น `workflow.yaml`/`state.json` แล้วรันจริง ตรวจสอบทุกขั้นตอนแบบ mechanical (ไม่ใช้วิจารณญาณของ AI) |
-| [`meta/`](meta/README.md) | `meta-pm`, `meta-ba`, `meta-designer`, `meta-sa`, `meta-architect`, `meta-dev`, `meta-qa`, `meta-review`, `meta-security`, `meta-devops` | 10 skill ตามบทบาทสำหรับ spec→plan→build→review (PM, BA, designer, solution architect, architect, dev, QA, review, security, devops) — เรียกใช้ตัวเดียวโดยตรง หรือ chain เองก็ได้ ไม่มี orchestrator ตายตัว |
+| [`meta/`](meta/README.md) | `meta-pm`, `meta-ba`, `meta-designer`, `meta-sa`, `meta-architect`, `meta-dev`, `meta-qa`, `meta-review`, `meta-security`, `meta-devops`, `meta-debug` | 11 skill ตามบทบาทสำหรับ spec→plan→build→review (PM, BA, designer, solution architect, architect, dev, QA, review, security, devops, บวก 4-mantra debugging discipline) — เรียกใช้ตัวเดียวโดยตรง หรือ chain เองก็ได้ ไม่มี orchestrator ตายตัว |
 | [`productivity/`](productivity/README.md) | `givename` | ช่วยตั้งชื่อ (ตัวแปร, ไฟล์, branch, commit, โปรเจกต์/skill ใหม่) โดยหา naming convention จริงที่มีอยู่รอบๆ ก่อน |
 
 รายละเอียดเต็มของแต่ละ skill อยู่ใน README ของกลุ่มนั้นๆ — มันทำอะไร ใช้ยังไง และเอกสารอ้างอิง

@@ -1,6 +1,6 @@
 # meta/ — role-based spec→plan→build→review agents
 
-Ten specialized skills, each modeling one role in a software delivery team — no fixed orchestrator
+Eleven specialized skills, each modeling one role in a software delivery team — no fixed orchestrator
 chains them; call one directly, chain them yourself, or reference one by name from a stage brief in
 a `workflow/kestra-build`-generated `workflow.yaml`. The name borrows from
 [MetaGPT](https://github.com/geekan/MetaGPT), a multi-agent framework that assigns the same kind of
@@ -22,6 +22,7 @@ enforcement), these are judgment-driven role skills — no shared enforcement ma
 | [`meta-review/`](meta-review/) | 3a | Independent code review of the real diff — correctness, edge cases, error handling, consistency |
 | [`meta-security/`](meta-security/) | 3b | Independent security review of the real diff — injection, authn/authz, secrets, vulnerable dependencies |
 | [`meta-devops/`](meta-devops/) | 3c | Pre-deploy checklist — env vars, migration order + rollback, feature flags, monitoring (when the spec has deploy concerns) |
+| [`meta-debug/`](meta-debug/) | — | Four-mantra debugging discipline (reproduce → trace fail path → falsify hypothesis → cross-reference breadcrumbs). Not a fixed phase — callable standalone for any bug, or as the escalation path when `meta-qa`'s verify loop or `meta-dev`'s fix attempts keep failing without converging. |
 
 Each skill's own `SKILL.md` is self-contained — read it directly for its exact process, inputs,
 and output format.
