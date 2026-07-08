@@ -39,7 +39,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source paths, grouped by folder (e.g. workflow/). Installed flat by basename
 # under the target skills dir — Claude Code discovers skills one level deep,
 # so the group folder is repo-organization only, not part of the install layout.
-SKILLS=(workflow/kestra-build workflow/kestra-run productivity/givename)
+SKILLS=(
+  workflow/kestra-build workflow/kestra-run
+  productivity/givename
+  meta/meta-pm meta/meta-ba meta/meta-designer meta/meta-sa meta/meta-architect
+  meta/meta-dev meta/meta-qa meta/meta-review meta/meta-security meta/meta-devops
+)
 
 MODE="copy"          # copy | link
 SCOPE="global"        # global | project
