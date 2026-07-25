@@ -119,16 +119,25 @@ Presenting the two as equivalent is how a guess quietly acquires the authority o
    value→stage mapping, not a second opinion on whether the upstream decision was proportionate to
    the work:
 
-   | Flag | Value in spec | Stage added (id) — mechanical, not a judgment call |
-   |------|---------------|------------------------------------------------------|
+   | Flag | Value in spec | Consequence — mechanical, not a judgment call |
+   |------|---------------|-----------------------------------------------|
    | needs_ui | ? | *(true → a `design` stage exists; false → none; no in-between)* |
-   | needs_ba | ? | ? |
-   | needs_sa | ? | ? |
+   | needs_ba | ? | *(true → resolved upstream: the spec must already carry a Business Rules section — cite it, or raise its absence as a spec gap. No stage.)* |
+   | needs_sa | ? | *(true → resolved upstream: the spec must already carry a Solution Architecture section — cite it, or raise its absence. No stage.)* |
    | needs_devops | ? | ? |
    | (any other explicit stage request in the spec text) | ? | ? |
 
-   Fill in every row for the actual spec before moving to stage derivation — a `Value` of `true` (or
-   an explicit request in the spec text) with a `Stage added` of "none" is a contradiction you must
+   Two of these flags resolve to a stage and two resolve to *content that must already exist in the
+   spec*, because the work they represent is done inline by whatever sharpened the spec rather than
+   deferred to execution. That asymmetry is easy to misread as an inconsistency, so it's spelled out
+   in the table itself: for `needs_ba`/`needs_sa` the mechanical check is "the corresponding section
+   is present and non-empty," and a `true` flag with the section missing is a real defect to surface
+   — the spec claims work was done that isn't in the file. Don't invent a stage to compensate;
+   kestra-build has no vocabulary for one, and manufacturing a stage to satisfy a table is worse
+   than reporting the gap.
+
+   Fill in every row for the actual spec before moving to stage derivation. A `Value` of `true` with
+   a `Consequence` that neither names a stage nor cites the spec section is a contradiction you must
    resolve before continuing, not something to leave inconsistent. Include this table in what you
    show the user alongside the final workflow.yaml/state.json, so the inconsistency is visible to
    them too if you miss one.
@@ -149,7 +158,20 @@ Presenting the two as equivalent is how a guess quietly acquires the authority o
      the same paths, sets `freeze_after: true`, and is the deliberate act of accepting what was
      written. It writes nothing — its `exit_criteria` re-runs the same static checks against the
      exact commit being frozen, which is worth doing precisely because that commit is the one every
-     later stage will be held to. Its `on_fail` is `reworking`, not `fixing`: if the tests no longer
+     later stage will be held to.
+
+     **Choose the freeze stage's `write_scope` deliberately; it defines the test-hash.** The
+     anti-pattern list below tells you to give the test-writing stage whatever runner plumbing the
+     suite needs to be collectible at all. That's right for `generate-tests` — but copying the same
+     globs onto `freeze-tests` verbatim decides something else entirely, because everything in that
+     scope becomes part of the hash, and any later change to it is a hard stop rather than a retry.
+     A dependency manifest is the case where this bites: it holds test configuration *and* the
+     dependency list, so freezing it means an unrelated version bump during implementation halts the
+     pipeline with a message about frozen tests being tampered with. Freeze what determines what the
+     tests *mean* — the test sources, and config that changes how they run — and keep churn-prone
+     files out of it, even when the writing stage legitimately needed to create them. When a project
+     genuinely can't separate the two, say so in the brief rather than leaving the next person to
+     discover it from a confusing halt. Its `on_fail` is `reworking`, not `fixing`: if the tests no longer
      pass their own checks at the moment of freezing, something is wrong upstream and quietly
      patching them here would bypass whatever review already approved them.
    - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
@@ -480,7 +502,11 @@ matters or how to fix it well.
   full run would. Whatever language/framework the spec uses, verify the exact `exit_criteria.run`
   command can actually pass *before* any implementation exists — the same "run it standalone before
   freezing" discipline as the write_scope anti-pattern above, just checking polarity instead of
-  scope.
+  scope. When the spec is illustrative and there's no repo to run anything against — a worked
+  example, a design sketch — you can't honor that discipline, so say plainly which commands and
+  globs are unverified placeholders instead of presenting them as checked. An unverifiable command
+  labelled as such is useful; the same command presented as verified is a trap for whoever runs it
+  next.
 - Solving that polarity problem with a **syntax-only** check and stopping there. A parse check
   (`python3 -m py_compile`, `node --check`, and friends) satisfies "passes before an implementation
   exists," which is why it's the tempting answer — but it accepts a test referencing a variable that
