@@ -1,14 +1,19 @@
-# workflow/ — kestra-build & kestra-run
+# workflow/ — kestra-spec, kestra-build & kestra-run
 
-These two skills work together as a **generator + orchestrator** for building and running a
-"stage machine" that actually enforces TDD (not just asking the AI nicely to write tests first).
-It freezes tests once written, restricts which files each stage may touch, and commits per stage
-so you can always roll back or resume.
+These three skills work together as a **spec-sharpener + generator + orchestrator** for building
+and running a "stage machine" that actually enforces TDD (not just asking the AI nicely to write
+tests first). It freezes tests once written, restricts which files each stage may touch, and
+commits per stage so you can always roll back or resume.
 
 ```
-spec (0-spec.md)
+sharpened idea (e.g. from /grilling)
    │
    ▼
+┌─────────────┐   writes 0-spec.md — testable ACs (optionally Given-When-Then/BDD), needs_*
+│ kestra-spec  │   flags, business rules, design notes, and a verified codebase survey — one pass
+└──────┬──────┘
+       │
+       ▼
 ┌─────────────┐   writes workflow.yaml + state.json, then stops
 │ kestra-build │   never runs a stage, writes code, or commits
 └──────┬──────┘
@@ -19,10 +24,50 @@ spec (0-spec.md)
 └─────────────┘ → commits each passing stage → stops at a real stop condition
 ```
 
-Neither skill has a hard dependency on any other skill — if a stage's brief wants to suggest a
-specialized skill (e.g. an implement skill, a review skill), that only ever appears as a
+None of the three skills has a hard dependency on any other skill — if a stage's brief wants to
+suggest a specialized skill (e.g. an implement skill, a review skill), that only ever appears as a
 "suggestion" inside the brief text. Whatever gets spawned to do that stage's work still runs fine
 if that skill isn't installed.
+
+---
+
+## kestra-spec — the spec sharpener
+
+**Location:** [`kestra-spec/`](kestra-spec/) · detail: [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md)
+
+### What it does
+
+Takes a sharpened idea (normally the output of a `/grilling` session, or an equivalent
+back-and-forth where ambiguity's already been interviewed out) and, in one pass, produces a single
+`0-spec.md`: testable acceptance criteria, explicit error states, the `needs_ba`/`needs_ui`/
+`needs_sa`/`needs_devops` flags `kestra-build` reads, business rules (when `needs_ba: true`),
+design notes (when `needs_ui: true`), solution-architecture decisions (when `needs_sa: true`), and
+a codebase survey with every file path verified to exist.
+
+Where the `meta/` group splits this same work across five skills and five files, `kestra-spec`
+does it as one continuous pass, one file — so nobody has to remember to chain five skills by hand,
+and `kestra-build`'s stage agents don't have to guess at gaps left by a handoff.
+
+### Given-When-Then / BDD-style acceptance criteria
+
+Acceptance criteria that describe *behavior under a condition* (not just a threshold or a data
+shape) can be written as Given-When-Then instead of prose — this matters most when `needs_ba:
+true`, since it forces every business-rule branch into its own explicit line instead of hiding it
+inside a one-line requirement. `kestra-build`'s `generate-tests` stage mirrors this: when a spec's
+ACs are Given-When-Then, the frozen tests are written as BDD scenarios (Gherkin or `describe`/`it`
+blocks structured as Given/When/Then) that map 1:1 onto them — a format choice only, `freeze_after`
+and the test-hash invariant work exactly the same either way. See
+[`workflow/runs/order-cancellation-refund/`](runs/order-cancellation-refund/) for a worked example
+spec + generated workflow using this format.
+
+**It runs nothing** — it writes `0-spec.md` and stops. Hand it off to `kestra-build` next.
+
+### Example usage
+
+```
+"write the spec for kestra-build for CSV export"
+"turn this idea into 0-spec.md"
+```
 
 ---
 
@@ -198,6 +243,9 @@ time.
 
 ## What's intentionally "not done"
 
+- **kestra-spec never touches code or runs anything** — it writes `0-spec.md` and stops; it
+  doesn't replace `meta-pm`/`meta-ba`/`meta-designer`/`meta-sa`/`meta-architect`, which remain
+  available standalone for anyone who wants just one piece of this.
 - **kestra-build never runs anything** — it doesn't write real code, commit, or call any skill.
 - **kestra-run never generates a workflow itself** — if the file doesn't exist yet, it says so
   instead of improvising one.

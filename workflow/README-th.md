@@ -1,15 +1,20 @@
-# workflow/ — kestra-build & kestra-run
+# workflow/ — kestra-spec, kestra-build & kestra-run
 
 *[Read in English](README.md)*
 
-สอง skill นี้ทำงานร่วมกันเป็น **ตัวสร้าง + ตัวรัน** สำหรับสร้างและรัน "stage machine" ที่บังคับ
-TDD จริงๆ (ไม่ใช่แค่ขอให้ AI เขียนเทสต์ก่อนแบบสุภาพๆ) มันจะ freeze เทสต์เมื่อเขียนเสร็จแล้ว
+สาม skill นี้ทำงานร่วมกันเป็น **ตัวลับ spec + ตัวสร้าง + ตัวรัน** สำหรับสร้างและรัน "stage machine"
+ที่บังคับ TDD จริงๆ (ไม่ใช่แค่ขอให้ AI เขียนเทสต์ก่อนแบบสุภาพๆ) มันจะ freeze เทสต์เมื่อเขียนเสร็จแล้ว
 จำกัดว่าแต่ละ stage แก้ไฟล์ไหนได้บ้าง และ commit ทีละ stage เพื่อให้ rollback หรือ resume ได้เสมอ
 
 ```
-spec (0-spec.md)
+ไอเดียที่ลับคมแล้ว (เช่น จาก /grilling)
    │
    ▼
+┌─────────────┐   เขียน 0-spec.md — AC ที่ทดสอบได้ (เขียนแบบ Given-When-Then/BDD ได้), flag
+│ kestra-spec  │   needs_*, business rules, design notes, และการสำรวจโค้ดจริงที่ verify แล้ว
+└──────┬──────┘   ทำทั้งหมดในรอบเดียว
+       │
+       ▼
 ┌─────────────┐   เขียน workflow.yaml + state.json แล้วหยุด
 │ kestra-build │   ไม่รัน stage, ไม่เขียนโค้ด, ไม่ commit
 └──────┬──────┘
@@ -20,9 +25,47 @@ spec (0-spec.md)
 └─────────────┘ → commit ทุก stage ที่ผ่าน → หยุดเมื่อเจอเงื่อนไขหยุดจริง
 ```
 
-ทั้งสอง skill ไม่ได้ผูกติดกับ skill อื่นแบบ hard dependency — ถ้า brief ของ stage ไหนอยากแนะนำ
+ทั้งสาม skill ไม่ได้ผูกติดกับ skill อื่นแบบ hard dependency — ถ้า brief ของ stage ไหนอยากแนะนำ
 skill เฉพาะทาง (เช่น skill สำหรับ implement, skill สำหรับ review) มันจะปรากฏแค่เป็น "คำแนะนำ"
 ในเนื้อหา brief เท่านั้น ตัวที่ถูก spawn มาทำงาน stage นั้นยังทำงานได้ปกติแม้ skill นั้นจะไม่ได้ติดตั้งไว้
+
+---
+
+## kestra-spec — ตัวลับ spec
+
+**ที่อยู่:** [`kestra-spec/`](kestra-spec/) · รายละเอียดเพิ่มเติม: [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md)
+
+### มันทำอะไร
+
+รับไอเดียที่ลับคมแล้ว (ปกติเป็นผลลัพธ์จาก `/grilling` หรือการซักถามแบบเดียวกันที่ทำให้ความคลุมเครือ
+หมดไปแล้ว) แล้วสร้าง `0-spec.md` ไฟล์เดียวในรอบเดียว: acceptance criteria ที่ทดสอบได้, error state
+ที่ชัดเจน, flag `needs_ba`/`needs_ui`/`needs_sa`/`needs_devops` ที่ `kestra-build` จะอ่านต่อ,
+business rules (ถ้า `needs_ba: true`), design notes (ถ้า `needs_ui: true`), การตัดสินใจด้าน
+solution architecture (ถ้า `needs_sa: true`), และการสำรวจโค้ดจริงที่ path ทุกอันถูก verify ว่ามีจริง
+
+ในขณะที่กลุ่ม `meta/` แบ่งงานชุดเดียวกันนี้ออกเป็นห้า skill ห้าไฟล์ `kestra-spec` ทำเป็นรอบเดียว
+ต่อเนื่อง ไฟล์เดียว — เพื่อไม่ต้องจำว่าต้อง chain ห้า skill เอง และ stage agent ของ `kestra-build`
+ก็ไม่ต้องเดาช่องว่างที่หลุดตอน handoff
+
+### Acceptance criteria แบบ Given-When-Then / BDD
+
+AC ที่บรรยาย *พฤติกรรมภายใต้เงื่อนไข* (ไม่ใช่แค่ threshold หรือรูปร่างข้อมูล) เขียนเป็น
+Given-When-Then แทน prose ได้ — สำคัญที่สุดตอน `needs_ba: true` เพราะบังคับให้แต่ละแขนงของ
+business rule กลายเป็นบรรทัดที่ชัดเจน แทนที่จะซ่อนอยู่ใน requirement บรรทัดเดียว stage
+`generate-tests` ของ `kestra-build` ก็ทำแบบเดียวกัน: ถ้า AC ของ spec เขียนเป็น Given-When-Then
+เทสต์ที่ freeze จะเขียนเป็น BDD scenario (Gherkin หรือ `describe`/`it` ที่จัดโครงเป็น
+Given/When/Then) ที่ map 1:1 กับมัน — เป็นแค่ทางเลือกด้าน format เท่านั้น `freeze_after` และ
+test-hash invariant ทำงานเหมือนเดิมทุกประการ ดูตัวอย่างจริงได้ที่
+[`workflow/runs/order-cancellation-refund/`](runs/order-cancellation-refund/)
+
+**มันไม่รันอะไรเลย** — แค่เขียน `0-spec.md` แล้วหยุด ส่งต่อให้ `kestra-build` ต่อไป
+
+### ตัวอย่างการใช้งาน
+
+```
+"write the spec for kestra-build for CSV export"
+"turn this idea into 0-spec.md"
+```
 
 ---
 
@@ -185,6 +228,9 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
 
 ## สิ่งที่ตั้งใจ "ไม่ทำ"
 
+- **kestra-spec ไม่แตะโค้ดหรือรันอะไรเลย** — เขียน `0-spec.md` แล้วหยุด ไม่ได้แทนที่
+  `meta-pm`/`meta-ba`/`meta-designer`/`meta-sa`/`meta-architect` ซึ่งยังเรียกใช้แยกเดี่ยวได้
+  สำหรับคนที่อยากได้แค่ส่วนใดส่วนหนึ่ง
 - **kestra-build ไม่รันอะไรเลย** — ไม่เขียนโค้ดจริง ไม่ commit ไม่เรียก skill ใดๆ
 - **kestra-run ไม่สร้างเวิร์กโฟลว์เอง** — ถ้าไฟล์ยังไม่มี มันจะบอกตรงๆ แทนที่จะด้นสดสร้างเอง
 - **ทั้งสอง skill ไม่ hard-depend กับ skill/agent เฉพาะทางใดๆ** — ชื่อ skill ที่อาจถูกแนะนำใน

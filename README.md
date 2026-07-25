@@ -10,7 +10,7 @@ installs the whole set in one go).
 
 | Group | Skills | What it's for |
 |---|---|---|
-| [`workflow/`](workflow/README.md) | `kestra-build`, `kestra-run` | Generator + orchestrator for a TDD-locked "stage machine" — turns a feature spec into `workflow.yaml`/`state.json`, then runs it with mechanical (not AI-judgment) checks at every step. |
+| [`workflow/`](workflow/README.md) | `kestra-spec`, `kestra-build`, `kestra-run` | Spec-sharpener + generator + orchestrator for a TDD-locked "stage machine" — `kestra-spec` turns a sharpened idea into a build-ready `0-spec.md` (ACs optionally as Given-When-Then/BDD), `kestra-build` turns that into `workflow.yaml`/`state.json`, then `kestra-run` runs it with mechanical (not AI-judgment) checks at every step. |
 | [`meta/`](meta/README.md) | `meta-pm`, `meta-ba`, `meta-designer`, `meta-sa`, `meta-architect`, `meta-dev`, `meta-qa`, `meta-review`, `meta-security`, `meta-devops`, `meta-debug` | Eleven role-based skills for spec→plan→build→review (PM, BA, designer, solution architect, architect, dev, QA, review, security, devops, plus a four-mantra debugging discipline) — call one directly or chain them yourself, no fixed orchestrator. |
 | [`productivity/`](productivity/README.md) | `givename` | Suggests names (variables, files, branches, commits, new projects/skills) by reading the actual naming convention nearby first. |
 
