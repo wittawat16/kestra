@@ -21,7 +21,7 @@ stages: [ ... ]                    # ordered list, see below — order is for re
 | `brief` | no | free text | plain-language instructions for whatever Claude gets spawned to do this stage's work. **Never a skill name or ID** — see note below |
 | `write_scope` | yes | list of glob patterns | paths this stage's diff may touch. `[]` means the stage produces no code diff (e.g. approval gates). Enforced at apply time by the orchestrator — not a promise the AI makes itself |
 | `exit_criteria` | yes | object, see below | how the orchestrator decides `verifying` → `passed` vs `fixing` |
-| `freeze_after` | no, default `false` | bool | set `true` **only** on the stage whose successful completion should snapshot the test-hash into `state.json` and commit the freeze point. Usually exactly one stage in the whole file has this set |
+| `freeze_after` | no, default `false` | bool | set `true` **only** on the dedicated freeze stage, whose successful completion snapshots the test-hash into `state.json` and commits the freeze point. Exactly one stage per file has this set, and its `write_scope` must be non-empty — the hash is computed from that scope, so an empty one snapshots nothing and the invariant silently doesn't exist. Not the stage that *writes* the tests: that one stays unfrozen so its output can still be reviewed and fixed cheaply (see `design-principles.md`) |
 | `on_fail` | yes | object, see below | what happens when `exit_criteria` fails |
 | `branches` | no | list, see below | declarative conditional branching — optional, use sparingly |
 
@@ -157,20 +157,64 @@ stages:
   - id: generate-tests
     depends_on: [spec-review]
     brief: >
-      Write tests covering every acceptance criterion in the frozen spec. No implementation
-      exists yet — these tests must fail for the right reason (missing feature), not error out.
+      Write tests covering every acceptance criterion in the spec. No implementation exists yet —
+      these tests must fail for the right reason (missing feature), not error out. Pin anything the
+      spec's Reality Constraints marks as pinned rather than reading it live.
     write_scope: ["test/**"]
     exit_criteria:
       type: command
-      run: "npm test -- --listTests csv-export"
-    freeze_after: true
+      run: "npm test -- --listTests csv-export && npx eslint test/csv-export --rule 'no-undef: error'"
     on_fail:
       action: fixing
       max_attempts: 3
       escalate_at: 2
 
-  - id: implement-csv-export
+  # Only generated when the spec's Reality Constraints list external dependencies or a pair of
+  # paths that must agree — i.e. when the tests will contain doubles that can drift from reality.
+  # A feature that fakes nothing can't have the defects this stage looks for; omit it there.
+  # Note it comes BEFORE the freeze: findings here are a bounded fixing loop against
+  # generate-tests, whereas the same finding after the freeze would cost a reworking bounce.
+  - id: test-review
     depends_on: [generate-tests]
+    brief: >
+      Read the tests just written against the spec's Reality Constraints and report a table with one
+      row per risk (ordering/preconditions, response realism, type/shape drift, path parity, own
+      shared logic, non-determinism), each marked applicable or n/a with file:line evidence. Add
+      rows this codebase's own conventions imply and say which you added. Judgment only — the
+      mechanical checks already ran in generate-tests' exit_criteria; don't re-derive them. Write
+      the verdict to test-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  # The freeze is its own act, deliberately separate from writing the tests. It writes nothing —
+  # it owns the test paths solely so the test-hash has something to snapshot, and re-runs the
+  # tests' own checks against the exact commit being locked. on_fail is reworking, not fixing:
+  # a failure here means something is wrong upstream, and patching it at the freeze point would
+  # bypass the review that just approved these tests.
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test suite as the frozen
+      baseline every later stage is held to.
+    write_scope: ["test/**"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "npm test -- --listTests csv-export && npx eslint test/csv-export --rule 'no-undef: error'"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-csv-export
+    depends_on: [freeze-tests]
     brief: >
       Implement the CSV export endpoint against the frozen tests — do not modify test/**. Also
       install the checks listed under the spec's Runtime Invariants: each one detects its condition
@@ -260,11 +304,16 @@ stages:
       escalate_at: 2
 ```
 
-Notice: `generate-tests` is the only stage with `write_scope` touching `test/**`, and the only one
-with `freeze_after: true`. Every stage after it is implicitly forbidden from writing test paths —
-if `implement-csv-export`'s diff touches `test/**`, the orchestrator rejects it regardless of intent.
-`verify-acceptance-criteria`, `review`, and `deploy-readiness` all have `write_scope: []` too — they
-judge/report on the diff, they don't produce one.
+Notice: `generate-tests` and `freeze-tests` are the only stages with `write_scope` touching
+`test/**`, and `freeze-tests` alone carries `freeze_after: true`. Both sit *before* the freeze
+point, which is why owning test paths is legitimate for them — that's how tests get written and
+revised while revising them is still a bounded `fixing` loop rather than a `reworking` bounce. Every
+stage from the freeze onward is forbidden those paths: if `implement-csv-export`'s diff touches
+`test/**`, the orchestrator rejects it regardless of intent. `test-review`,
+`verify-acceptance-criteria`, `review`, and `deploy-readiness` all have `write_scope: []` — they
+judge or report on work they don't produce. `test-review` still directs fixes through
+`on_fail.target: generate-tests`, the same mechanism `review` uses against the implement stage; a
+reviewer that could edit what it reviews wouldn't be an independent check at all.
 
 `verify-acceptance-criteria` and `review` both `depends_on: [implement-csv-export]` directly — they
 are **siblings, not a chain**. kestra-run's rule for running independent stages in parallel ("their

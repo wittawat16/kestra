@@ -288,29 +288,17 @@ def validate(workflow, state):
     frozen_scopes = []
     if frozen:
         frozen_scopes = by_id[frozen[0]].get("write_scope") or []
+        if not frozen_scopes:
+            problems.append(
+                f"stage '{frozen[0]}' sets freeze_after: true but its write_scope is empty — the "
+                f"test-hash is computed from the freeze stage's own write_scope, so this snapshots "
+                f"nothing and the freeze invariant silently does not exist. Give the freeze stage "
+                f"the test paths it is freezing."
+            )
 
-    # write_scope checks
-    for s in stages:
-        sid = s.get("id", "<unknown>")
-        ws = s.get("write_scope")
-        if ws is None:
-            problems.append(f"stage '{sid}' missing write_scope (use [] if it produces no diff)")
-            continue
-        if frozen and sid != frozen[0]:
-            for scope in ws:
-                for fscope in frozen_scopes:
-                    if fnmatch_overlap(scope, fscope):
-                        problems.append(
-                            f"stage '{sid}' write_scope '{scope}' overlaps the frozen test "
-                            f"scope '{fscope}' owned by '{frozen[0]}' — only freeze_after and "
-                            f"reworking may touch test paths"
-                        )
+    memo = {}
 
-    # pairwise overlap for stages that are NOT ordered relative to each other.
-    # Skipped entirely when a cycle was already found above — ancestor chains
-    # aren't well-defined until that's fixed, and the cycle problem alone is
-    # enough to block treating this workflow as frozen.
-    def ancestors(sid, memo={}, visiting=None):
+    def ancestors(sid, visiting=None):
         if visiting is None:
             visiting = set()
         if sid in memo:
@@ -322,10 +310,39 @@ def validate(workflow, state):
         for d in (by_id[sid].get("depends_on") or []):
             if d in by_id:
                 result.add(d)
-                result |= ancestors(d, memo, visiting)
+                result |= ancestors(d, visiting)
         memo[sid] = result
         return result
 
+    # write_scope checks
+    #
+    # The freeze only takes effect when the freeze stage *passes*, so a stage that
+    # runs strictly before it may legitimately own test paths — that's how tests get
+    # written and revised in the first place. The prohibition applies to everything
+    # that could run at or after the freeze point. Ancestors of the freeze stage are
+    # therefore exempt; when a cycle was already found, "runs before" isn't
+    # well-defined, so fall back to flagging every overlap.
+    pre_freeze = ancestors(frozen[0]) if (frozen and not cycle) else set()
+    for s in stages:
+        sid = s.get("id", "<unknown>")
+        ws = s.get("write_scope")
+        if ws is None:
+            problems.append(f"stage '{sid}' missing write_scope (use [] if it produces no diff)")
+            continue
+        if frozen and sid != frozen[0] and sid not in pre_freeze:
+            for scope in ws:
+                for fscope in frozen_scopes:
+                    if fnmatch_overlap(scope, fscope):
+                        problems.append(
+                            f"stage '{sid}' write_scope '{scope}' overlaps the frozen test "
+                            f"scope '{fscope}' owned by '{frozen[0]}' — after the freeze, only a "
+                            f"reworking pass may touch test paths"
+                        )
+
+    # pairwise overlap for stages that are NOT ordered relative to each other.
+    # Skipped entirely when a cycle was already found above — ancestor chains
+    # aren't well-defined until that's fixed, and the cycle problem alone is
+    # enough to block treating this workflow as frozen.
     all_ids = list(by_id.keys()) if not cycle else []
     for i in range(len(all_ids)):
         for j in range(i + 1, len(all_ids)):
@@ -352,6 +369,15 @@ def validate(workflow, state):
         ec = s.get("exit_criteria")
         if not ec:
             problems.append(f"stage '{sid}' missing exit_criteria")
+        elif not isinstance(ec, dict):
+            # e.g. an inline flow mapping `{type: command, ...}`, which this
+            # deliberately-minimal parser doesn't read. Report it instead of
+            # crashing — a validator that tracebacks on malformed input is
+            # useless exactly when it's needed most.
+            problems.append(
+                f"stage '{sid}' exit_criteria could not be parsed as a mapping — write it as an "
+                f"indented block (type:/run: on their own lines), not an inline {{...}} mapping"
+            )
         else:
             t = ec.get("type")
             if t not in ("command", "artifact_exists", "human_approval"):
@@ -361,11 +387,17 @@ def validate(workflow, state):
             if t == "artifact_exists" and not ec.get("artifact"):
                 problems.append(f"stage '{sid}' exit_criteria.type is 'artifact_exists' but 'artifact' is empty")
 
+        ec_type = ec.get("type") if isinstance(ec, dict) else None
         of = s.get("on_fail")
-        if not of and (not ec or ec.get("type") != "human_approval"):
+        if not of and ec_type != "human_approval":
             problems.append(f"stage '{sid}' missing on_fail")
             continue
-        if of:
+        if of and not isinstance(of, dict):
+            problems.append(
+                f"stage '{sid}' on_fail could not be parsed as a mapping — write it as an "
+                f"indented block, not an inline {{...}} mapping"
+            )
+        elif of:
             action = of.get("action")
             if action not in valid_actions:
                 problems.append(f"stage '{sid}' on_fail.action is missing/invalid: {action!r}")
@@ -422,7 +454,7 @@ def validate(workflow, state):
                 problems.append(f"state.json has stages not present in workflow.yaml: {sorted(extra_in_state)}")
 
         if state.get("test_hash") not in (None, "null"):
-            warnings.append("state.json.test_hash is not null at initial state — expected null before generate-tests runs")
+            warnings.append("state.json.test_hash is not null at initial state — expected null until the freeze stage passes")
 
     return problems, warnings
 

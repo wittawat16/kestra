@@ -1,15 +1,69 @@
 {
   "feature": "order-cancellation-refund",
-  "current_stage": ["spec-review"],
+  "current_stage": [
+    "spec-review"
+  ],
   "test_hash": null,
   "stages": {
-    "spec-review": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "design": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "generate-tests": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "implement-backend": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "implement-frontend": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "verify-acceptance-criteria": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "review": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] },
-    "done": { "status": "pending", "attempt": 0, "seen_diffs": [], "history": [] }
+    "spec-review": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "design": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "generate-tests": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "test-review": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "freeze-tests": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "implement-backend": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "implement-frontend": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "verify-acceptance-criteria": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "review": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "done": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    }
   }
 }

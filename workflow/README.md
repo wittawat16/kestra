@@ -144,7 +144,19 @@ regenerating tests, re-freezing, and resetting the attempt counter.
    decide which stages are needed (e.g. `needs_ui: true` → must add a `design` stage before
    `generate-tests`).
 3. Derive the stage list from the actual spec, not a fixed template. The minimal skeleton:
-   `spec-review → generate-tests (🔒 freeze) → implement[-per-component] → {verify, review} → done`
+   `spec-review → generate-tests → [test-review] → freeze-tests (🔒) → implement[-per-component] →
+   {verify, review} → done`
+   - Writing the tests and freezing them are **separate stages**. The freeze stops an
+     *implementation* from editing a test into agreement with broken code, and no implementation
+     exists when the tests are first written — so locking then protects nothing, while giving up the
+     only cheap window to fix a defect in the tests. Before the lock that's a bounded retry; after
+     it, the only legal response is a `reworking` bounce, the design's guaranteed human stop.
+   - `test-review` fills that window, and is generated **only when the spec's Reality Constraints
+     say the tests will contain doubles** — external dependencies, or a pair of paths that must
+     agree. A feature that fakes nothing can't have the defects it looks for, so omitting it there
+     isn't cutting a corner. It reviews against a six-row risk table (ordering, response realism,
+     type drift, path parity, own shared logic, non-determinism), owns no files, and directs fixes
+     back into `generate-tests` the same way `review` directs them into `implement-*`.
    - `spec-review` is a real gate, not a formality — it reviews the spec's runtime invariants and
      reality constraints for gaps and contradictions and writes a verdict artifact, the same shape
      `review` uses. It's the cheapest point in the whole file to catch a defect: one edit to one

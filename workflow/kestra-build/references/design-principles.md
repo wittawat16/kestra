@@ -32,6 +32,48 @@ trust it." **Do not claim** "this fixes hallucination" or "this fixes false posi
 system ever ships something wrong behind a green build, people will believe that green build
 completely, because you set the expectation that it can't lie.
 
+## Tests cover the anticipated; guards cover the rest
+
+A frozen test suite is derived from acceptance criteria, and acceptance criteria enumerate cases
+someone thought of. That's not a defect in how the tests were written — it's what a test *is*. The
+consequence is worth stating plainly because it bounds what this whole machine can promise: for any
+condition nobody imagined, there is no test, the implementation passes everything, and the first
+encounter with that condition happens in production.
+
+The complement to a test is a **runtime invariant**: a check the running system performs on itself,
+which halts, refuses, or alerts rather than proceeding when something that must be true isn't. Where
+a test answers "did we handle the cases we listed," an invariant answers "are we still in a state
+where proceeding makes sense at all" — and it keeps answering long after the last test ran, against
+inputs no one enumerated.
+
+This distinction has a mechanical consequence for stage generation, which is why it lives here
+rather than in a style guide: **no `exit_criteria` can verify that a guard exists.** The criteria
+are the tests, the tests came from the anticipated cases, and an implementation with no guards at
+all satisfies them completely. So the requirement has to travel in the `implement-*` stage's
+`brief`, and the check for it has to be `review`'s judgment on the diff. It is the one obligation in
+the design that no mechanical gate can carry, and pretending otherwise produces a pipeline that is
+green, thorough-looking, and silent about the thing most likely to break it.
+
+## Why the freeze comes after the tests are read, not when they're written
+
+`freeze_after` exists to stop an implementation from editing a test into agreement with broken code.
+That threat requires an implementation to exist. When the tests are first written, none does — so
+locking at that instant defends against nothing, while giving up the only cheap window to fix a
+defect *in the tests themselves*.
+
+The asymmetry is what settles it. Before the freeze, a bad test is a bounded `fixing` loop against
+the stage that wrote it. After, the only legal response is `reworking` — unlock, regenerate,
+re-freeze, reset counters — which is deliberately the design's guaranteed human stop. Same defect,
+same fix, radically different cost, decided entirely by which side of the lock it was noticed on.
+
+Hence the split: a stage writes the tests, an optional reviewer reads them while they're still
+editable, and a separate stage performs the freeze as an explicit act of acceptance. The freeze
+stage writes nothing; it owns the test paths only so the test-hash has something to snapshot, and
+re-runs the tests' own static checks against the exact commit being locked. Nothing about the
+invariant weakens — there is still exactly one `test_hash`, still exactly one stage that may set it,
+and still no legal path for `fixing` to touch a test path afterward. What changes is only *when* the
+door closes: after someone has looked, rather than before.
+
 ## States (per stage)
 
 | State | Meaning |

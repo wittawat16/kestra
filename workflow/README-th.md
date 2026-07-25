@@ -136,7 +136,18 @@ review ไม่ใช่ของ stage machine)
    ตัดสินว่าต้องมี stage ไหนบ้าง (เช่น `needs_ui: true` → ต้องเพิ่ม stage `design` ก่อน
    `generate-tests`)
 3. สร้างรายการ stage จาก spec จริง ไม่ใช่ template ตายตัว โครงขั้นต่ำคือ:
-   `spec-review → generate-tests (🔒 freeze) → implement[-per-component] → {verify, review} → done`
+   `spec-review → generate-tests → [test-review] → freeze-tests (🔒) → implement[-per-component] →
+   {verify, review} → done`
+   - การเขียนเทสต์กับการ freeze เป็น **คนละ stage** เพราะ freeze มีไว้กัน *implementation* แก้เทสต์
+     ให้เข้าข้างโค้ดที่พัง แต่ตอนเขียนเทสต์เสร็จใหม่ๆ ยังไม่มี implementation อยู่เลย — ล็อกตอนนั้น
+     จึงไม่ได้ป้องกันอะไร แต่เสียโอกาสเดียวที่จะแก้ข้อผิดพลาด *ในตัวเทสต์เอง* แบบถูกๆ ไป ก่อนล็อก
+     มันคือ retry แบบมีขอบเขต หลังล็อกทางเดียวที่ทำได้คือ `reworking` ซึ่งคือจุดหยุดที่ต้องใช้คนเสมอ
+   - `test-review` อยู่ในช่วงนั้น และจะถูกสร้าง **เฉพาะเมื่อ Reality Constraints ของ spec บอกว่า
+     เทสต์จะมี test double** — คือมี external dependency หรือมีคู่ path ที่ต้องให้ผลตรงกัน ฟีเจอร์ที่
+     ไม่ได้ fake อะไรเลยเกิดข้อผิดพลาดกลุ่มนี้ไม่ได้ การไม่ใส่จึงไม่ใช่การลดคุณภาพ มันตรวจตามตาราง
+     ความเสี่ยง 6 แถว (ลำดับการเรียก, ความสมจริงของ response, type drift, path parity, การ mock
+     logic ของตัวเอง, non-determinism) ไม่ได้เป็นเจ้าของไฟล์ไหน และสั่งแก้ย้อนกลับไปที่
+     `generate-tests` ด้วยกลไกเดียวกับที่ `review` สั่งกลับไป `implement-*`
    - `spec-review` เป็น gate จริง ไม่ใช่พิธีกรรม — มันตรวจ runtime invariants และ reality
      constraints ของ spec ว่ามีช่องโหว่หรือขัดแย้งกันเองไหม แล้วเขียน verdict artifact แบบเดียวกับ
      `review` เป็นจุดที่ถูกที่สุดในไฟล์ทั้งหมดสำหรับจับข้อผิดพลาด: แก้เอกสารใบเดียว เทียบกับการ

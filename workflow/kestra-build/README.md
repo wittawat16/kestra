@@ -42,18 +42,30 @@ For the CSV-export example above (no UI, so no design stage), that sequence is:
 
 ```mermaid
 flowchart TD
-    A[spec-review] --> B["generate-tests<br/>🔒 freeze point"]
-    B --> C[implement-csv-export]
+    A[spec-review] --> B[generate-tests]
+    B --> R["test-review<br/><i>only when doubles exist</i>"]
+    R --> Z["freeze-tests<br/>🔒 freeze point"]
+    Z --> C[implement-csv-export]
     C --> D[verify-acceptance-criteria]
-    D --> E[review]
-    E --> F[done]
+    C --> E[review]
+    D --> F[done]
+    E --> F
 
     classDef freeze fill:#d97757,color:#fff,stroke:#333,stroke-width:1px
-    class B freeze
+    class Z freeze
 ```
 
-Every stage after the freeze point is forbidden from touching test paths — enforced against the
-diff, not by asking the stage nicely. `review` (suggesting whatever code-review and security-review
+Writing the tests and freezing them are separate stages on purpose. The freeze exists to stop an
+*implementation* from editing a test into agreement with broken code — and no implementation exists
+when the tests are first written, so locking at that moment protects nothing while giving up the
+only cheap chance to fix a defect in the tests themselves. Before the lock, a bad test is a bounded
+retry against the stage that wrote it; after it, the only legal response is a `reworking` bounce,
+which is the design's guaranteed human stop. `test-review` sits in that window, and only appears
+when the spec's Reality Constraints say the tests will contain doubles that can drift from what
+they imitate — a feature that fakes nothing can't have those defects, so there's nothing to check.
+
+Every stage from the freeze point onward is forbidden from touching test paths — enforced against
+the diff, not by asking the stage nicely. `review` (suggesting whatever code-review and security-review
 skills you have) is unconditional — passing tests only prove the spec's own acceptance criteria, not
 code quality or security holes the spec never thought to test for. A spec with a devops-relevant
 flag (env vars, migrations, feature flags) also picks up a `deploy-readiness` stage (suggesting
@@ -75,14 +87,17 @@ extra `design` stage that has to land *before* the freeze point:
 ```mermaid
 flowchart TD
     A[spec-review] --> B[design]
-    B --> C["generate-tests<br/>🔒 freeze point"]
-    C --> D[implement-password-reset]
+    B --> C[generate-tests]
+    C --> R[test-review]
+    R --> Z["freeze-tests<br/>🔒 freeze point"]
+    Z --> D[implement-password-reset]
     D --> E[verify-acceptance-criteria]
-    E --> F[review]
-    F --> G[done]
+    D --> F[review]
+    E --> G[done]
+    F --> G
 
     classDef freeze fill:#d97757,color:#fff,stroke:#333,stroke-width:1px
-    class C freeze
+    class Z freeze
 ```
 
 The full generated YAML for both examples — every field filled in — is in

@@ -11,17 +11,23 @@ stages:
   - id: spec-review
     depends_on: []
     brief: >
-      Confirm workflow/runs/order-cancellation-refund/0-spec.md has a non-empty Acceptance
-      Criteria list and no unresolved ⚠️ OPEN markers. Purely a sanity check — the spec's business
-      rules (BR-1/2/3) were already resolved inline when the spec was written, so there's nothing
-      further to clarify here.
+      Review workflow/runs/order-cancellation-refund/0-spec.md for the defects that are cheap to fix
+      now and expensive to fix after tests are frozen. Check that every acceptance criterion is
+      testable without a follow-up question; that each Runtime Invariant names what actually happens
+      on violation and none amount to "log it and continue"; that the Reality Constraints are filled
+      in or explicitly marked not-applicable, especially what each dependency does NOT guarantee;
+      and that none of these contradict each other or the business rules — in particular that BR-2's
+      exact refund amount is reconcilable with the payment provider not guaranteeing immediately
+      consistent prior-refund totals. Write the verdict to
+      workflow/runs/order-cancellation-refund/spec-verdict.md, first line exactly "VERDICT: CLEAR"
+      or "VERDICT: CHANGES_REQUESTED", followed by findings.
     write_scope: []
     exit_criteria:
       type: command
-      run: "test -s workflow/runs/order-cancellation-refund/0-spec.md && grep -q '## 🎯 Acceptance Criteria' workflow/runs/order-cancellation-refund/0-spec.md && ! grep -q '⚠️ OPEN' workflow/runs/order-cancellation-refund/0-spec.md"
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/spec-verdict.md"
     on_fail:
       action: reworking
-      reason: "spec missing, malformed, or still has open items — needs another pass before any code exists"
+      reason: "spec has gaps or contradictions — resolve before any test or code exists"
 
   - id: design
     depends_on: [spec-review]
@@ -63,15 +69,56 @@ stages:
     write_scope: ["test/order-cancellation/**"]
     exit_criteria:
       type: command
-      run: "npm test -- --listTests order-cancellation"
-    freeze_after: true
+      run: "npm test -- --listTests order-cancellation && npx eslint test/order-cancellation --rule 'no-undef: error'"
     on_fail:
       action: fixing
       max_attempts: 3
       escalate_at: 2
 
-  - id: implement-backend
+  # The spec's Reality Constraints name an external payment provider, so the tests will contain
+  # doubles that can drift from it — that's the trigger for this stage. It runs BEFORE the freeze
+  # so a finding is a bounded fixing loop against generate-tests, not a reworking bounce.
+  - id: test-review
     depends_on: [generate-tests]
+    brief: >
+      Read the tests just written against the spec's Reality Constraints and report a table with
+      one row per risk (ordering/preconditions, response realism, type/shape drift, path parity,
+      own shared logic, non-determinism), each marked applicable or n/a with file:line evidence.
+      Pay particular attention to the payment provider double: BR-2's refund amount depends on
+      prior-refund state the provider owns, and BR-3's atomicity depends on failure modes a
+      happy-path double will never produce. Add rows this codebase's conventions imply and say
+      which you added. Judgment only — the mechanical checks already ran in generate-tests'
+      exit_criteria. Write the verdict to
+      workflow/runs/order-cancellation-refund/test-verdict.md, first line exactly "VERDICT: CLEAR"
+      or "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  # Writes nothing. Owns the test paths only so the test-hash has something to snapshot, and
+  # re-runs the same checks against the exact commit being locked.
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      No edits. Snapshot and commit the approved test suite as the frozen baseline every later
+      stage is held to.
+    write_scope: ["test/order-cancellation/**"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "npm test -- --listTests order-cancellation && npx eslint test/order-cancellation --rule 'no-undef: error'"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-backend
+    depends_on: [freeze-tests]
     brief: >
       Implement the cancellation/refund/inventory-release logic against the frozen
       Given-When-Then tests — do not modify test/**. Per BR-3, the refund call and the
@@ -79,8 +126,15 @@ stages:
       failure must never leave the order refunded-but-not-released or released-but-not-refunded.
       Per the edge cases, a failed payment-provider call must leave the order in its original
       `paid` status, not a half-cancelled state, and a cancel racing a ship must let ship win
-      (needs a concurrency guard on order status). An implementation-focused skill, if you have
-      one installed, fits this stage well.
+      (needs a concurrency guard on order status).
+
+      Also install every check in the spec's Runtime Invariants section as a real guard —
+      atomicity, duplicate-cancel idempotency, the refund-never-exceeds-uncredited-balance bound,
+      and the status-transition guard — each detecting its condition and halting, refusing, or
+      alerting rather than proceeding. The frozen tests pass whether or not these exist, since they
+      were derived from anticipated cases and the guards are for unanticipated ones, so nothing
+      downstream will catch their absence. An implementation-focused skill, if you have one
+      installed, fits this stage well.
     write_scope: ["src/orders/**", "src/inventory/**"]
     exit_criteria:
       type: command
@@ -91,7 +145,7 @@ stages:
       escalate_at: 3
 
   - id: implement-frontend
-    depends_on: [generate-tests]
+    depends_on: [freeze-tests]
     brief: >
       Implement the order-detail page's Cancel action per design.md — the confirmation step, and
       the four screen states (empty/loading/success/error, including the BR-1 rejected-shipped
@@ -133,8 +187,10 @@ stages:
       injection/authn/secrets risk — in particular that the refund amount (BR-2) is computed from
       the payment provider's actual prior-refund record rather than trusted client input, and that
       the atomic refund+release (BR-3) has no window where a crash leaves the order
-      half-cancelled. Passing tests only prove the spec's own acceptance criteria — this stage
-      exists to catch what the spec never thought to test for. Whatever code-review and
+      half-cancelled. Confirm every Runtime Invariant from the spec is present in the diff as an
+      actual guard that halts or refuses — this is the only stage that can catch a missing one,
+      since the frozen tests pass either way. Passing tests only prove the spec's own acceptance
+      criteria — this stage exists to catch what the spec never thought to test for. Whatever code-review and
       security-review skills you have available both fit this stage well; try them, proceed with a
       direct review if none are available. Write the verdict to
       workflow/runs/order-cancellation-refund/review-verdict.md as the first line, exactly:

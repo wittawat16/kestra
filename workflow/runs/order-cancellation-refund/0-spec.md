@@ -37,6 +37,37 @@ releasing reserved inventory — this is the example spec used to illustrate BDD
 * **Concurrent cancel + ship:** if a shipment is created while a cancel request is in flight, the
   cancel must lose — ship wins, customer is routed to returns.
 
+## 🛡️ Runtime Invariants
+*(must hold every time this runs — a violation halts, refuses, or alerts; it never proceeds
+silently. These are enforced in production, not verified once in a test.)*
+| Invariant — what must be true | Detected at runtime by | On violation |
+|-------------------------------|------------------------|--------------|
+| Refund and inventory-release either both take effect or neither does | Transaction/saga boundary around the pair; a post-commit consistency check comparing refund state to reservation state | Halt the cancellation, leave the order in `paid`, alert — a half-applied cancellation must never be left in place |
+| An order is never refunded twice for the same cancellation | Idempotency key on the cancellation request, checked before any provider call | Refuse the duplicate and return the existing cancellation state; alert if the key was reused with different parameters |
+| Refund amount never exceeds the order's uncredited balance | Compute from the provider's prior-refund record, then assert `refund ≤ total − already_refunded` before issuing | Refuse and alert — never issue the call; this bound must hold even if upstream state is wrong |
+| Order status transitions only along the allowed path | Guard on the status transition (`paid`/`processing` → `cancelled` only) | Refuse the transition and alert, rather than forcing the target status |
+
+## 🌐 Reality Constraints
+*(what the world outside this feature actually does — the standard its test doubles get judged
+against.)*
+
+### External dependencies
+| Dependency | Enforced ordering / preconditions | Types & shapes actually returned | Does **not** guarantee |
+|------------|-----------------------------------|----------------------------------|------------------------|
+| Payment provider | A refund can only be issued against a settled charge; refunds against an unsettled charge are rejected | Provider-native identifier types and money as minor-unit integers — confirm both against the SDK rather than assuming strings/floats | That a refund call is idempotent by default; that prior-refund totals are immediately consistent after a write; that a timeout means the refund did *not* happen |
+| Inventory service | Reservation must exist before it can be released; releasing twice is an error | Reservation identifiers and quantities as the service defines them | That release is synchronous, or that a released quantity is immediately visible as available |
+
+### Paths that must agree
+* None — single cancellation path. *(If a batch/admin cancellation path is added later, it and the
+  customer path must agree on BR-1/2/3 and would need a parity check.)*
+
+### Non-deterministic inputs
+| Input | Pinned or floating in tests | Why |
+|-------|-----------------------------|-----|
+| Clock | 📌 pinned | Shipment-status and settlement checks are time-relative; a live clock makes the same test pass or fail depending on when it runs |
+| Provider-assigned identifiers | 📌 pinned | Assertions must not depend on values the provider generates per call |
+| Provider latency / timeout | 🌊 floating, but the timeout path must be exercised explicitly | The edge case requires proving a failed refund leaves the order untouched, which needs a deliberately induced failure rather than a lucky one |
+
 ## 📜 Business Rules  *(needs_ba: true)*
 
 * **BR-1 — Only pre-shipment orders are self-service cancellable.**
