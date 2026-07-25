@@ -47,6 +47,27 @@ solution architecture (ถ้า `needs_sa: true`), และการสำร�
 ต่อเนื่อง ไฟล์เดียว — เพื่อไม่ต้องจำว่าต้อง chain ห้า skill เอง และ stage agent ของ `kestra-build`
 ก็ไม่ต้องเดาช่องว่างที่หลุดตอน handoff
 
+### Runtime invariants และ reality constraints
+
+เทสต์ที่ผ่านพิสูจน์ได้แค่เคสที่มีคนคิดถึงเท่านั้น เพราะเทสต์ถูกสร้างจาก spec และ spec คือที่ที่คำว่า
+"คิดถึงแล้ว" ถูกตรึงไว้ สองหัวข้อนี้มีไว้ครอบส่วนที่เหลือ
+
+* **🛡️ Runtime Invariants** — เงื่อนไขที่ต้องเป็นจริง *ทุกครั้งที่ระบบทำงาน* บังคับใช้ตอนรันจริง
+  ไม่ใช่ตรวจครั้งเดียวในเทสต์ แต่ละข้อระบุ: เงื่อนไขคืออะไร, ตรวจจับตอนรันยังไง, และเกิดอะไรขึ้น
+  เมื่อถูกละเมิด — หยุด, ปฏิเสธ, หรือแจ้งเตือน ส่วนการแค่ log แล้วทำงานต่อไม่นับ เพราะนั่นคือ
+  พฤติกรรมที่หัวข้อนี้มีไว้ป้องกันโดยตรง
+* **🌐 Reality Constraints** — โลกภายนอกทำอะไรจริงบ้าง ซึ่งคือมาตรฐานที่ test double จะถูกตัดสิน
+  เทียบกับมัน: ลำดับการเรียกที่ dependency บังคับ, type ที่มันคืนมาจริง, และ (คอลัมน์ที่คนมักเว้น)
+  ความครบถ้วนหรือความสอดคล้องที่มัน **ไม่** รับประกัน; คู่ของ code path ที่ต้องให้ผลตรงกัน เพราะ
+  parity check เขียนไม่ได้ถ้าไม่มีใครประกาศคู่นั้นไว้; และ input ที่ไม่ deterministic — clock,
+  randomness, timezone, network, filesystem, environment — ข้อไหนต้อง pin ในเทสต์ ข้อไหนปล่อยได้
+
+ที่มาของความเสี่ยงเหล่านี้: [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md)
+เชื่อมโยงกับวรรณกรรมด้าน testing ที่มีอยู่จริง (hermetic tests, test-double fidelity,
+consumer-driven contract testing, characterization/golden-master) — เป็นจุดตั้งต้นที่มีที่มา
+**ไม่ใช่รายการที่ครบถ้วน** data pipeline เจอ schema drift เป็นหลัก เว็บแอปเจอเรื่อง authorization
+ซึ่งทั้งคู่ไม่มีอยู่ในนั้น
+
 ### Acceptance criteria แบบ Given-When-Then / BDD
 
 AC ที่บรรยาย *พฤติกรรมภายใต้เงื่อนไข* (ไม่ใช่แค่ threshold หรือรูปร่างข้อมูล) เขียนเป็น
@@ -116,6 +137,10 @@ review ไม่ใช่ของ stage machine)
    `generate-tests`)
 3. สร้างรายการ stage จาก spec จริง ไม่ใช่ template ตายตัว โครงขั้นต่ำคือ:
    `spec-review → generate-tests (🔒 freeze) → implement[-per-component] → {verify, review} → done`
+   - `spec-review` เป็น gate จริง ไม่ใช่พิธีกรรม — มันตรวจ runtime invariants และ reality
+     constraints ของ spec ว่ามีช่องโหว่หรือขัดแย้งกันเองไหม แล้วเขียน verdict artifact แบบเดียวกับ
+     `review` เป็นจุดที่ถูกที่สุดในไฟล์ทั้งหมดสำหรับจับข้อผิดพลาด: แก้เอกสารใบเดียว เทียบกับการ
+     `reworking` หลังจาก freeze เทสต์ไปแล้ว
    - component ที่เป็นอิสระต่อกัน (เช่น backend/frontend) จะเป็น stage พี่น้องกัน ไม่ใช่ chain
      เพื่อให้ kestra-run รันขนานกันได้จริง
    - `verify` กับ `review` เป็นพี่น้องกันเสมอ (ทั้งคู่ `depends_on` stage implement โดยตรง)
@@ -125,7 +150,10 @@ review ไม่ใช่ของ stage machine)
    - ถ้า spec เกี่ยวข้องกับเรื่อง deployment (env vars, migration, feature flags) จะเพิ่ม stage
      `deploy-readiness`
    - จบด้วย stage `done` แบบ mechanical (เขียนสรุปแล้วหยุด — ไม่ใช่ `waiting_approval`)
-4. กรอกทุกฟิลด์ของแต่ละ stage: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
+4. brief ของ `implement-*` ต้องสั่งให้ลง runtime invariants ของ spec เป็น guard จริงด้วย — เทสต์ที่
+   freeze ไว้มาจากเคสที่คิดถึงแล้ว ส่วน guard มีไว้สำหรับเคสที่คิดไม่ถึง ดังนั้น implementation ที่
+   ไม่มี guard เลยก็ยังผ่านเทสต์หมด และไม่มีการตรวจเชิงกลไกจุดไหนในไฟล์ที่จะจับได้ — จึงต้องสั่งใน
+   brief เท่านั้น จากนั้นกรอกทุกฟิลด์ของแต่ละ stage: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
    `on_fail`, `freeze_after`
 5. เขียน `workflow.yaml` + `state.json`
 6. **dry-run เสมอก่อน**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` —
@@ -223,6 +251,7 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
 | [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | ที่มาของทุก state/transition, "Default HITL posture", ทำไมไม่มีการ replan กลางเวิร์กโฟลว์ |
 | [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | รายการฟิลด์เต็มของ `workflow.yaml` พร้อมตัวอย่างจริง (csv-export) |
 | [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | รายการฟิลด์ของ `state.json` |
+| [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md) | ทำไมเทสต์ผ่านแต่ production พัง — 6 รูปแบบความล้มเหลวด้าน test fidelity ที่เกิดซ้ำ เชื่อมโยงกับวรรณกรรมที่มีอยู่จริง พร้อมแหล่งอ้างอิง |
 | [`kestra-run/references/enforcement.md`](kestra-run/references/enforcement.md) | คำสั่งจริงที่ใช้เช็คทุกอย่าง (write_scope diff, test-hash, commit-per-stage, rollback) |
 | [`kestra-run/references/efficiency-notes.md`](kestra-run/references/efficiency-notes.md) | ทำไมแต่ละทางลัดด้าน efficiency ถึงปลอดภัย (ไม่ spawn agent ใหม่ทุก stage, resume แทน respawn ฯลฯ) |
 

@@ -48,6 +48,29 @@ Where the `meta/` group splits this same work across five skills and five files,
 does it as one continuous pass, one file — so nobody has to remember to chain five skills by hand,
 and `kestra-build`'s stage agents don't have to guess at gaps left by a handoff.
 
+### Runtime invariants & reality constraints
+
+Passing tests only prove the cases someone anticipated, because the tests were derived from the
+spec and the spec is where "anticipated" gets fixed. Two sections exist to cover the rest:
+
+* **🛡️ Runtime Invariants** — conditions that must hold *every time the system runs*, enforced in
+  production rather than verified once in a test. Each names the condition, how it's detected at
+  runtime, and what happens when it's violated — halt, refuse, or alert. A check that logs and
+  carries on doesn't count; that's the failure mode the section exists to prevent.
+* **🌐 Reality Constraints** — what the world outside the feature actually does, which is the
+  standard its test doubles get judged against: each external dependency's enforced call ordering,
+  the types it really returns, and (the column people skip) what completeness or consistency it
+  does **not** guarantee; any pair of code paths that must produce equivalent results, since a
+  parity check can't be written unless someone declares the pair; and which non-deterministic
+  inputs — clock, randomness, timezone, network, filesystem, environment — must be pinned in tests
+  versus allowed to float.
+
+Why these particular risks: [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md)
+maps them to established testing literature (hermetic tests, test-double fidelity, consumer-driven
+contract testing, characterization/golden-master comparison). It's a well-supported starting point,
+not a complete list — a data pipeline's dominant risk is schema drift and a web app's is
+authorization, and neither appears there.
+
 ### Given-When-Then / BDD-style acceptance criteria
 
 Acceptance criteria that describe *behavior under a condition* (not just a threshold or a data
@@ -122,6 +145,10 @@ regenerating tests, re-freezing, and resetting the attempt counter.
    `generate-tests`).
 3. Derive the stage list from the actual spec, not a fixed template. The minimal skeleton:
    `spec-review → generate-tests (🔒 freeze) → implement[-per-component] → {verify, review} → done`
+   - `spec-review` is a real gate, not a formality — it reviews the spec's runtime invariants and
+     reality constraints for gaps and contradictions and writes a verdict artifact, the same shape
+     `review` uses. It's the cheapest point in the whole file to catch a defect: one edit to one
+     document, versus a `reworking` bounce once tests are frozen.
    - Independent components (e.g. backend/frontend) become sibling stages, not a chain, so
      kestra-run can actually run them in parallel.
    - `verify` and `review` are always siblings (both `depends_on` the implement stage directly).
@@ -133,7 +160,10 @@ regenerating tests, re-freezing, and resetting the attempt counter.
      `deploy-readiness` stage gets added.
    - It ends with a mechanical `done` stage (writes a summary and stops — not `waiting_approval`).
 4. Fill in every stage's fields: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
-   `on_fail`, `freeze_after`.
+   `on_fail`, `freeze_after`. An `implement-*` brief also has to ask for the spec's runtime
+   invariants to be installed as real guards — the frozen tests came from anticipated cases and the
+   guards exist for unanticipated ones, so an implementation with no guards at all still goes green.
+   No mechanical check anywhere in the file would notice, which is why the brief has to say it.
 5. Write `workflow.yaml` + `state.json`.
 6. **Always dry-run first**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` — a
    zero-LLM structural check (no PyYAML, no AI judgment) that catches 7 main things:
@@ -238,6 +268,7 @@ time.
 | [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | Where every state/transition comes from, the "Default HITL posture," why there's no mid-workflow replanning |
 | [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | Full field reference for `workflow.yaml`, with a complete worked example (csv-export) |
 | [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | Field reference for `state.json` |
+| [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md) | Why tests can pass while production breaks — six recurring test-fidelity failure modes mapped to established literature, with sources |
 | [`kestra-run/references/enforcement.md`](kestra-run/references/enforcement.md) | The exact real commands used for every check (write_scope diff, test-hash, commit-per-stage, rollback) |
 | [`kestra-run/references/efficiency-notes.md`](kestra-run/references/efficiency-notes.md) | Why each efficiency shortcut is safe (not spawning a fresh agent every stage, resuming instead of respawning, etc.) |
 

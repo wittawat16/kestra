@@ -5,7 +5,8 @@ description: >
   normally the output of /grilling. Combines spec-sharpening (testable acceptance
   criteria, explicit error states, needs_ba/needs_ui/needs_sa/needs_devops flags),
   inline business-rule clarification, inline UI/design notes, inline solution-
-  architecture decisions, and a codebase survey with verified file paths — all in
+  architecture decisions, runtime invariants and external-dependency reality
+  constraints, and a codebase survey with verified file paths — all in
   one pass, one output file. Use this whenever the user wants a spec that
   kestra-build can consume without an agent having to guess or interpret gaps:
   "write the spec for kestra-build", "turn this idea into 0-spec.md", "make a spec
@@ -181,7 +182,58 @@ This is the step that most directly closes the "agent has to interpret" gap, so 
 * List new dependencies (packages, migrations, infra) and name risks explicitly (shared files,
   race conditions, migrations needing care) — don't bury these in prose elsewhere.
 
-### 5. Write `0-spec.md` — single file, everything included
+### 5. Name what the world won't guarantee, and what must hold at runtime
+
+Everything up to here describes what the feature should do in the cases someone thought of. This
+step is about the cases nobody thought of — and it's the step most likely to feel skippable and
+most likely to be the reason something ships broken.
+
+Here's the mechanism, stated plainly: **a test can only ever check a case that was anticipated, and
+the spec is where "anticipated" gets fixed.** A case that's absent here is absent from the tests
+derived from here, so the implementation passes every test and still misses it. `kestra-build`'s
+own design notes call this out as the residual risk TDD does *not* close — it belongs to spec
+review, not to the stage machine. This step is where you pay it down.
+
+Four things to name. Each is cheap to write now and expensive to discover later.
+
+**a. Runtime invariants — what must be true whenever this runs.** These are not acceptance
+criteria wearing a different hat. An AC is checked *once*, in a test, against a case you predicted.
+An invariant is enforced *forever*, in production, including against inputs nobody predicted. The
+question that separates them: *if this condition were false and the system carried on anyway, would
+anyone find out before the damage was done?* If the honest answer is no, it's an invariant, and the
+system needs to detect and refuse — not log a line and continue. Give each one: the condition, how
+it's detected at runtime, and what happens when it's violated. An "invariant" that's merely noted
+in a log while execution proceeds is not an invariant; it's a comment.
+
+**b. What each external dependency actually does — especially what it doesn't promise.** For every
+dependency this feature touches, record the constraints that are real rather than assumed: any
+enforced call ordering or precondition, the actual types and shapes it returns, and — the column
+people skip — what completeness or consistency it explicitly does *not* guarantee. That last one
+earns its keep because a dependency that returns complete, well-formed data almost every time will
+eventually not, and a test double built by hand from the usual case will never say so. Whatever you
+write here is the standard the project's test doubles get judged against later.
+
+**c. Pairs of paths that must agree.** If two code paths are meant to produce equivalent results —
+replay vs. live, cached vs. computed, sync vs. async, batch vs. incremental — name the pair, say
+what "equivalent" means, and say what may legitimately differ. Neither path's own tests will ever
+notice the two have drifted apart, because each is only ever checked against itself. A parity check
+can't be written unless someone declares the pair, and this is the only place that happens.
+
+**d. Non-deterministic inputs: pinned or floating.** Clock, randomness, timezone and locale,
+network reachability, filesystem state, environment. For each one this feature reads, say whether
+it must be pinned to a fixed value in tests or may float, and why. A test that quietly reads a live
+value passes or fails depending on when and where it runs, which is a defect in the test rather
+than a discovery about the code.
+
+For grounding on why these particular risks recur, see
+[`../kestra-build/references/test-quality-taxonomy-research.md`](../kestra-build/references/test-quality-taxonomy-research.md),
+which maps them to established testing literature (hermetic tests, test-double fidelity, contract
+testing, characterization/golden-master comparison). Treat that as a well-supported starting point
+rather than a complete list — a data pipeline's dominant risk is schema drift, a web app's is
+authorization and N+1 queries, and neither appears there. Add whatever this codebase's own history
+and conventions tell you belongs.
+
+### 6. Write `0-spec.md` — single file, everything included
 
 One file, not five. See the template below. Every section that step 3 produced content for gets
 folded in under its own heading in the same document — there is no separate `ba.md`/`design.md`/
@@ -219,6 +271,13 @@ convention.
 * **[edge case]:** [how it's handled]
 * **[failure mode]:** [expected behaviour]
 
+## 🛡️ Runtime Invariants
+*(must hold every time this runs — a violation halts, refuses, or alerts; it never proceeds
+silently. These are enforced in production, not verified once in a test.)*
+| Invariant — what must be true | Detected at runtime by | On violation |
+|-------------------------------|------------------------|--------------|
+| [condition] | [the actual check, and where it sits in the flow] | [halt / refuse / alert — and who or what finds out] |
+
 ## 📜 Business Rules  *(only if needs_ba: true)*
 * **BR-1:** [rule, stated precisely, with example + counter-example — prefer Given-When-Then for the
   example/counter-example pair, e.g. `Given [state] When [action] Then [expected]` /
@@ -251,6 +310,25 @@ convention.
 ## 🔎 Codebase Survey
 * **Explored:** [dirs/files actually read]
 * **Integrate with:** [existing modules/patterns/conventions to follow]
+
+## 🌐 Reality Constraints
+*(what the world outside this feature actually does — the standard its test doubles get judged
+against. Omit a subsection only when it genuinely doesn't apply, and say so rather than deleting
+the heading.)*
+
+### External dependencies
+| Dependency | Enforced ordering / preconditions | Types & shapes actually returned | Does **not** guarantee |
+|------------|-----------------------------------|----------------------------------|------------------------|
+| `[name]` | [e.g. X must be released before Y is requested — or "none known"] | [real types as observed/documented, not assumed] | [completeness / ordering / uniqueness / timeliness it won't promise] |
+
+### Paths that must agree
+* `[path A]` ↔ `[path B]` — **equivalent means:** [what must match] · **may differ:** [what's
+  allowed to diverge, and why] — *(or "none — single path")*
+
+### Non-deterministic inputs
+| Input | Pinned or floating in tests | Why |
+|-------|-----------------------------|-----|
+| [clock / randomness / timezone / locale / network / filesystem / env] | 📌 pinned \| 🌊 floating | [reason] |
 
 ## 🗂️ Files to Touch
 | File | Change | Verified? | Why |
@@ -296,6 +374,12 @@ Done once:
 - Every row in **Files to touch** has been verified to exist (or is deliberately placed per an
   existing pattern, named explicitly)
 - Every AC maps to at least one file/step in the coverage map
+- **Runtime Invariants** names what happens on violation for each row — and none of them resolve to
+  "log it and continue," which is the absence of an invariant rather than one
+- **Reality Constraints** has each subsection either filled in or explicitly marked as
+  not-applicable with a reason; in particular the "does not guarantee" column is populated, since
+  that's the column whose emptiness later shows up as a test double that was never wrong in testing
+  and never right in production
 - No silent gaps — anything unresolved is in **Open Items**, not left blank
 
 If **Open Items** is non-empty, say so plainly when handing this off — `kestra-build` (or whoever
@@ -307,6 +391,9 @@ reads this next) should decide whether to pause on those before generating stage
 - **Detective, not tourist** — verify paths and read real code before naming them; never invent
 - **Flags are facts, not opinions** — once derived in step 2, don't re-litigate their value while
   doing the work they trigger
+- **Acceptance criteria cover what you thought of; invariants cover what you didn't** — if the only
+  protection against a condition is that someone remembered to write a test for it, the condition
+  is unprotected the first time reality supplies a case nobody imagined
 - **One file, no dangling handoffs** — if you catch yourself wanting to write a second file to hold
   "the rest" of something, that content belongs under a heading in `0-spec.md` instead
 - **Honest gaps over confident guesses** — an explicit `⚠️ OPEN` beats a silently invented answer,

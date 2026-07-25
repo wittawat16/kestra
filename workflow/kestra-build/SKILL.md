@@ -73,10 +73,28 @@ Full source reasoning (state table, transition pseudocode, false-positive taxono
 ## Inputs
 
 kestra-build needs a spec with testable acceptance criteria. If the user hands you:
-- **A structured spec** (e.g. an upstream PM/spec-sharpening skill's `0-spec.md`, with an
-  `acceptance_criteria` list) — use it directly.
-- **Prose or a rough ask** — sharpen it into a short numbered AC list first and show it back for a
-  quick confirm before deriving stages. Don't silently invent acceptance criteria the user didn't say.
+- **A structured spec** (e.g. `kestra-spec`'s `0-spec.md`, or an upstream PM/spec-sharpening skill's
+  output, with an `acceptance_criteria` list and populated `needs_*` flags) — use it directly.
+- **Prose or a rough ask, with no spec yet** — don't sharpen it yourself here. Run the `kestra-spec`
+  skill first (it produces the same kind of build-ready `0-spec.md` in one pass — testable ACs,
+  flags, runtime invariants, dependency constraints, and a verified codebase survey — so stage
+  derivation below isn't working from guesses), then come back and use its output. Only sharpen
+  inline yourself if `kestra-spec` genuinely isn't available in this environment; if you do, sharpen
+  into a short numbered AC list and show it back for a quick confirm before deriving stages — don't
+  silently invent ACs the user didn't say.
+
+**When a spec arrives without the sections this file expects.** Not every spec comes from
+`kestra-spec` — a perfectly good `0-spec.md` from another tool, or one written before a section
+existed, may carry acceptance criteria and flags but no **Runtime Invariants** and no **Reality
+Constraints** (what external dependencies actually do and don't guarantee, pairs of paths that must
+agree, non-deterministic inputs that need pinning). Those sections drive real stage content below,
+so their absence is a gap to close rather than a section to skip. Derive what you honestly can from
+the codebase survey and the spec's own text — a dependency the feature plainly calls, a scheduled
+job that plainly reads the clock — then **label each derived item as inferred rather than
+specified** when you show the workflow to the user. That distinction carries weight: something the
+spec stated is a decision a human made and stands behind, while something you inferred is a
+plausible guess that deserves a second look before it hardens into a stage's `exit_criteria`.
+Presenting the two as equivalent is how a guess quietly acquires the authority of a requirement.
 
 ## Process
 
@@ -120,6 +138,26 @@ kestra-build needs a spec with testable acceptance criteria. If the user hands y
    done`. Add stages only when the spec calls for them (e.g. a UI-facing spec adds a
    design stage before `generate-tests`; multiple independent components each get their own
    `implement-*` stage so their `write_scope`s don't collide).
+   - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
+     The obvious version of this stage checks that the spec file exists, is non-empty, and contains
+     an acceptance-criteria heading. That passes for any spec-shaped document, including one that's
+     confidently wrong, which makes it a stage that costs a step and buys nothing. Consider where
+     this stage sits: it runs before a single test exists, so a defect it catches costs one edit to
+     one document, while the same defect caught after the freeze costs a `reworking` bounce, and
+     caught after release costs whatever the release costs. Nothing else in the file has that ratio.
+     Give it real content to check: that the spec's **Runtime Invariants** each name what actually
+     happens on violation (and that none of them resolve to "log it and carry on," which is the
+     absence of an invariant described in the vocabulary of having one); that its **Reality
+     Constraints** are either filled in or explicitly marked not-applicable with a reason —
+     especially what each external dependency does *not* guarantee, since an empty answer there is
+     the seed of a test double that is never wrong in testing and never right in production; and
+     that these don't contradict the acceptance criteria or each other (an AC asserting an exact
+     result while a dependency is documented as not guaranteeing completeness is a contradiction
+     someone has to resolve now, not during implementation). Keep the enforcement mechanical the
+     same way `review` does it: the brief asks for the analysis and a written verdict artifact, and
+     `exit_criteria` greps that artifact for the verdict line. When the spec lacked these sections
+     and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
+     rather than assuming a human already blessed it.
    - **Independent components default to sibling `implement-*` stages, not a chain.** A monorepo
      feature touching e.g. `src/api/**` and `src/web/**` should get `implement-backend` and
      `implement-frontend` both `depends_on: [generate-tests]` directly — never one `depends_on` the
@@ -240,6 +278,23 @@ kestra-build needs a spec with testable acceptance criteria. If the user hands y
      to add a new verification mechanism. If the spec's ACs are plain testable prose instead, write
      ordinary unit/integration tests as usual; don't force Given-When-Then onto a spec that doesn't
      use it.
+   - **An `implement-*` brief has to ask for the spec's runtime invariants as actual guards, not
+     just for green tests.** This is the one instruction in a brief that can't be replaced by a
+     mechanical check, and the reason is structural rather than incidental. The frozen tests were
+     derived from the acceptance criteria, and the acceptance criteria describe conditions someone
+     anticipated. A runtime invariant exists precisely for the conditions nobody anticipated — so an
+     implementation that omits every guard still passes every test, by construction. `exit_criteria`
+     can't catch it either, since the criteria are the tests. If the brief doesn't ask, nothing in
+     the pipeline will, and the omission surfaces the first time production supplies an input the
+     spec never imagined. So state it plainly in the brief: implement the feature against the frozen
+     tests **and** install the checks the spec's **Runtime Invariants** section calls for, each one
+     detecting its condition and halting, refusing, or alerting rather than proceeding — a guard
+     that logs and continues satisfies the letter of the section while providing none of its value.
+     When the spec named pairs of paths that must agree, or dependency behavior that isn't
+     guaranteed, mention those in the brief too: they're constraints the implementation has to
+     respect and the frozen tests may well not cover. Point the `review` stage's brief at the same
+     section, since reading the diff for a missing guard is exactly the kind of judgment `review`
+     exists to apply and `verify` structurally cannot.
 5. **Write `workflow.yaml`** — schema and a full worked example in `references/workflow-schema.md`.
 6. **Write `state.json`** — initial state matching the stage list, schema + example in
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
@@ -276,6 +331,15 @@ matters or how to fix it well.
 
 - A stage's `write_scope` including test paths when that stage isn't `generate-tests` or an
   unlocked `reworking` pass. This is the single most common way to silently defeat the whole design.
+- A `spec-review` stage whose `exit_criteria` only proves the spec file exists and contains a
+  heading. That check passes for any spec-shaped document, including a confidently wrong one, so the
+  stage costs a step and buys nothing — while sitting at the single cheapest point in the file to
+  catch a defect, before one test has been written. Give it a real verdict artifact to grep, the
+  same shape `review` uses.
+- An `implement-*` brief that asks only for the frozen tests to pass, on a spec that declares runtime
+  invariants. The tests came from anticipated cases and the invariants exist for unanticipated ones,
+  so an implementation with no guards at all goes green — there is no mechanical check anywhere in
+  the file that would notice, which is exactly why the brief has to ask.
 - A "replan" stage, or any `on_fail`/branching condition that reads like a programming language.
   Branching stays declarative — conditions may only reference an artifact's existence or an exit
   code, nothing more expressive. If the user wants real replanning mid-run, say so explicitly rather

@@ -59,10 +59,12 @@ code quality or security holes the spec never thought to test for. A spec with a
 flag (env vars, migrations, feature flags) also picks up a `deploy-readiness` stage (suggesting
 whatever devops skill you have) between `review` and `done` — omitted here since csv-export has none.
 
-None of these stages stop for a human by default — `spec-review` is a mechanical spec-sanity
-check, `review` greps an automated verdict artifact and gives the implementation stage a bounded
-number of attempts to address any findings, and `done` just writes a completion summary once
-everything upstream passed. The one place a human is always in the loop is `fixing → reworking`,
+None of these stages stop for a human by default — `spec-review` reviews the spec's runtime
+invariants and reality constraints for gaps and contradictions and greps its own verdict artifact
+(it's the cheapest place in the file to catch a defect: one edit to one document, versus a
+`reworking` bounce once tests are frozen), `review` greps an automated verdict artifact and gives
+the implementation stage a bounded number of attempts to address any findings, and `done` just
+writes a completion summary once everything upstream passed. The one place a human is always in the loop is `fixing → reworking`,
 same as before — see [`references/design-principles.md`](references/design-principles.md)'s
 "Default HITL posture." Want an explicit sign-off somewhere anyway (e.g. before a risky prod
 deploy)? Say so and kestra-build will add a `human_approval` stage for that specific checkpoint.

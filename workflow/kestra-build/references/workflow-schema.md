@@ -136,16 +136,23 @@ stages:
   - id: spec-review
     depends_on: []
     brief: >
-      Confirm workflows/runs/csv-export/0-spec.md has a non-empty acceptance_criteria list and no
-      unresolved TODO/TBD markers. Purely a sanity check — the spec's actual content was already
-      vetted upstream by whoever sharpened it.
+      Review workflows/runs/csv-export/0-spec.md for the defects that are cheap to fix now and
+      expensive to fix after tests are frozen. Check that: every acceptance criterion is testable
+      without a follow-up question; each Runtime Invariant names what actually happens on violation
+      and none of them amount to "log it and continue"; the Reality Constraints subsections are
+      either filled in or explicitly marked not-applicable with a reason, in particular what each
+      external dependency does NOT guarantee; and none of these contradict each other or the
+      acceptance criteria. Anything derived rather than stated by the spec is flagged as inferred in
+      the brief above — review the inference itself, don't assume a human already approved it.
+      Write the verdict to spec-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
     write_scope: []
     exit_criteria:
       type: command
-      run: "test -s workflows/runs/csv-export/0-spec.md && grep -q 'acceptance_criteria' workflows/runs/csv-export/0-spec.md"
+      run: "grep -q '^VERDICT: CLEAR$' spec-verdict.md"
     on_fail:
       action: reworking
-      reason: "spec missing or malformed — needs another pass before any code exists"
+      reason: "spec has gaps or contradictions — resolve before any test or code exists"
 
   - id: generate-tests
     depends_on: [spec-review]
@@ -165,7 +172,11 @@ stages:
   - id: implement-csv-export
     depends_on: [generate-tests]
     brief: >
-      Implement the CSV export endpoint against the frozen tests — do not modify test/**. An
+      Implement the CSV export endpoint against the frozen tests — do not modify test/**. Also
+      install the checks listed under the spec's Runtime Invariants: each one detects its condition
+      and halts, refuses, or alerts rather than proceeding. The frozen tests will pass whether or
+      not those guards exist — they were derived from anticipated cases, and the guards exist for
+      unanticipated ones — so their presence is on you here, not on the test run. An
       implementation-focused skill fits this stage well if you have one installed.
     write_scope: ["src/routes/**", "src/services/csv-export/**"]
     exit_criteria:
