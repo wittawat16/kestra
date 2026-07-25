@@ -1,0 +1,165 @@
+feature: order-cancellation-refund
+source_spec: workflow/runs/order-cancellation-refund/0-spec.md
+
+# NOTE: 0-spec.md is an illustrative example spec, not wired to a real codebase — its "Files to
+# Touch" section explicitly says so. The write_scope globs below (src/orders/**,
+# src/web/order-detail/**, src/inventory/**) are therefore reasonable ILLUSTRATIVE choices, not
+# verified-real paths. Before running this with kestra-run against a real repo, replace them with
+# paths actually confirmed to exist there.
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Confirm workflow/runs/order-cancellation-refund/0-spec.md has a non-empty Acceptance
+      Criteria list and no unresolved ⚠️ OPEN markers. Purely a sanity check — the spec's business
+      rules (BR-1/2/3) were already resolved inline when the spec was written, so there's nothing
+      further to clarify here.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "test -s workflow/runs/order-cancellation-refund/0-spec.md && grep -q '## 🎯 Acceptance Criteria' workflow/runs/order-cancellation-refund/0-spec.md && ! grep -q '⚠️ OPEN' workflow/runs/order-cancellation-refund/0-spec.md"
+    on_fail:
+      action: reworking
+      reason: "spec missing, malformed, or still has open items — needs another pass before any code exists"
+
+  - id: design
+    depends_on: [spec-review]
+    brief: >
+      needs_ui: true in the spec — produce design.md covering the order-detail page's new Cancel
+      action: a component audit (reuse vs. new, real import paths for whatever component library
+      this codebase actually uses), real design tokens (not invented hex values), and all four
+      screen states (empty/loading/success/error) for the cancel confirmation flow — including the
+      BR-1 rejected-state ("already shipped — use Returns instead") as its own explicit error
+      state, not folded into a generic error message. A UI-design-focused skill, if you have one
+      installed, fits this stage well.
+    write_scope: ["workflow/runs/order-cancellation-refund/design.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "workflow/runs/order-cancellation-refund/design.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+
+  - id: generate-tests
+    depends_on: [design]
+    brief: >
+      Write tests covering every acceptance criterion in the frozen spec. No implementation exists
+      yet — these tests must fail for the right reason (missing feature), not error out.
+
+      The spec's acceptance criteria are written as Given-When-Then scenarios — mirror that
+      structure 1:1 in the frozen tests rather than translating them into generic unit-test
+      assertions. Use whichever form is idiomatic for this stack: Gherkin `.feature` files if
+      Cucumber/Behave/SpecFlow tooling is already present or the user wants it, otherwise plain
+      `describe`/`it` blocks (or the language's equivalent) named and structured as Given/When/Then
+      — e.g. `describe("cancelling a paid order") > describe("given it has already shipped") >
+      it("then the request is rejected and Returns is suggested")`. Cover at minimum: BR-1
+      (pre-shipment cancel succeeds, post-shipment cancel rejected), BR-2 (refund amount accounts
+      for a prior partial refund), BR-3 (refund + inventory release happen atomically), and the
+      payment-provider-failure and duplicate-cancel edge cases. Each scenario should be traceable
+      back to the BR or edge case it came from — don't collapse multiple business rules into one
+      generic "cancel order" test.
+    write_scope: ["test/order-cancellation/**"]
+    exit_criteria:
+      type: command
+      run: "npm test -- --listTests order-cancellation"
+    freeze_after: true
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  - id: implement-backend
+    depends_on: [generate-tests]
+    brief: >
+      Implement the cancellation/refund/inventory-release logic against the frozen
+      Given-When-Then tests — do not modify test/**. Per BR-3, the refund call and the
+      inventory-release must be atomic (single transaction or saga with compensation) — a partial
+      failure must never leave the order refunded-but-not-released or released-but-not-refunded.
+      Per the edge cases, a failed payment-provider call must leave the order in its original
+      `paid` status, not a half-cancelled state, and a cancel racing a ship must let ship win
+      (needs a concurrency guard on order status). An implementation-focused skill, if you have
+      one installed, fits this stage well.
+    write_scope: ["src/orders/**", "src/inventory/**"]
+    exit_criteria:
+      type: command
+      run: "npm test -- order-cancellation --testPathPattern=backend"
+    on_fail:
+      action: fixing
+      max_attempts: 5
+      escalate_at: 3
+
+  - id: implement-frontend
+    depends_on: [generate-tests]
+    brief: >
+      Implement the order-detail page's Cancel action per design.md — the confirmation step, and
+      the four screen states (empty/loading/success/error, including the BR-1 rejected-shipped
+      state as its own explicit UI state) it defines. Do not modify test/**. An
+      implementation-focused skill, if you have one installed, fits this stage well.
+    write_scope: ["src/web/order-detail/**"]
+    exit_criteria:
+      type: command
+      run: "npm test -- order-cancellation --testPathPattern=frontend"
+    on_fail:
+      action: fixing
+      max_attempts: 5
+      escalate_at: 3
+
+  # verify-acceptance-criteria and review are siblings of each other, and both depend on BOTH
+  # implement-* stages directly (not on each other) — write_scope: [] on both, so nothing to
+  # collide on, and their target diff isn't final until both implement-* stages have passed.
+  - id: verify-acceptance-criteria
+    depends_on: [implement-backend, implement-frontend]
+    brief: >
+      Run the full e2e suite and confirm every Given-When-Then acceptance criterion in the spec is
+      actually met end-to-end (not just that the frozen unit/integration tests pass) — in
+      particular BR-2's partial-refund-amount math and BR-3's atomicity, which are easy to satisfy
+      in a unit test but still get wrong end-to-end.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm run test:e2e -- order-cancellation"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-backend
+
+  - id: review
+    depends_on: [implement-backend, implement-frontend]
+    brief: >
+      Review the real diff since the last stage commit for correctness, edge cases, and
+      injection/authn/secrets risk — in particular that the refund amount (BR-2) is computed from
+      the payment provider's actual prior-refund record rather than trusted client input, and that
+      the atomic refund+release (BR-3) has no window where a crash leaves the order
+      half-cancelled. Passing tests only prove the spec's own acceptance criteria — this stage
+      exists to catch what the spec never thought to test for. Whatever code-review and
+      security-review skills you have available both fit this stage well; try them, proceed with a
+      direct review if none are available. Write the verdict to
+      workflow/runs/order-cancellation-refund/review-verdict.md as the first line, exactly:
+      "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-backend
+
+  - id: done
+    depends_on: [verify-acceptance-criteria, review]
+    brief: >
+      Every upstream stage passed. Write a one-page completion-summary.md: what shipped, which
+      commits, the review verdict, and confirmation that BR-1/2/3 all have passing
+      Given-When-Then coverage.
+    write_scope: ["workflow/runs/order-cancellation-refund/completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "workflow/runs/order-cancellation-refund/completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

@@ -226,6 +226,20 @@ kestra-build needs a spec with testable acceptance criteria. If the user hands y
    genuinely don't cover yet, but the same instruction applied blanket-style across every stage
    multiplies token/time cost without multiplying confidence. When a stage's automated exit_criteria
    already proves the property, say so in the brief and let it stop there.
+   - **If the source spec's ACs are written as Given-When-Then** (see `kestra-spec`/`meta-pm`), the
+     `generate-tests` stage's brief should say so explicitly: write the frozen tests as BDD scenarios
+     that mirror the spec's Given-When-Then structure one-to-one, in whatever the stack's idiomatic
+     form is — Gherkin `.feature` files (Cucumber/Behave/SpecFlow) if that tooling is already present
+     or the user wants it, otherwise plain `describe`/`it` (or the language's equivalent) blocks
+     structured as Given/When/Then in the test body and names. This is a format instruction only —
+     it changes nothing about the mechanics: `freeze_after: true` still goes on this stage exactly as
+     before, the test-hash still snapshots whatever `write_scope` this stage owns, and `fixing` is
+     still barred from touching it. The point is to keep the frozen artifact readable as the same
+     scenario a non-technical stakeholder already signed off on in the spec, so a reviewer scanning
+     the diff at test-freeze time can catch a missing business scenario before it's locked in — not
+     to add a new verification mechanism. If the spec's ACs are plain testable prose instead, write
+     ordinary unit/integration tests as usual; don't force Given-When-Then onto a spec that doesn't
+     use it.
 5. **Write `workflow.yaml`** — schema and a full worked example in `references/workflow-schema.md`.
 6. **Write `state.json`** — initial state matching the stage list, schema + example in
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
