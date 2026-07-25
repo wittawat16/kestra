@@ -6,7 +6,7 @@ tests first). It freezes tests once written, restricts which files each stage ma
 commits per stage so you can always roll back or resume.
 
 ```
-sharpened idea (e.g. from /grilling)
+sharpened idea (from /grilling — or /wayfinder first, when the effort is too big for one session)
    │
    ▼
 ┌─────────────┐   writes 0-spec.md — testable ACs (optionally Given-When-Then/BDD), needs_*
@@ -47,6 +47,25 @@ a codebase survey with every file path verified to exist.
 Where the `meta/` group splits this same work across five skills and five files, `kestra-spec`
 does it as one continuous pass, one file — so nobody has to remember to chain five skills by hand,
 and `kestra-build`'s stage agents don't have to guess at gaps left by a handoff.
+
+### What comes before this: `/grilling`, and `/wayfinder` when the effort is bigger
+
+`kestra-spec` expects the ambiguity to be gone already — it reads what was settled and doesn't
+re-open it. Two upstream skills get you there, and they compose rather than compete:
+
+* **`/grilling`** — one continuous interview, one question at a time, walking down the design tree
+  and resolving dependencies between decisions as it goes. This is the normal entry point: a
+  `0-spec.md` describes one feature, which is usually one session's worth of deciding.
+* **`/wayfinder`** — for an effort *too big for one session and still wrapped in fog*, where you
+  can't yet say how many features there are or which decisions block which. It doesn't answer the
+  questions itself; it charts them as a map of tickets on the issue tracker and works them one at a
+  time across sessions. `/grilling` is one of its four ticket types, and its default one — so
+  reaching for wayfinder isn't skipping the grilling, it's scheduling several of them.
+
+Wayfinder names its own destination per effort, and "a spec to hand off and iterate on" is one of
+the shapes it lists — which is exactly the handoff into `kestra-spec`. Rule of thumb: if you can
+already say what the feature *is* and only the details need sharpening, grill it and go. If you
+don't yet know how many specs this becomes, chart it first, then bring each settled piece here.
 
 ### Runtime invariants & reality constraints
 
