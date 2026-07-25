@@ -333,3 +333,43 @@ just `review` — the full diff isn't actually finished-and-passed until verify 
 though it ran alongside review rather than after it. No stage in this example stops for a human
 unless `reworking` is reached; see `design-principles.md`'s "Default HITL posture" for why that's
 now the default, not the exception.
+
+---
+
+## The `design` stage (not in the example above — csv-export has no UI)
+
+`needs_ui: true` adds a `design` stage between `spec-review` and `generate-tests`, so the tests can
+assert against decided components and states rather than invented ones. The worked example has no
+UI and therefore no such stage, which left its shape unstated — confirmed the useful way, by two
+independent generation runs both having to invent `write_scope`, `exit_criteria` type and `on_fail`
+from scratch and both reaching for `deploy-readiness` as the closest pattern. It is the closest
+pattern; here it is written down so it stops being a guess:
+
+```yaml
+  - id: design
+    depends_on: [spec-review]
+    brief: >
+      The spec sets needs_ui: true. Produce design.md: a component audit (reuse vs. new, with real
+      import paths read from this codebase's actual component library), real token names read from
+      the actual token source rather than invented hex values, and all four screen states
+      (empty/loading/success/error) for every view this feature touches — including any state the
+      spec's business rules imply, such as a rejected action, as its own explicit state rather than
+      folded into a generic error. A UI-design-focused skill fits this stage well if one is
+      installed.
+    write_scope: ["<run-folder>/design.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "<run-folder>/design.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+```
+
+Two things about this shape are deliberate rather than incidental. `exit_criteria` is
+`artifact_exists` and not a verdict grep: the stage's output is a document to be *used* by the
+stages after it, and whether it's any good is judged when `generate-tests` and `implement-*` try to
+work from it — a verdict line here would be the stage grading its own homework. And `write_scope`
+is the design artifact alone, never component source: a `design` stage that can edit `src/` has
+quietly become an implementation stage that runs before the tests are frozen, which is the one
+ordering the whole design exists to prevent.
