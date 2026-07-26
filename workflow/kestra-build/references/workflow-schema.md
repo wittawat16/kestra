@@ -8,9 +8,18 @@ the fields only make sense in light of *why* they exist.
 ```yaml
 feature: <feature-id>              # kebab-case, matches the spec's feature id
 source_spec: <path>                # spec this workflow was derived from
+mode: lite | full                  # which stage shape was derived — see SKILL.md's lite/full table
 stages: [ ... ]                    # ordered list, see below — order is for readability only,
                                     # actual execution order comes from depends_on
 ```
+
+`mode` is a **record of a decision, not a switch.** Nothing in the orchestrator reads it to change
+behavior — every stage in the file is executed and enforced identically either way. It exists so
+that whoever opens this file six weeks from now can see that the missing `test-review` was a
+derivation choice made against a spec with no test doubles, rather than an omission. Changing the
+value by hand does nothing; the stage list is the truth. If a lite workflow needs to become full —
+a second component appears, a dependency gets mocked — regenerate from the spec rather than
+hand-editing stages in, so the freeze and the write_scope non-overlap get re-validated by step 7.
 
 ## Per-stage fields
 

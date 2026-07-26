@@ -1,5 +1,8 @@
 feature: order-cancellation-refund
 source_spec: workflow/runs/order-cancellation-refund/0-spec.md
+# full: two independent components, and the spec's Reality Constraints list a payment-gateway
+# dependency the tests will have to double.
+mode: full
 
 # NOTE: 0-spec.md is an illustrative example spec, not wired to a real codebase — its "Files to
 # Touch" section explicitly says so. The write_scope globs below (src/orders/**,

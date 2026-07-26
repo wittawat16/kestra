@@ -96,6 +96,62 @@ spec stated is a decision a human made and stands behind, while something you in
 plausible guess that deserves a second look before it hardens into a stage's `exit_criteria`.
 Presenting the two as equivalent is how a guess quietly acquires the authority of a requirement.
 
+---
+
+## Lite mode vs full mode — decide this before deriving stages
+
+The full stage list buys one thing: it catches a **false pass that nobody would otherwise notice**
+— an implementation that went green by narrowing a test, a double that was never wrong in testing
+and never right in production, a security hole the acceptance criteria never thought to ask about.
+That is worth several subagent round-trips on work where a silent wrong answer survives to
+production. It is not worth them on work where the first run tells you the answer.
+
+So the mode is a function of the spec, decided mechanically before step 3, not a preference:
+
+**Generate `mode: full` if ANY of these hold. Otherwise generate `mode: lite`.**
+
+| Condition | Read it off | Why full |
+|---|---|---|
+| 2+ independent components | the spec's Files-to-Touch spanning genuinely separate write scopes | sibling `implement-*`/`review-*` stages only exist to be split; lite has nothing to parallelize |
+| The tests will contain test doubles | the spec's **Reality Constraints** listing any external dependency, or any pair of paths that must agree | this is the exact and only trigger for `test-review` — no doubles, no defect for it to find |
+| `needs_devops: true` | the flags table | `deploy-readiness` has real content to check |
+| Runtime Invariants is non-trivial | the spec's **Runtime Invariants** having rows whose violation is silent in production | a dedicated `spec-review` earns its round-trip when there's something to contradict |
+| The user asked for full | their words | their call, not yours |
+
+Ambiguity resolves toward **full** — the cost of a wrong `lite` is a missed defect, the cost of a
+wrong `full` is a slower run. State which condition (or the absence of all of them) decided it when
+you show the workflow to the user, so the choice is auditable rather than a mood.
+
+### What lite actually is
+
+Lite is the same machine with the same three primitives — **write-scope allowlist, test-hash
+freeze, commit-per-stage — all still present, none of them optional.** A lite workflow is still
+TDD-locked; the freeze stage still exists and still sets `freeze_after: true`. What lite drops are
+the stages that had nothing to examine on this particular spec:
+
+```
+generate-tests → freeze-tests (freeze point) → implement → {verify, review} → done
+```
+
+| Full stage | In lite | Why |
+|---|---|---|
+| `spec-review` | **folded into `generate-tests`'s brief** | not dropped — the checks still run, they just don't get a subagent of their own. Ask the brief to reconcile the ACs against the spec's invariants/constraints and say plainly if it finds a contradiction, before writing a single test |
+| `generate-tests` | kept | — |
+| `test-review` | **dropped** | its trigger is the presence of test doubles, and the lite condition table already established there are none |
+| `freeze-tests` | kept, unchanged | the freeze is the point of the whole thing; a "lite" mode that skips it is not this skill |
+| `implement-*` | kept, exactly one | the lite condition table already established there's one component |
+| `verify` | kept | costs no subagent — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
+| `review` | kept, unconditional | passing tests say nothing about injection/authn/secrets or a missing runtime guard. This is the one judgment stage lite keeps, and the reason lite is still safe to use |
+| `deploy-readiness` | **dropped** | `needs_devops: false` was a precondition of choosing lite |
+
+Net effect on a typical single-component feature: three subagent-bearing stages instead of six or
+seven, with the freeze and the security/correctness review both intact.
+
+**Do not invent further savings.** Merging `verify` into `review`, skipping `review` because the
+diff looks small, or dropping `freeze-tests` to save a commit are not lite — they're the full
+machine with its load-bearing parts removed, and each has its own entry in the anti-pattern list
+below. Lite is a fixed, named shape, not a license to trim per-spec.
+
 ## Process
 
 1. **Read or derive the spec.** Confirm the AC list with the user if you had to sharpen it yourself.
@@ -121,6 +177,7 @@ Presenting the two as equivalent is how a guess quietly acquires the authority o
 
    | Flag | Value in spec | Consequence — mechanical, not a judgment call |
    |------|---------------|-----------------------------------------------|
+   | mode | ? | *(the lite/full decision above — record which condition forced `full`, or note that none did)* |
    | needs_ui | ? | *(true → a `design` stage exists; false → none; no in-between)* |
    | needs_ba | ? | *(true → resolved upstream: the spec must already carry a Business Rules section — cite it, or raise its absence as a spec gap. No stage.)* |
    | needs_sa | ? | *(true → resolved upstream: the spec must already carry a Solution Architecture section — cite it, or raise its absence. No stage.)* |
@@ -142,6 +199,11 @@ Presenting the two as equivalent is how a guess quietly acquires the authority o
    show the user alongside the final workflow.yaml/state.json, so the inconsistency is visible to
    them too if you miss one.
 3. **Derive the stage list from what the spec actually needs** — don't default to a fixed phase set.
+   **If step 2 settled on `mode: lite`, the stage list is already fixed** by the lite shape above —
+   generate exactly those stages and skip ahead to step 4; the per-stage guidance below still
+   applies in full to each stage lite keeps (`generate-tests`'s exit_criteria polarity,
+   `freeze-tests`'s write_scope, `review`'s verdict artifact and `on_fail.target`), so read it for
+   those, not for whether to add more stages. The rest of this step is the `mode: full` path.
    A minimal TDD-honest skeleton looks like:
    `spec-review → generate-tests → freeze-tests (freeze point) → implement[-per-component] →
    {verify, review} → done`. Add stages only when the spec calls for them (e.g. a UI-facing spec
@@ -421,6 +483,16 @@ Most of the anti-patterns below are exactly what `scripts/validate_workflow.py` 
 mechanically — read them anyway, since the dry-run tells you *that* something's wrong, not why it
 matters or how to fix it well.
 
+- Choosing `mode: lite` to make a run cheaper when a condition in the lite table actually holds —
+  most often a spec whose Reality Constraints do list an external dependency, waved away as "only
+  one mock." The doubles are exactly what `test-review` exists to read, so this doesn't save a
+  redundant stage; it removes the only pass that would have caught the double drifting from the
+  thing it stands in for. The table is read off the spec, the same as the `needs_*` flags.
+- A "lite" workflow that drops `freeze-tests`, drops `review`, or merges `verify` into `review`.
+  None of those are lite — lite drops stages that had nothing to examine on this spec, and every
+  one of these three is load-bearing regardless of spec size. A file without `freeze_after` isn't
+  TDD-locked at all; a file without `review` has no pass looking for injection/authn/secrets or a
+  missing runtime guard.
 - A stage's `write_scope` including test paths when that stage runs at or after the freeze point and
   isn't an unlocked `reworking` pass. This is the single most common way to silently defeat the
   whole design. Stages *before* the freeze — `generate-tests`, and `freeze-tests` itself — own those
