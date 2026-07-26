@@ -162,7 +162,21 @@ regenerating tests, re-freezing, and resetting the attempt counter.
 2. Fill in a mechanical flag table (`needs_ui`, `needs_ba`, `needs_sa`, `needs_devops`, ...) to
    decide which stages are needed (e.g. `needs_ui: true` → must add a `design` stage before
    `generate-tests`).
-3. Derive the stage list from the actual spec, not a fixed template. The minimal skeleton:
+3. Pick the **mode** — `lite` or `full` — before deriving any stage, off a fixed condition table
+   rather than a feel for how much rigor the change deserves. Any one of these forces `full`: 2+
+   independent components, Reality Constraints listing an external dependency or a pair of paths
+   that must agree, `needs_devops: true`, runtime invariants whose violation would be silent in
+   production, or an explicit request. None present → `lite`; ambiguity resolves toward `full`,
+   since a wrong `lite` costs a missed defect while a wrong `full` costs a slower run.
+   `lite` is `generate-tests → freeze-tests (🔒) → implement → {verify, review} → done` — the same
+   machine with the stages that had nothing to examine removed, **not** with the safety removed:
+   the write-scope allowlist, the freeze, commit-per-stage, and `review` all stay. It drops
+   `test-review` and `deploy-readiness` (whose triggers `lite`'s own preconditions rule out) and
+   folds `spec-review`'s checks into `generate-tests`'s brief instead of losing them. Typically
+   three subagent-bearing stages instead of six or seven. The chosen mode is recorded as
+   `mode: lite | full` in `workflow.yaml` — a note explaining why a stage is absent, not a switch
+   anything reads at run time.
+4. Derive the stage list from the actual spec, not a fixed template. The `full` skeleton:
    `spec-review → generate-tests → [test-review] → freeze-tests (🔒) → implement[-per-component] →
    {verify, review} → done`
    - Writing the tests and freezing them are **separate stages**. The freeze stops an
@@ -190,13 +204,13 @@ regenerating tests, re-freezing, and resetting the attempt counter.
    - If the spec involves deployment concerns (env vars, migrations, feature flags), a
      `deploy-readiness` stage gets added.
    - It ends with a mechanical `done` stage (writes a summary and stops — not `waiting_approval`).
-4. Fill in every stage's fields: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
+5. Fill in every stage's fields: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
    `on_fail`, `freeze_after`. An `implement-*` brief also has to ask for the spec's runtime
    invariants to be installed as real guards — the frozen tests came from anticipated cases and the
    guards exist for unanticipated ones, so an implementation with no guards at all still goes green.
    No mechanical check anywhere in the file would notice, which is why the brief has to say it.
-5. Write `workflow.yaml` + `state.json`.
-6. **Always dry-run first**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` — a
+6. Write `workflow.yaml` + `state.json`.
+7. **Always dry-run first**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` — a
    zero-LLM structural check (no PyYAML, no AI judgment) that catches 7 main things:
    - Missing `on_fail.target` on a `write_scope: []` + `action: fixing` stage
    - `write_scope` overlapping a path that was already frozen as a test path
@@ -208,7 +222,7 @@ regenerating tests, re-freezing, and resetting the attempt counter.
 
    `FAIL` = must be fixed before showing the user, `WARN` = surfaced but not blocking.
 
-7. Shows both files plus a plain-language walkthrough of the stage sequence so the user can
+8. Shows both files plus a plain-language walkthrough of the stage sequence so the user can
    sanity-check before treating it as "frozen."
 
 ### Example usage

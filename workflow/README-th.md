@@ -154,7 +154,20 @@ review ไม่ใช่ของ stage machine)
 2. กรอกตาราง flag แบบ mechanical (`needs_ui`, `needs_ba`, `needs_sa`, `needs_devops`, ...) เพื่อ
    ตัดสินว่าต้องมี stage ไหนบ้าง (เช่น `needs_ui: true` → ต้องเพิ่ม stage `design` ก่อน
    `generate-tests`)
-3. สร้างรายการ stage จาก spec จริง ไม่ใช่ template ตายตัว โครงขั้นต่ำคือ:
+3. เลือก **mode** — `lite` หรือ `full` — ก่อนจะสร้าง stage ใดๆ โดยอ่านจากตารางเงื่อนไขตายตัว ไม่ใช่
+   จากความรู้สึกว่างานนี้ควรเข้มแค่ไหน ข้อใดข้อหนึ่งต่อไปนี้บังคับให้เป็น `full`: มี component
+   อิสระตั้งแต่ 2 ตัวขึ้นไป, Reality Constraints ระบุ external dependency หรือคู่ path ที่ต้องให้ผล
+   ตรงกัน, `needs_devops: true`, มี runtime invariant ที่ถ้าถูกละเมิดแล้วจะเงียบใน production, หรือ
+   ผู้ใช้ขอมาเอง ถ้าไม่เข้าข้อไหนเลย → `lite` และถ้าก้ำกึ่งให้เลือก `full` เพราะ `lite` ที่ผิดคือ
+   ข้อผิดพลาดที่หลุดไป ส่วน `full` ที่ผิดแค่ทำให้รันช้าลง
+   `lite` คือ `generate-tests → freeze-tests (🔒) → implement → {verify, review} → done` — เครื่อง
+   ตัวเดิมที่ตัดเฉพาะ stage ที่ไม่มีอะไรให้ตรวจบน spec นี้ **ไม่ใช่การตัดกลไกกันพลาด**: write-scope
+   allowlist, การ freeze, commit-per-stage และ `review` ยังอยู่ครบ สิ่งที่หายไปคือ `test-review` กับ
+   `deploy-readiness` (ซึ่งเงื่อนไขของ `lite` เองรับประกันแล้วว่าไม่มีอะไรให้ทั้งคู่ตรวจ) ส่วน
+   `spec-review` ถูกยุบเข้าไปใน brief ของ `generate-tests` ไม่ได้หายไป โดยทั่วไปเหลือ stage ที่ต้อง
+   spawn subagent 3 ตัว แทนที่จะเป็น 6-7 ตัว mode ที่เลือกถูกบันทึกเป็น `mode: lite | full` ใน
+   `workflow.yaml` — เป็นบันทึกว่าทำไม stage นั้นถึงไม่อยู่ ไม่ใช่สวิตช์ที่มีอะไรอ่านตอนรัน
+4. สร้างรายการ stage จาก spec จริง ไม่ใช่ template ตายตัว โครงของ `full` คือ:
    `spec-review → generate-tests → [test-review] → freeze-tests (🔒) → implement[-per-component] →
    {verify, review} → done`
    - การเขียนเทสต์กับการ freeze เป็น **คนละ stage** เพราะ freeze มีไว้กัน *implementation* แก้เทสต์
@@ -180,13 +193,13 @@ review ไม่ใช่ของ stage machine)
    - ถ้า spec เกี่ยวข้องกับเรื่อง deployment (env vars, migration, feature flags) จะเพิ่ม stage
      `deploy-readiness`
    - จบด้วย stage `done` แบบ mechanical (เขียนสรุปแล้วหยุด — ไม่ใช่ `waiting_approval`)
-4. brief ของ `implement-*` ต้องสั่งให้ลง runtime invariants ของ spec เป็น guard จริงด้วย — เทสต์ที่
+5. brief ของ `implement-*` ต้องสั่งให้ลง runtime invariants ของ spec เป็น guard จริงด้วย — เทสต์ที่
    freeze ไว้มาจากเคสที่คิดถึงแล้ว ส่วน guard มีไว้สำหรับเคสที่คิดไม่ถึง ดังนั้น implementation ที่
    ไม่มี guard เลยก็ยังผ่านเทสต์หมด และไม่มีการตรวจเชิงกลไกจุดไหนในไฟล์ที่จะจับได้ — จึงต้องสั่งใน
    brief เท่านั้น จากนั้นกรอกทุกฟิลด์ของแต่ละ stage: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
    `on_fail`, `freeze_after`
-5. เขียน `workflow.yaml` + `state.json`
-6. **dry-run เสมอก่อน**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` —
+6. เขียน `workflow.yaml` + `state.json`
+7. **dry-run เสมอก่อน**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` —
    การเช็คโครงสร้างแบบ zero-LLM (ไม่มี PyYAML ไม่มีการตัดสินใจของ AI) ที่จับ 7 เรื่องหลัก:
    - `on_fail.target` หายไปใน stage ที่ `write_scope: []` + `action: fixing`
    - `write_scope` ทับซ้อนกับ path ที่ freeze เป็นเทสต์ไปแล้ว
@@ -198,7 +211,7 @@ review ไม่ใช่ของ stage machine)
 
    `FAIL` = ต้องแก้ก่อนโชว์ให้ผู้ใช้ดู, `WARN` = แจ้งไว้แต่ไม่บล็อก
 
-7. โชว์ทั้งสองไฟล์พร้อมคำอธิบายลำดับ stage แบบภาษาธรรมดา เพื่อให้ผู้ใช้ตรวจสอบได้ก่อนถือว่า
+8. โชว์ทั้งสองไฟล์พร้อมคำอธิบายลำดับ stage แบบภาษาธรรมดา เพื่อให้ผู้ใช้ตรวจสอบได้ก่อนถือว่า
    "freeze" แล้วจริงๆ
 
 ### ตัวอย่างการใช้งาน

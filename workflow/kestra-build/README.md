@@ -71,6 +71,45 @@ code quality or security holes the spec never thought to test for. A spec with a
 flag (env vars, migrations, feature flags) also picks up a `deploy-readiness` stage (suggesting
 whatever devops skill you have) between `review` and `done` — omitted here since csv-export has none.
 
+### Lite mode
+
+The sequence above is the **full** shape. Those extra stages each cost a subagent round-trip to buy
+one thing: catching a false pass nobody would otherwise notice. That's worth paying when a wrong
+answer survives to production, and not worth paying when the first run tells you the answer — so
+kestra-build picks a **lite** shape instead when the spec gives the extra stages nothing to examine:
+
+```mermaid
+flowchart TD
+    B[generate-tests] --> Z["freeze-tests<br/>🔒 freeze point"]
+    Z --> C[implement]
+    C --> D[verify-acceptance-criteria]
+    C --> E[review]
+    D --> F[done]
+    E --> F
+
+    classDef freeze fill:#d97757,color:#fff,stroke:#333,stroke-width:1px
+    class Z freeze
+```
+
+Lite is **full with the empty stages removed, not with the safety removed.** All three primitives
+still apply — the write-scope allowlist, the test-hash freeze, commit-per-stage — and `review` is
+still there, so there's still a pass reading the diff for injection/authn/secrets and for runtime
+guards the tests never asked about. What's gone is `test-review` (its trigger is test doubles, and
+lite requires there are none), `deploy-readiness` (lite requires `needs_devops: false`), and
+`spec-review` as a stage of its own — its checks get folded into `generate-tests`'s brief rather
+than dropped. Typical saving on a single-component feature: three subagent-bearing stages instead
+of six or seven.
+
+You don't pick the mode; it's read off the spec. Any one of these forces full — two or more
+independent components, Reality Constraints listing an external dependency or a pair of paths that
+must agree, `needs_devops: true`, runtime invariants whose violation would be silent in production,
+or you asking for it. None of them present means lite, and anything ambiguous resolves toward full,
+since a wrong `lite` costs a missed defect while a wrong `full` costs a slower run. The workflow
+records the answer as `mode: lite | full` and says which condition decided it. That field is a note
+for whoever reads the file later, not a switch — every stage present is executed and enforced
+identically either way, so flipping it by hand does nothing. If a lite feature grows a second
+component or starts mocking a service, regenerate from the spec rather than hand-adding stages.
+
 None of these stages stop for a human by default — `spec-review` reviews the spec's runtime
 invariants and reality constraints for gaps and contradictions and greps its own verdict artifact
 (it's the cheapest place in the file to catch a defect: one edit to one document, versus a
