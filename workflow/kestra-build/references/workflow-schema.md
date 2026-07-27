@@ -85,6 +85,29 @@ exit_criteria:
   (see the worked example below) — the fix loop and `fixing → reworking` remain the one place a
   human is always in the loop.
 
+### The verdict artifact
+
+Every stage whose gate greps a verdict writes the same shape, and the brief has to say so — left
+unspecified these come back as multi-page prose that costs turns to compose and that nothing reads
+in that form:
+
+```markdown
+VERDICT: CHANGES_REQUESTED
+
+| Severity | Finding | Where |
+|---|---|---|
+| blocking | Guard for the "empty batch" invariant is missing entirely | src/alloc.ts:88 |
+| minor | Error message names the old field | src/alloc.ts:141 |
+
+Evidence: evidence/sweep-200k.md (command recorded in the file)
+```
+
+First line exactly `VERDICT: CLEAR` or `VERDICT: CHANGES_REQUESTED` — that's what `exit_criteria`
+greps. The table takes as many rows as there are findings; a finding that genuinely needs more than
+a row gets its row plus a short paragraph under the table. The point is to cut narration, never to
+cap how much gets reported. A numeric finding also names the quantity it measured and pastes the
+command that produced it — see the note in `SKILL.md`'s `review` guidance.
+
 ### `on_fail`
 
 ```yaml

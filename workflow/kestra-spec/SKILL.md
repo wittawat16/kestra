@@ -233,7 +233,35 @@ rather than a complete list — a data pipeline's dominant risk is schema drift,
 authorization and N+1 queries, and neither appears there. Add whatever this codebase's own history
 and conventions tell you belongs.
 
-### 6. Write `0-spec.md` — single file, everything included
+### 6. Self-check against the list `spec-review` will grade this by
+
+`kestra-build` generates a `spec-review` stage that runs before a single test is written, and its
+job is to find contradictions inside this document. Every contradiction it finds costs a full stage
+cycle to bounce back and resolve — and on a real run, the first bounce was a contradiction the spec
+author could have caught in a minute: a Runtime Invariant that raises on a condition the spec's own
+Edge Cases section declares an unchanged no-op. Both sentences were written by the same pass; only
+nothing ever read them against each other.
+
+So read them against each other now. This is the same list `spec-review` uses, deliberately — keep
+the two in sync, and if you change one, change the other:
+
+1. **Each Runtime Invariant vs. the Edge Cases and ACs describing the same condition.** Find every
+   row that talks about the same situation and confirm they agree on what happens. An invariant that
+   halts where an edge case says "no-op," or an AC asserting an exact result where a dependency is
+   documented as not guaranteeing completeness, is a contradiction to resolve here.
+2. **No invariant's on-violation action is "log and continue."** That's the absence of an invariant
+   written in the vocabulary of having one. Halt, refuse, or alert someone — or move the row out of
+   the invariants table and call it what it is.
+3. **Each AC is testable without a follow-up question.** Where a count or a composition decides the
+   answer, name the exact inputs — "returns the right subset" needs the input set and the expected
+   subset, or the test author will invent both.
+4. **Each "does not guarantee" column is filled.** An empty one is the seed of a test double that is
+   never wrong in testing and never right in production.
+
+Fix what this turns up before writing the file. Anything you genuinely can't resolve goes in **Open
+Items** — an honest open item passes `spec-review`; a contradiction doesn't.
+
+### 7. Write `0-spec.md` — single file, everything included
 
 One file, not five. See the template below. Every section that step 3 produced content for gets
 folded in under its own heading in the same document — there is no separate `ba.md`/`design.md`/
@@ -380,6 +408,9 @@ Done once:
   not-applicable with a reason; in particular the "does not guarantee" column is populated, since
   that's the column whose emptiness later shows up as a test double that was never wrong in testing
   and never right in production
+- **Step 6's cross-check has actually been run** — each Runtime Invariant read against the Edge
+  Cases and ACs covering the same condition, and any disagreement resolved rather than left for
+  `spec-review` to find at the cost of a stage cycle
 - No silent gaps — anything unresolved is in **Open Items**, not left blank
 
 If **Open Items** is non-empty, say so plainly when handing this off — `kestra-build` (or whoever

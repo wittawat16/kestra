@@ -52,15 +52,48 @@ serialize the re-check than the original pass. Only after both come back does th
 count as passed. A sibling that already passed in this batch doesn't need re-running; only the
 ones that failed.
 
-## Resume the previous attempt's subagent instead of spawning fresh
+## Run artifacts: build the harness once, and keep expensive evidence
 
-A brand-new subagent has to re-read the spec, re-orient on the codebase, and rebuild whatever
-understanding the previous attempt already had — pure re-paid cost on every single retry, which is
-exactly where cost balloons on a stage with `max_attempts: 5`. Resuming means the follow-up only
-needs to carry the failure output and the retry instruction; everything the agent already loaded
-stays loaded. This applies to the same stage's own `fixing` retries (and to a `target`-based
-re-review — a resumed reviewer already knows what it found the first time, so it naturally checks
-specifically whether *those* findings are now resolved instead of re-deriving a whole fresh review
-of the entire diff from zero). It does **not** apply across a `reworking` transition — that unlocks
-test-writing and changes what's even true about the stage, so start that fresh. If the environment
-has no way to resume a specific prior agent, spawning fresh is the fallback, not a mistake.
+Two things a run tends to produce over and over because no stage can see what another stage did:
+
+- **A throwaway harness** — the thing that applies mutants and reports which ones the suite caught,
+  or compares two paths, or sweeps an input space. Measured on a real run, four agents each wrote
+  their own, and the expense was never the writing; it was each one re-discovering which config
+  files a sandbox copy of the repo needs before the suite runs there at all.
+- **Expensive evidence** — a sweep, a benchmark, a large enumeration. Same run: a 200,001-case
+  sweep performed twice by two stages that couldn't see each other.
+
+Both live in the run folder — `<run-folder>/harness/` and `<run-folder>/evidence/` — and both get
+named in every subsequent spawn's context pack (path plus one line on what's there). Deliberately
+*not* shipped inside this skill: a harness has to be written in some language, and the setup
+knowledge it encodes is specific to this repo, so it belongs next to `state.json` rather than in a
+skill that has to work in any stack.
+
+The reuse rules that keep this from becoming a liability: an `evidence/` file is valid only for the
+commit it was computed against, so a stage reusing one after the code moved must re-run it; and a
+stage may not clear a finding on the strength of an artifact it neither verified nor reproduced.
+Reuse is there to skip *recomputation*, never to skip *judgment*.
+
+## Resume vs. respawn — a trade, not a default
+
+The earlier guidance here was "resume over respawn, full stop." Measured, that's wrong as an
+absolute. Resuming `generate-tests` for a fixing round took 138.7 s against 221.6 s for the original
+fresh spawn — 37% less wall clock — but cost 170,964 tokens against 154,868, about 10% more, because
+resuming resends the entire prior transcript on every turn. The same shape held for both other
+resumed spawns in that run: they had by far the highest tokens-per-turn (up to 29,910, against
+~12,000 for a fresh spawn).
+
+So it buys wall clock with tokens, and which side wins depends on how big the transcript already is:
+
+- **Transcript still small → resume.** The re-orientation you'd otherwise re-pay costs more than the
+  transcript does, and a resumed reviewer naturally checks whether *its own* findings were addressed
+  rather than re-deriving a whole review from zero.
+- **Transcript large (roughly past 150k tokens) → respawn with the context pack.** Past that point
+  every turn is dragging a transcript heavier than the pack that would replace it, and the pack
+  supplies exactly what resuming was protecting: the current state, what changed, and the specific
+  findings to address. A fresh agent with the pack is not the uninformed agent the old advice was
+  written against.
+
+Two cases are not judgment calls: **never** carry a transcript across a `reworking` transition —
+that unlocks test-writing and changes what's even true about the stage, so start fresh — and if the
+environment has no way to resume a specific prior agent, respawning is the fallback, not a mistake.

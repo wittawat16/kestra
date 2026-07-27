@@ -4,6 +4,34 @@ Every check here must be a real command you actually run, with the real output p
 act on it. This file exists so you don't improvise slightly-wrong versions of these from memory —
 the whole design depends on these being precise.
 
+## Building the context pack (before a spawn)
+
+The pack SKILL.md's step 2 requires is assembled from commands you already have to run anyway.
+Gather it immediately before spawning, not once per stage-with-retries — a stale pack misleads.
+
+```bash
+# 1. Starting state: run the stage's own exit_criteria.run yourself first.
+#    Capture the exit code — for a pre-implementation stage a NON-zero code is the expected,
+#    informative answer, not a failure to hide.
+<the stage's exit_criteria.run command>; echo "exit=$?"
+
+# 2. What the previous stage actually did. <prev-sha> is the commit that stage ended with,
+#    recorded in state.json / findable via `git log --oneline`.
+git diff --name-only <prev-sha>^ <prev-sha>
+git diff -U0 <prev-sha>^ <prev-sha>
+
+# 3. Verdict artifact from the previous stage, and its verdict line only.
+ls <run-folder>/*verdict*.md
+grep -m1 '^VERDICT:' <run-folder>/<prev-stage>-verdict.md
+
+# 4. Anything already computed or built for this run.
+ls -1 <run-folder>/evidence/ <run-folder>/harness/ 2>/dev/null
+```
+
+Paste the real output of each into the spawn prompt. Nothing here reads a language-specific file —
+`exit_criteria.run` comes from `workflow.yaml`, the rest is `git` and `ls` — so this works
+unchanged in any repo.
+
 ## write_scope check
 
 After a subagent finishes a stage's work, compare what it actually touched against the stage's

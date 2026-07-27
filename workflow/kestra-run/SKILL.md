@@ -96,8 +96,8 @@ do when one or both of them fail.
    below) — if it is, spawn one (Agent tool) with a prompt built from: the stage's `brief`, the path
    to `source_spec` (let the subagent read the full spec itself — don't paraphrase it down, that's
    how implementation stages start hallucinating requirements they can't see), the stage's
-   `write_scope` (so it knows its own boundary before enforcement even checks it), and a plain note
-   of any prior stage's relevant artifacts. If `brief` names a skill as a suggestion, leave that in
+   `write_scope` (so it knows its own boundary before enforcement even checks it), and **the context
+   pack below**. If `brief` names a skill as a suggestion, leave that in
    verbatim — the subagent decides whether to use it. Tell the subagent to report back tersely:
    command + exit code + one-line verdict per check it ran, not a narrative essay — you re-verify
    every claim yourself in step 3 regardless, so a long self-justifying writeup has no enforcement
@@ -106,6 +106,36 @@ do when one or both of them fail.
    independent test files, or reading several unrelated existing files for context) rather than
    doing them one at a time — this is the same "independent work doesn't need to be serialized"
    idea as the stage-level parallelism above, just applied one level down inside a single stage.
+   - **The context pack — hand over what you already know, every spawn, no exceptions.** Measured on
+     a real run: every spawn cost between 150k and 205k tokens regardless of what it did, and the
+     stage that wrote production code was the *cheapest* one. The dominant cost isn't the work, it's
+     an agent standing up with no idea where it is and spending its first three to five turns
+     rediscovering facts the orchestrator is already holding. Those early turns are the expensive
+     ones, because every later turn resends their output. So paste the following into the prompt
+     rather than letting the subagent go find it:
+     - the stage's `write_scope` globs (above)
+     - **the stage's `exit_criteria.run` command, already executed by you, with its real exit code
+       and output.** Run it before spawning. This is the single highest-value field: it tells the
+       agent the starting state — red, green, or broken — without it burning a turn to find out, and
+       it costs you nothing you weren't going to run in step 3 anyway. When `exit_criteria.type` is
+       `artifact_exists` instead, say whether the artifact is currently present.
+     - the files and line ranges the previous stage touched — `git diff --name-only` and
+       `git diff -U0` against that stage's commit, pasted, not summarized
+     - the previous stage's verdict artifact path **and its verdict line**
+     - anything under `<run-folder>/evidence/` and `<run-folder>/harness/` (see the artifact-reuse
+       and harness notes in `references/efficiency-notes.md`) — path plus one line on what each holds
+     - on a `fixing` retry: the specific findings being fixed, which you already have from the
+       failing stage's own output. Not "it failed" — the actual claims.
+
+     Every field here is read off the workflow's own files or off `git`, so none of it assumes a
+     language, a test runner, or a project layout. Omit a field only when it genuinely has no value
+     yet (no previous stage, no verdict artifact) and say so explicitly — a silently missing field
+     reads to the subagent as "nothing to see here," which is exactly the wrong inference when the
+     truth is "not gathered." Two failure modes to watch: a pack that has gone **stale** (you ran
+     `exit_criteria` before an intervening change) is worse than no pack, since the agent trusts it —
+     regenerate the pack for each attempt rather than reusing the previous one; and a pack is context,
+     never permission — it never widens `write_scope`, and step 3 re-verifies everything regardless
+     of what the pack said.
    - **Efficiency note — not every stage needs a fresh subagent.** Run the check directly instead
      of spawning one when a stage's whole job is a mechanical re-check `exit_criteria` already
      covers (empty `write_scope`, no judgment call). Reserve spawns for work a shell command can't
@@ -175,12 +205,15 @@ do when one or both of them fail.
      doesn't just trust the fix. TaskUpdate the stage's task's `activeForm` to something like
      "implement-csv-export — attempt 2/5, retrying after test failure" so a retry loop reads as
      visible progress from outside instead of silence; status stays `in_progress` throughout.
-     **Resume the previous attempt's subagent instead of spawning a fresh one**, whenever your
-     environment lets you send a follow-up message to a specific prior agent — a fresh subagent
-     re-pays the cost of re-reading the spec and re-orienting on every single retry. This applies
-     to the stage's own `fixing` retries and to `target`-based re-reviews; it does **not** apply
-     across a `reworking` transition, which starts fresh. If resuming isn't possible, spawning
-     fresh is the fallback, not a mistake. Full reasoning in `references/efficiency-notes.md`.
+     **Resume the previous attempt's subagent while its transcript is still small; respawn with a
+     fresh context pack once it isn't.** Resuming trades tokens for wall clock — measured, ~37%
+     faster but ~10% more expensive, because the whole prior transcript is resent every turn — so it
+     wins early, when re-orientation would cost more than the transcript does, and loses once the
+     transcript is past roughly 150k tokens and the pack can supply the same orientation for a
+     fraction of it. This applies to the stage's own `fixing` retries and to `target`-based
+     re-reviews; it does **not** apply across a `reworking` transition, which always starts fresh.
+     If resuming isn't possible, spawning fresh is the fallback, not a mistake.
+     `references/efficiency-notes.md`. Full reasoning in `references/efficiency-notes.md`.
    - `attempts >= max_attempts`, OR the same diff came back **and** `attempt >= escalate_at` (no
      progress, and the grace window for that repeat is spent) → **stop.** This is
      `reworking` — the one transition the design explicitly reserves for a human, and now the *only*

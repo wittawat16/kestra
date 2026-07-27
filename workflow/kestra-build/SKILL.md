@@ -253,7 +253,10 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      result while a dependency is documented as not guaranteeing completeness is a contradiction
      someone has to resolve now, not during implementation). Keep the enforcement mechanical the
      same way `review` does it: the brief asks for the analysis and a written verdict artifact, and
-     `exit_criteria` greps that artifact for the verdict line. When the spec lacked these sections
+     `exit_criteria` greps that artifact for the verdict line. This is the same list `kestra-spec`'s
+     own step-6 self-check runs before handing the spec over — deliberately, so a spec produced by
+     that skill arrives having already cleared it and this stage costs one cheap pass instead of a
+     bounce; keep the two lists in sync if you change either. When the spec lacked these sections
      and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
      rather than assuming a human already blessed it.
    - **Add a `test-review` stage between `generate-tests` and `freeze-tests` when — and only when —
@@ -294,6 +297,34 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      starting point rather than a closed set — a data pipeline's characteristic failure is schema
      drift, a web app's is authorization and N+1 queries, and neither is in the table. Tell the
      brief to add rows the spec and codebase imply, and to say plainly when a row was added.
+   - **Build the throwaway harness once per run, not once per stage — as a contract, never a
+     bundled script.** Proving a test is non-vacuous means mutating the code and checking the suite
+     notices; the same goes for a parity claim or a sweep over an input space. Measured on a real
+     run, four separate agents each wrote their own mutation harness, and each re-discovered from
+     scratch which config files a sandbox copy needs before the suite will even run there. The
+     writing was never the expense — the rediscovery was. And that knowledge is repo-specific, which
+     is exactly why the fix is *not* to ship a harness inside this skill: a harness has to be written
+     in some language, and a Python one is dead weight in a Go repo. Define the contract in the
+     brief and let the first stage that needs one build it in the project's own language:
+     - **takes** a set of mutants (a patch, or an edit described precisely enough to apply) plus the
+       command that runs the suite
+     - **returns**, per mutant, whether the suite caught it — a surviving mutant is the finding
+     - **lives** in the run folder, e.g. `<run-folder>/harness/`, beside `state.json`; not in the
+       repo's own source tree, and not in this skill
+     Tell every later stage's brief that the harness may already exist, where to look, and to extend
+     it rather than write a second one. Say plainly that it is scaffolding for this run and is not
+     held to the project's production standards — otherwise a stage will try to make it nice.
+   - **Expensive evidence becomes an artifact other stages can read.** On the same run, `review` ran
+     a 200,001-case sweep against an exact oracle that `test-review` had already run a variant of;
+     neither could see the other's work, because there was nowhere to put it. Add to the briefs:
+     any computation costing more than a moment writes its result **and the exact command that
+     produced it** into `<run-folder>/evidence/`, and any stage about to compute something checks
+     `evidence/` first and computes only what's missing. The command matters more than the number —
+     a result whose provenance isn't recorded can't be re-derived, and then a later stage is
+     trusting a figure it cannot check. Two guards worth stating in the brief: an `evidence/` file
+     is only valid for the commit it was computed against, so a stage reusing one after the code
+     changed must re-run it; and evidence is an input to judgment, never a substitute for it — a
+     reviewer may not clear a finding on the strength of an artifact it didn't verify or reproduce.
    - **Independent components default to sibling `implement-*` stages, not a chain.** A monorepo
      feature touching e.g. `src/api/**` and `src/web/**` should get `implement-backend` and
      `implement-frontend` both `depends_on: [freeze-tests]` directly — never one `depends_on` the
@@ -353,6 +384,28 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      `on_fail.action: fixing` with `target: <the implement stage's id>` gives the implementation a
      bounded number of attempts to address the findings before this escalates to `reworking` — see
      `workflow-schema.md`'s `on_fail.target` field.
+     - **Specify the verdict artifact's shape in the brief — every stage that writes one
+       (`spec-review`, `test-review`, `review`).** Left unspecified, these come back as multi-page
+       prose, and the stage spends turns composing something no one reads that way: the gate greps a
+       single line, and the only other consumer is a later stage that needs the claims and where to
+       check them. Ask for, in order: the verdict line, exactly `VERDICT: CLEAR` or
+       `VERDICT: CHANGES_REQUESTED` as the first line; then a findings table with one row per
+       finding — severity, the claim in one line, and `file:line`; then paths into `<run-folder>/evidence/`
+       for anything that took real computation to establish. Give the reason in the brief rather
+       than just the format, because a reviewer told only "be brief" will drop findings to comply.
+       The shape has room for as many rows as there are findings; what it cuts is narration, not
+       substance. And say explicitly that a finding needing more explanation than a row holds gets
+       its row *plus* a short paragraph below the table — a format that suppresses a real finding
+       has cost more than the prose ever did.
+     - **A reviewer challenging a numeric claim must state the quantity it measured and paste the
+       command.** On a real run, one `spec-review` pass (179,460 tokens) existed solely because a
+       reviewer measured a different quantity than the spec did — an `abs()`-symmetric, ungated
+       deviation where the spec meant a one-sided shortfall at the decisive comparison — reported it
+       as a defect, and withdrew it when asked to show its work. The asymmetry is what makes this
+       worth a line in the brief: stating the quantity costs the reviewer one sentence, while a
+       mismeasured finding costs a whole extra stage cycle to resolve. So: a numeric finding names
+       the quantity, the inputs, and the exact command or script, with the output pasted. A numeric
+       finding without them isn't a finding yet.
      - **When there are 2+ sibling `implement-*` stages, split `review` one-per-component instead
        of a single shared `review`** (e.g. `review-backend`/`review-frontend` alongside
        `implement-backend`/`implement-frontend`), each `depends_on` every implement stage (still
