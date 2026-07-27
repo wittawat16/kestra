@@ -1,3 +1,6 @@
 .claude/settings.local.json
+# A project-scoped install (`./install.sh --project .`) lands here and would
+# shadow the source skills in this repo's own sessions — never commit it.
+.claude/skills/
 __pycache__/
 *.pyc
