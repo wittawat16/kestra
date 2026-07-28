@@ -243,6 +243,25 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      discover it from a confusing halt. Its `on_fail` is `reworking`, not `fixing`: if the tests no longer
      pass their own checks at the moment of freezing, something is wrong upstream and quietly
      patching them here would bypass whatever review already approved them.
+   - **Optionally split `generate-tests` itself into a `design-tests` stage (scenario list) and a
+     `generate-tests` stage (test code)** when the spec has enough ACs/BRs/edge cases that
+     scenario-coverage gaps are a real risk on their own, independent of the code that will
+     eventually express them — same reasoning as the writing/freezing split above, one level
+     earlier. `design-tests` writes nothing but a table (AC/BR/edge-case → scenario title →
+     Given/When/Then), `depends_on` the same stage `generate-tests` would have, `write_scope`d to
+     that table artifact only, `exit_criteria.type: artifact_exists`. `generate-tests` then
+     `depends_on: [design-tests]` and translates the approved table into real test code 1:1 —
+     its own judgment burden shrinks to "does this code match the plan," not "did I think of
+     everything," so a coverage gap is a one-row table edit instead of a rewritten test file. Skip
+     this split on a small/simple spec — it's overhead when there's nothing near enough to a
+     coverage gap to be worth a dedicated stage for. Two traps, both hit on a real attempt: if the
+     `generate-tests` brief already enumerates every scenario by name (BRs, edge cases, states),
+     the plan table just duplicates the brief at the cost of a full extra spawn — the split only
+     pays when the brief *can't* enumerate everything up front; and on a `needs_ui` spec,
+     `design-tests` must stay downstream of `design`, because running them as parallel siblings
+     means design.md's screen states can't appear in a plan written before design.md exists, while
+     `generate-tests` is simultaneously forbidden from inventing rows the plan lacks — a coverage
+     gap with no legal path to close it.
    - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
      The obvious version of this stage checks that the spec file exists, is non-empty, and contains
      an acceptance-criteria heading. That passes for any spec-shaped document, including one that's
@@ -363,17 +382,28 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      By the time execution reaches it, every judgment-bearing check already ran and already had its
      own escalation path; there's nothing left for a human to approve that hasn't already been
      mechanically or automatically checked.
-4. **For every stage, fill in:** `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
+4. **Before writing briefs, ask the user once whether they have a preferred skill for any stage**
+   (e.g. "use `meta-dev` for implementation", "use `meta-qa` for verify") — don't guess or default
+   silently. This matters because of an observed failure mode: a brief that names a skill only
+   generically ("an implementation-focused skill, if you have one installed, fits this stage well")
+   was measured, across real `kestra-run` spawns, to never actually get picked up — the spawned
+   subagent just does the work directly without invoking any skill, because generic phrasing gives
+   it nothing concrete to match against. A named preference fixes this: put it in the brief as
+   "Use the `<skill-name>` skill for this stage" rather than the generic hedge. If the user has no
+   preference, keep the generic phrasing (still a suggestion, never a hard dependency — see below)
+   and say so plainly rather than picking a skill on their behalf.
+   **For every stage, fill in:** `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
    `on_fail`, `freeze_after` (true only on the freeze stage), and `model` (omit on every stage
    except optionally `implement-*` — see schema for the full field list and the reasoning behind
    the narrow scope). Write `brief` as plain instructions for whatever Claude eventually gets
    spawned to do the stage's work — never a skill name as a hard dependency. You're generating this
-   inside a live Claude session right now, so you can see your own `available_skills`; if one is
-   genuinely relevant to a stage (e.g. an implementation-focused skill for an implement stage), name
-   it *inside the brief text* as a suggestion worth trying, not as a required binding. The workflow
-   may execute on a different machine with a different skill set later — the enforcement fields
-   (`write_scope`, `exit_criteria`, `on_fail`) must keep working with or without any specific skill
-   installed. **Keep each brief proportionate to what it's actually verifying new.** A brief that
+   inside a live Claude session right now, so you can see your own `available_skills`; if the user
+   named a preferred skill for this stage, name it *inside the brief text* as an explicit
+   instruction ("Use the `<skill-name>` skill"); otherwise, if one is genuinely relevant (e.g. an
+   implementation-focused skill for an implement stage), name it as a suggestion worth trying, not
+   as a required binding. The workflow may execute on a different machine with a different skill set
+   later — the enforcement fields (`write_scope`, `exit_criteria`, `on_fail`) must keep working with
+   or without any specific skill installed. **Keep each brief proportionate to what it's actually verifying new.** A brief that
    asks a stage to re-derive evidence the mechanical `exit_criteria` check already produces (e.g.
    "run the test suite and paste the output" when `exit_criteria.run` already does exactly that)
    just burns an extra subagent round-trip for zero new information — every stage's real work gets

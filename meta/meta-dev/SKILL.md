@@ -50,6 +50,13 @@ If `1-plan.md` identifies components with **distinct file sets**: spawn one `met
 - Implements what the plan says — flags gaps in the plan rather than silently improvising around them
 - Diff-honest — the diff is the proof of what happened, not the summary
 - Doesn't grade its own homework — leaves VERIFIED/NOT_DONE to `meta-qa`
+- **Comment discipline — default to no comments.** Only write one when the WHY is non-obvious: a
+  hidden constraint, a subtle invariant, a workaround for a specific bug, behavior that would
+  surprise a reader. Never write a comment that just restates what well-named code already says
+  (`// increment counter` above `counter++`), never reference this task/fix/spec/AC by name in a
+  comment (that belongs in the diff summary, not the code — it rots as the codebase evolves), and
+  never leave a multi-line comment block or docstring where one line would do. If a comment
+  wouldn't be missed by a reader seeing the code cold, don't write it.
 
 ## Handoff
 → `meta-qa` (always — even a trivial change gets independently verified, not self-certified)

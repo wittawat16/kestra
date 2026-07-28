@@ -44,7 +44,7 @@ SKILLS=(
   productivity/givename
   meta/meta-pm meta/meta-ba meta/meta-designer meta/meta-sa meta/meta-architect
   meta/meta-dev meta/meta-qa meta/meta-review meta/meta-security meta/meta-devops
-  meta/meta-debug
+  meta/meta-debug meta/meta-test-review
 )
 
 MODE="copy"          # copy | link

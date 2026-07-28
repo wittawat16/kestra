@@ -53,7 +53,13 @@
       "seen_diffs": [],
       "history": []
     },
-    "review": {
+    "review-backend": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "review-frontend": {
       "status": "pending",
       "attempt": 0,
       "seen_diffs": [],

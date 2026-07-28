@@ -7,8 +7,11 @@ mode: full
 # NOTE: 0-spec.md is an illustrative example spec, not wired to a real codebase — its "Files to
 # Touch" section explicitly says so. The write_scope globs below (src/orders/**,
 # src/web/order-detail/**, src/inventory/**) are therefore reasonable ILLUSTRATIVE choices, not
-# verified-real paths. Before running this with kestra-run against a real repo, replace them with
-# paths actually confirmed to exist there.
+# verified-real paths — and the same goes for every exit_criteria.run command (npm test
+# --listTests, the eslint no-undef check, --testPathPattern filters, npm run test:e2e): none has
+# been run against a real repo, so treat them as unverified placeholders too. Before running this
+# with kestra-run against a real repo, replace globs AND commands with ones actually confirmed to
+# work there.
 
 stages:
   - id: spec-review
@@ -51,6 +54,11 @@ stages:
       max_attempts: 2
       escalate_at: 2
 
+  # design-tests (a separate think-then-write split) was tried here and removed: its scenario list
+  # duplicated what this brief already enumerates, cost a full extra subagent spawn per run, and
+  # parallelizing it with `design` opened a real coverage gap (design.md-only screen states had no
+  # path into the frozen tests). First scenario coverage + first code in one stage is the right
+  # size for this spec.
   - id: generate-tests
     depends_on: [design]
     brief: >
@@ -65,10 +73,11 @@ stages:
       — e.g. `describe("cancelling a paid order") > describe("given it has already shipped") >
       it("then the request is rejected and Returns is suggested")`. Cover at minimum: BR-1
       (pre-shipment cancel succeeds, post-shipment cancel rejected), BR-2 (refund amount accounts
-      for a prior partial refund), BR-3 (refund + inventory release happen atomically), and the
-      payment-provider-failure and duplicate-cancel edge cases. Each scenario should be traceable
-      back to the BR or edge case it came from — don't collapse multiple business rules into one
-      generic "cancel order" test.
+      for a prior partial refund), BR-3 (refund + inventory release happen atomically), the
+      payment-provider-failure and duplicate-cancel edge cases, and the four screen states
+      design.md defines (including the BR-1 rejected-shipped state as its own scenario). Each
+      scenario should be traceable back to the BR, edge case, or design state it came from — don't
+      collapse multiple business rules into one generic "cancel order" test.
     write_scope: ["test/order-cancellation/**"]
     exit_criteria:
       type: command
@@ -84,14 +93,22 @@ stages:
   - id: test-review
     depends_on: [generate-tests]
     brief: >
-      Read the tests just written against the spec's Reality Constraints and report a table with
-      one row per risk (ordering/preconditions, response realism, type/shape drift, path parity,
-      own shared logic, non-determinism), each marked applicable or n/a with file:line evidence.
-      Pay particular attention to the payment provider double: BR-2's refund amount depends on
-      prior-refund state the provider owns, and BR-3's atomicity depends on failure modes a
-      happy-path double will never produce. Add rows this codebase's conventions imply and say
-      which you added. Judgment only — the mechanical checks already ran in generate-tests'
-      exit_criteria. Write the verdict to
+      The spec's Reality Constraints are fully populated — don't re-derive them, check the tests
+      against exactly what's already there. Report a table with one row per item below, each
+      marked applicable or n/a with file:line evidence:
+        - Payment provider double: does it respect "refund only against a settled charge"? Does
+          it avoid assuming idempotency-by-default, immediately-consistent prior-refund totals
+          after a write, or that a timeout means the refund did not happen — since BR-2's refund
+          amount depends on prior-refund state the provider owns?
+        - Inventory service double: does it respect "reservation must exist before release,
+          releasing twice is an error"? Does it avoid assuming release is synchronous or
+          immediately visible — since BR-3's atomicity depends on failure modes a happy-path
+          double will never produce?
+        - Non-determinism: is the Clock pinned? Are provider-assigned identifiers pinned? Is the
+          provider latency/timeout path deliberately exercised (not left to luck)?
+      Path parity does not apply — the spec's Reality Constraints confirm there is only one
+      cancellation path, so skip that check rather than re-deriving it. Judgment only — the
+      mechanical checks already ran in generate-tests' exit_criteria. Write the verdict to
       workflow/runs/order-cancellation-refund/test-verdict.md, first line exactly "VERDICT: CLEAR"
       or "VERDICT: CHANGES_REQUESTED", followed by findings.
     write_scope: []
@@ -163,16 +180,19 @@ stages:
       max_attempts: 5
       escalate_at: 3
 
-  # verify-acceptance-criteria and review are siblings of each other, and both depend on BOTH
-  # implement-* stages directly (not on each other) — write_scope: [] on both, so nothing to
-  # collide on, and their target diff isn't final until both implement-* stages have passed.
+  # verify-acceptance-criteria needs BOTH implement-* stages (e2e spans components); the two
+  # review-* stages below each depend only on their own component and run as early as it lands.
   - id: verify-acceptance-criteria
     depends_on: [implement-backend, implement-frontend]
     brief: >
-      Run the full e2e suite and confirm every Given-When-Then acceptance criterion in the spec is
-      actually met end-to-end (not just that the frozen unit/integration tests pass) — in
-      particular BR-2's partial-refund-amount math and BR-3's atomicity, which are easy to satisfy
-      in a unit test but still get wrong end-to-end.
+      The exit_criteria command below already proves this stage's property mechanically — the e2e
+      suite covers every Given-When-Then acceptance criterion, including BR-2's
+      partial-refund-amount math and BR-3's atomicity end-to-end. No additional manual pass is
+      needed: run the command and let its real exit code decide. Per kestra-run's efficiency rule,
+      no subagent spawn is warranted for this stage. Targeting note: this e2e gate spans both
+      components but on_fail can only name one target — failures route to implement-backend by
+      default; when a failure is plainly frontend-only, say so in the failure output so the
+      orchestrator routes the fix brief against implement-frontend's write_scope instead.
     write_scope: []
     exit_criteria:
       type: command
@@ -183,33 +203,61 @@ stages:
       escalate_at: 2
       target: implement-backend
 
-  - id: review
-    depends_on: [implement-backend, implement-frontend]
+  # review is split per component so each on_fail.target routes to a stage whose write_scope can
+  # legally hold the fix — a single review targeting implement-backend would strand any
+  # frontend-only finding (fix diffs land outside the target's write_scope and get reverted every
+  # attempt). Each review depends only on its own implement stage: write_scope enforcement means
+  # the sibling can't touch this component's paths, so the diff under review is already final.
+  - id: review-backend
+    depends_on: [implement-backend]
     brief: >
-      Review the real diff since the last stage commit for correctness, edge cases, and
-      injection/authn/secrets risk — in particular that the refund amount (BR-2) is computed from
-      the payment provider's actual prior-refund record rather than trusted client input, and that
-      the atomic refund+release (BR-3) has no window where a crash leaves the order
-      half-cancelled. Confirm every Runtime Invariant from the spec is present in the diff as an
-      actual guard that halts or refuses — this is the only stage that can catch a missing one,
-      since the frozen tests pass either way. Passing tests only prove the spec's own acceptance
-      criteria — this stage exists to catch what the spec never thought to test for. Whatever code-review and
-      security-review skills you have available both fit this stage well; try them, proceed with a
-      direct review if none are available. Write the verdict to
-      workflow/runs/order-cancellation-refund/review-verdict.md as the first line, exactly:
-      "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
+      Review the backend diff (src/orders/**, src/inventory/**) since the last stage commit for
+      correctness, edge cases, and injection/authn/secrets risk — in particular that the refund
+      amount (BR-2) is computed from the payment provider's actual prior-refund record rather than
+      trusted client input, and that the atomic refund+release (BR-3) has no window where a crash
+      leaves the order half-cancelled. Confirm every Runtime Invariant from the spec is present in
+      the diff as an actual guard that halts or refuses — this is the only stage that can catch a
+      missing one, since the frozen tests pass either way. Passing tests only prove the spec's own
+      acceptance criteria — this stage exists to catch what the spec never thought to test for.
+      Whatever code-review and security-review skills you have available both fit this stage well;
+      try them, proceed with a direct review if none are available. Write the verdict to
+      workflow/runs/order-cancellation-refund/review-backend-verdict.md as the first line,
+      exactly: "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
     write_scope: []
     exit_criteria:
       type: command
-      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/review-verdict.md"
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/review-backend-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 3
       escalate_at: 2
       target: implement-backend
 
+  - id: review-frontend
+    depends_on: [implement-frontend]
+    brief: >
+      Review the frontend diff (src/web/order-detail/**) since the last stage commit for
+      correctness and injection/XSS risk — in particular that the Cancel flow renders all four
+      screen states design.md defines (with the BR-1 rejected-shipped state as its own explicit
+      state, not a generic error), that no refund amount or order status shown to the user is
+      computed client-side from trusted input, and that design.md's components/tokens are actually
+      used rather than one-off styles. Whatever code-review and security-review skills you have
+      available both fit this stage well; try them, proceed with a direct review if none are
+      available. Write the verdict to
+      workflow/runs/order-cancellation-refund/review-frontend-verdict.md as the first line,
+      exactly: "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/review-frontend-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-frontend
+
   - id: done
-    depends_on: [verify-acceptance-criteria, review]
+    depends_on: [verify-acceptance-criteria, review-backend, review-frontend]
     brief: >
       Every upstream stage passed. Write a one-page completion-summary.md: what shipped, which
       commits, the review verdict, and confirmation that BR-1/2/3 all have passing
