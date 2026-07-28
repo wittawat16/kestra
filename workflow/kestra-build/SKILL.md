@@ -139,7 +139,7 @@ generate-tests → freeze-tests (freeze point) → implement → {verify, review
 | `generate-tests` | kept | — |
 | `test-review` | **dropped** | its trigger is the presence of test doubles, and the lite condition table already established there are none |
 | `freeze-tests` | kept, unchanged | the freeze is the point of the whole thing; a "lite" mode that skips it is not this skill |
-| `implement-*` | kept, exactly one | the lite condition table already established there's one component |
+| `implement-*` | kept, exactly one, `effort: low` | the lite condition table already established there's one component and nothing heavy to reason about — set `effort: low` automatically here (never `model`, that stays opt-in — see the `effort`/`model` sections in `references/workflow-schema.md`) |
 | `verify` | kept | costs no subagent — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
 | `review` | kept, unconditional | passing tests say nothing about injection/authn/secrets or a missing runtime guard. This is the one judgment stage lite keeps, and the reason lite is still safe to use |
 | `deploy-readiness` | **dropped** | `needs_devops: false` was a precondition of choosing lite |
@@ -396,6 +396,17 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      `verify`/`review` re-check `implement-*`'s output, so that failure mode has nowhere to be
      caught. Don't set the field defensively when the user hasn't asked for it — omitting it already
      gives every stage the safe default.
+   - **Set `effort: low` on `implement-*` automatically whenever `mode: lite` — this one isn't
+     opt-in, unlike `model`.** See `references/workflow-schema.md`'s `effort` section for the full
+     reasoning. In short: `mode: lite`'s own precondition table already establishes `implement-*`
+     doesn't need heavy reasoning (single component, no doubles, trivial invariants), and the same
+     `verify`/`review` safety net that makes `model` overrides safe on `implement-*` applies here
+     too — a low-effort mistake just fails and loops through `fixing`. Under `mode: full`, leave
+     `effort` unset on `implement-*`: full's own trigger conditions describe other stages'
+     complexity, not necessarily this one's, so the signal doesn't transfer. Judgment stages
+     (`spec-review`, `test-review`, `review`, `generate-tests`) never get an automatic `effort`
+     override, same reasoning as `model` — nothing downstream re-checks how well they reasoned.
+     `effort` and `model` are independent fields; setting one never implies or requires the other.
    - **If the source spec's ACs are written as Given-When-Then** (see `kestra-spec`/`meta-pm`), the
      `generate-tests` stage's brief should say so explicitly: write the frozen tests as BDD scenarios
      that mirror the spec's Given-When-Then structure one-to-one, in whatever the stack's idiomatic
@@ -470,6 +481,11 @@ matters or how to fix it well.
   faster model was measured to silently invent an unstated answer and report zero open items where
   the default model had correctly flagged one. `model` belongs on `implement-*` only, where
   `verify`/`review` catch a wrong answer on the default model regardless of what wrote it.
+- Setting `effort: low` on a judgment stage (`spec-review`/`test-review`/`review`/`generate-tests`),
+  or on `implement-*` under `mode: full`. Same reasoning as the `model` anti-pattern above — the
+  `mode: lite` precondition table is the only thing that makes `effort: low` safe on `implement-*`,
+  and it doesn't hold for judgment stages or for `implement-*` under `mode: full`, which can still
+  be a genuinely complex piece of work even when the *reason* the workflow is `full` lives elsewhere.
 - Choosing `mode: lite` to make a run cheaper when a condition in the lite table actually holds —
   most often a spec whose Reality Constraints do list an external dependency, waved away as "only
   one mock." The doubles are exactly what `test-review` exists to read, so this doesn't save a

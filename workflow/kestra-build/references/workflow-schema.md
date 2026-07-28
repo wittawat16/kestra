@@ -34,6 +34,7 @@ hand-editing stages in, so the freeze and the write_scope non-overlap get re-val
 | `on_fail` | yes | object, see below | what happens when `exit_criteria` fails |
 | `branches` | no | list, see below | declarative conditional branching — optional, use sparingly |
 | `model` | no | `"default"` \| a faster/cheaper model tier's id | which model kestra-run should spawn this stage's subagent with. Omit (or `"default"`) to inherit whatever model is running the orchestrator itself — that's correct for almost every stage. See `SKILL.md`'s model-routing guidance before setting anything else; this field exists for one narrow case (`implement-*`), not as a general cost knob |
+| `effort` | no | `"default"` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | reasoning-effort override for this stage's subagent, independent of `model` — same model, less/more thinking budget. Omit (or `"default"`) to inherit the orchestrator's own effort level. See the `effort` section below; auto-set only on `implement-*` under `mode: lite`, and only that one case |
 
 ### `model`
 
@@ -62,6 +63,34 @@ So the rule is narrow and stage-shaped, not a global toggle:
 - **Don't set it defensively "to be safe."** Only give `implement-*` a `model` override when the
   user has asked for faster/cheaper runs; the default (omit the field) already inherits the
   orchestrator's model, which is the safe choice for every stage including `implement-*`.
+
+### `effort`
+
+A separate axis from `model` — same model family, less or more reasoning budget per turn. Unlike
+`model`, this one **does** get set automatically, in exactly one case, because the signal for when
+it's safe is already computed for another reason: `mode: lite`.
+
+- **`implement-*` under `mode: lite` defaults to `effort: low`.** `mode: lite`'s own precondition
+  table (single component, no test doubles, no non-trivial Runtime Invariants) is already evidence
+  the implementation itself doesn't need heavy reasoning — that's what earned it `lite` in the first
+  place. And the same safety net that justifies `model` overrides on `implement-*` applies here
+  unchanged: `verify` and `review` independently re-check the result at the orchestrator's own
+  effort level, so a low-effort implementation that gets something wrong just fails and loops
+  through `fixing` rather than silently passing.
+- **`implement-*` under `mode: full` keeps `effort` unset (`"default"`).** `mode: full`'s own
+  trigger conditions (test doubles, non-trivial invariants, 2+ components, `needs_devops`) describe
+  *other* stages' complexity, not `implement-*`'s own — a full-mode workflow can still have a
+  trivially simple `implement-*` (single file, e.g. because the complexity lived entirely in an
+  external dependency `test-review` exists to check). `mode: full` is not evidence either way about
+  `implement-*` specifically, so don't extend the lite-only default to it.
+- **Every judgment stage keeps `effort` unset, same reasoning as `model`, no exceptions.**
+  `spec-review`, `test-review`, `review`, and `generate-tests` never get an automatic `effort`
+  override under any mode — nothing downstream re-checks *how well* these stages reasoned, so
+  there's no safety net to catch a shallow pass the way there is for `implement-*`.
+- **`model` is never touched by this rule.** Whatever `model` a stage already has (explicit or
+  inherited) stays exactly as-is; `effort` is set independently and does not imply or require a
+  `model` override, and a `model` override does not imply an `effort` override either — they're
+  two separate knobs on the same stage, each with their own narrow rule above.
 
 ### `brief`
 

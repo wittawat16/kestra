@@ -100,7 +100,10 @@ do when one or both of them fail.
    pack below**. If the stage sets `model`, pass it as the spawn's model override; otherwise inherit
    the orchestrator's own model — don't default a stage to a faster tier on your own initiative, the
    workflow file is the only place that decision is allowed to live (see kestra-build's `model`
-   guidance for why it's scoped to `implement-*`). If `brief` names a skill as a suggestion, leave that in
+   guidance for why it's scoped to `implement-*`). Same for `effort`: if the stage sets it, pass it
+   as the spawn's effort override; otherwise inherit the orchestrator's own effort level — `effort`
+   and `model` are independent fields, check and pass each on its own, one can be set without the
+   other. If `brief` names a skill as a suggestion, leave that in
    verbatim — the subagent decides whether to use it. Tell the subagent to report back tersely:
    command + exit code + one-line verdict per check it ran, not a narrative essay — you re-verify
    every claim yourself in step 3 regardless, so a long self-justifying writeup has no enforcement
