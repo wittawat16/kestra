@@ -142,8 +142,8 @@ command that produced it — see the note in `SKILL.md`'s `review` guidance.
 ```yaml
 on_fail:
   action: fixing            # fixing | reworking | blocked
-  max_attempts: 5            # required when action: fixing
-  escalate_at: 3              # required when action: fixing — a repeated diff (no progress) gets
+  max_attempts: 3            # required when action: fixing
+  escalate_at: 2              # required when action: fixing — a repeated diff (no progress) gets
                                # a grace window of retries below this attempt count; once attempt
                                # >= escalate_at, a repeat stops straight to reworking instead of
                                # retrying again, even if max_attempts hasn't been reached yet
@@ -162,6 +162,14 @@ on_fail:
   this stage's failure output said (e.g. the `CHANGES_REQUESTED` findings), and re-runs *this*
   stage's own work + `exit_criteria` again afterward. `attempt`/`seen_diffs` are still tracked
   against this stage's own entry in `state.json`, same as any other `fixing` stage.
+  **Keep `implement-*`'s `max_attempts`/`escalate_at` the same as every other stage (`3`/`2`), not
+  higher.** Earlier guidance here gave `implement-*` a longer leash (`5`/`3`) on the assumption that
+  more retries against frozen tests is strictly safer. Sourced research says otherwise for exactly
+  this shape of loop — refining code against a test suite it can see repeatedly measurably
+  *increases* test-overfitting the more rounds it runs, not just increases cost (see
+  `workflow/research/tdd-in-ai-sdlc.md`). A longer leash on this specific stage trades a worse
+  failure mode (code that games the frozen tests rather than satisfying them) for a lower `reworking`
+  rate, which is the wrong trade.
 - `reworking` — bounce **up** to spec-review or test-regeneration, unlock test paths, re-freeze,
   reset attempt counters. This is the *only* legal way test paths become writable again after
   `freeze_after` has fired, and the one place the design always stops for a human — see
@@ -292,8 +300,8 @@ stages:
       run: "npm test -- csv-export"
     on_fail:
       action: fixing
-      max_attempts: 5
-      escalate_at: 3
+      max_attempts: 3
+      escalate_at: 2
 
   - id: verify-acceptance-criteria
     depends_on: [implement-csv-export]
