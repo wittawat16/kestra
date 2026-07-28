@@ -33,6 +33,35 @@ hand-editing stages in, so the freeze and the write_scope non-overlap get re-val
 | `freeze_after` | no, default `false` | bool | set `true` **only** on the dedicated freeze stage, whose successful completion snapshots the test-hash into `state.json` and commits the freeze point. Exactly one stage per file has this set, and its `write_scope` must be non-empty — the hash is computed from that scope, so an empty one snapshots nothing and the invariant silently doesn't exist. Not the stage that *writes* the tests: that one stays unfrozen so its output can still be reviewed and fixed cheaply (see `design-principles.md`) |
 | `on_fail` | yes | object, see below | what happens when `exit_criteria` fails |
 | `branches` | no | list, see below | declarative conditional branching — optional, use sparingly |
+| `model` | no | `"default"` \| a faster/cheaper model tier's id | which model kestra-run should spawn this stage's subagent with. Omit (or `"default"`) to inherit whatever model is running the orchestrator itself — that's correct for almost every stage. See `SKILL.md`'s model-routing guidance before setting anything else; this field exists for one narrow case (`implement-*`), not as a general cost knob |
+
+### `model`
+
+Model choice is a real trade — a faster/cheaper model finishes an `implement-*` stage in less
+wall-clock and fewer tokens, but it also degrades judgment, and this workflow file has no way to
+tell *how much* for the specific model you'd route to. Measured directly: the same spec-writing
+task, run once on the orchestrator's own model and once on a smaller/faster one, produced a spec
+that silently invented an unstated constant and marked **Open Items: none** — the exact failure
+mode `kestra-spec`'s step 6 self-check exists to prevent — and picked a design the stronger model's
+own spec had explicitly written down and rejected one paragraph earlier. That happened on a
+spec-writing task, which is exactly the shape of `spec-review`, `test-review`, `review`, and
+`generate-tests`: read something ambiguous, decide what it means, don't paper over the gap.
+
+So the rule is narrow and stage-shaped, not a global toggle:
+
+- **`implement-*` may set `model` to a faster tier.** Its output is never trusted on its own say-so
+  — `verify` re-runs the frozen tests against it and `review` reads the diff independently, both
+  still on the default model, and a wrong implementation just fails and loops through `fixing`
+  rather than silently passing. The stage most exposed to a weaker model is also the one with the
+  most mechanical re-checking already sitting downstream of it.
+- **Every judgment stage stays on `"default"` — no exceptions.** `spec-review`, `test-review`,
+  `review`, and `generate-tests` (translating an acceptance criterion into an assertion is exactly
+  the kind of ambiguity-resolution that degraded above) keep the orchestrator's own model. Nothing
+  downstream double-checks *whether* these stages reasoned correctly the way `verify`/`review`
+  double-check `implement-*` — their output is the check.
+- **Don't set it defensively "to be safe."** Only give `implement-*` a `model` override when the
+  user has asked for faster/cheaper runs; the default (omit the field) already inherits the
+  orchestrator's model, which is the safe choice for every stage including `implement-*`.
 
 ### `brief`
 
@@ -255,6 +284,9 @@ stages:
       unanticipated ones — so their presence is on you here, not on the test run. An
       implementation-focused skill fits this stage well if you have one installed.
     write_scope: ["src/routes/**", "src/services/csv-export/**"]
+    # model: <faster-tier-id>   # only when the user asked for faster/cheaper runs — see the
+                                 # `model` section above. Omitted here; the default already inherits
+                                 # the orchestrator's model, which is correct unless asked otherwise.
     exit_criteria:
       type: command
       run: "npm test -- csv-export"

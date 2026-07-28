@@ -450,8 +450,9 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      own escalation path; there's nothing left for a human to approve that hasn't already been
      mechanically or automatically checked.
 4. **For every stage, fill in:** `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
-   `on_fail`, and `freeze_after` (true only on the freeze stage — see schema for the
-   full field list). Write `brief` as plain instructions for whatever Claude eventually gets
+   `on_fail`, `freeze_after` (true only on the freeze stage), and `model` (omit on every stage
+   except optionally `implement-*` — see schema for the full field list and the reasoning behind
+   the narrow scope). Write `brief` as plain instructions for whatever Claude eventually gets
    spawned to do the stage's work — never a skill name as a hard dependency. You're generating this
    inside a live Claude session right now, so you can see your own `available_skills`; if one is
    genuinely relevant to a stage (e.g. an implementation-focused skill for an implement stage), name
@@ -468,6 +469,19 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
    genuinely don't cover yet, but the same instruction applied blanket-style across every stage
    multiplies token/time cost without multiplying confidence. When a stage's automated exit_criteria
    already proves the property, say so in the brief and let it stop there.
+   - **If the user asked for faster/cheaper runs, set `model` on `implement-*` stages only** — see
+     `references/workflow-schema.md`'s `model` section for the full reasoning. In short:
+     `implement-*`'s output is never trusted on its own say-so (`verify` and `review` both
+     independently re-check it on the default model, and a wrong implementation just loops through
+     `fixing`), so it's the one stage where a faster model's mistakes are cheap. Every judgment
+     stage — `spec-review`, `test-review`, `review`, `generate-tests` — keeps `model` unset. Measured
+     directly on a spec-writing task (the same shape of work those stages do): a faster model
+     silently invented an unstated constant and reported zero open items where the default model
+     had correctly flagged it, and picked an approach the default model's own analysis had already
+     written down and rejected. Nothing downstream re-checks a judgment stage's reasoning the way
+     `verify`/`review` re-check `implement-*`'s output, so that failure mode has nowhere to be
+     caught. Don't set the field defensively when the user hasn't asked for it — omitting it already
+     gives every stage the safe default.
    - **If the source spec's ACs are written as Given-When-Then** (see `kestra-spec`/`meta-pm`), the
      `generate-tests` stage's brief should say so explicitly: write the frozen tests as BDD scenarios
      that mirror the spec's Given-When-Then structure one-to-one, in whatever the stack's idiomatic
@@ -536,6 +550,12 @@ Most of the anti-patterns below are exactly what `scripts/validate_workflow.py` 
 mechanically — read them anyway, since the dry-run tells you *that* something's wrong, not why it
 matters or how to fix it well.
 
+- Setting `model` to a faster/cheaper tier on `spec-review`, `test-review`, `review`, or
+  `generate-tests` to make a run cheaper. These are exactly the stages nothing downstream
+  double-checks — their output *is* the check — and that's precisely the shape of task where a
+  faster model was measured to silently invent an unstated answer and report zero open items where
+  the default model had correctly flagged one. `model` belongs on `implement-*` only, where
+  `verify`/`review` catch a wrong answer on the default model regardless of what wrote it.
 - Choosing `mode: lite` to make a run cheaper when a condition in the lite table actually holds —
   most often a spec whose Reality Constraints do list an external dependency, waved away as "only
   one mock." The doubles are exactly what `test-review` exists to read, so this doesn't save a
