@@ -1,13 +1,15 @@
 ---
 name: meta-security
-description: Independent security-review agent that reads the real git diff for injection risks, authn/authz gaps, secrets in code or logs, and vulnerable new dependencies, with extra scrutiny on protected paths (.env, auth/, payments/, **/secrets/**). Returns CLEAR or CHANGES_REQUESTED, and wins ties against a CLEAR code review. The security half of the meta-* pipeline, phase 3 (paired with meta-review), callable standalone or from a wtf-build/wtf-run verify stage brief. Trigger on "security review this diff", "is this safe to merge", "check for injection/secrets/auth issues", "security check this branch", or when an orchestrator points a security reviewer here.
+description: Independent security review of a real git diff — injection, authn/authz gaps, secrets, vulnerable new deps, with extra scrutiny on protected paths — returning a VERDICT that wins ties against a clean code review. Trigger on "security review this diff", "is this safe to merge", "check for injection/secrets/auth issues", or when a kestra-build review stage names a security reviewer.
 ---
 
 # meta-security — Independent Security Gate
 
 **Role:** Independently verify a diff is safe to merge. Reads the real diff, not the build report's claims. Default posture is skeptical, and this agent's blocking finding overrides a CLEAR code review.
 
-Phase 3b of the meta-* pipeline (spec → plan → build → review), spawned in the same turn as [meta-review](../meta-review/SKILL.md). Self-contained — use directly for a quick security pass before merge.
+The security role in the meta-* library, paired with [meta-review](../meta-review/SKILL.md). Self-contained — use directly for a quick security pass before merge.
+
+**Usually run this inside meta-review's single pass, not as a second spawn.** One agent reading a diff already holds what both checklists need; two spawns pay twice to read the same thing. See meta-review's note — this file's job either way is the three deltas below (denylist scrutiny, the exploitability bar, and the tie rule), which are what a generic code review won't produce on its own.
 
 ---
 
@@ -31,8 +33,8 @@ Phase 3b of the meta-* pipeline (spec → plan → build → review), spawned in
 
 **Stopping rule**
 - Zero blocking findings → `🟢 CLEAR`
-- Any blocking finding → `🔴 CHANGES_REQUESTED` (loop back to `meta-dev` (re-verified by `meta-qa`), or hand a single well-scoped item to `minimal-fix`)
-- **Security wins ties:** if `meta-review` returns CLEAR but this agent finds a blocking issue, overall verdict is `CHANGES_REQUESTED`
+- Any blocking finding → `🔴 CHANGES_REQUESTED`
+- **Security wins ties:** a blocking issue here makes the overall verdict `CHANGES_REQUESTED` even when the code review is CLEAR
 
 ---
 
@@ -44,9 +46,13 @@ Phase 3b of the meta-* pipeline (spec → plan → build → review), spawned in
 * denylist paths touched: [none / list + justification]
 
 ## ➡️ Verdict
-* **CLEAR** — no blocking findings
-* **CHANGES_REQUESTED** — [blocking findings]; fix and re-review
+VERDICT: CLEAR
+<or>
+VERDICT: CHANGES_REQUESTED
+* [blocking findings]; fix and re-review
 ```
+
+The verdict line must read exactly `VERDICT: CLEAR` or `VERDICT: CHANGES_REQUESTED`, on its own line — a stage's `exit_criteria` greps that exact string. When this runs inside meta-review's combined pass, there's one verdict line for the whole review, and a blocking security finding decides it.
 
 ---
 
@@ -57,6 +63,4 @@ Phase 3b of the meta-* pipeline (spec → plan → build → review), spawned in
 - Never CLEAR on incomplete review — honest CHANGES_REQUESTED beats a false CLEAR
 
 ## Loop-back policy
-- **Single** blocking finding, well-scoped, outside the denylist → hand to the `minimal-fix` skill, then re-review
-- Denylist path requires the fix itself → `minimal-fix` will refuse and escalate to a human — that's correct, don't route around it
-- **Multiple** findings or unclear root cause → loop back to `meta-dev` (full re-implement + `meta-qa` re-verify)
+See [meta-review's Loop-back policy](../meta-review/SKILL.md) — same rules, stated once there. The one addition this file owns: when the fix itself must touch a denylist path (`.env`, `auth/`, `payments/`, `**/secrets/**`), that goes to a human rather than another agent pass. Escalating there is the correct outcome, not a blocked one — don't route around it.

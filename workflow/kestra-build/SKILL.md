@@ -437,7 +437,7 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      (`spec-review`, `test-review`, `review`, `generate-tests`) never get an automatic `effort`
      override, same reasoning as `model` — nothing downstream re-checks how well they reasoned.
      `effort` and `model` are independent fields; setting one never implies or requires the other.
-   - **If the source spec's ACs are written as Given-When-Then** (see `kestra-spec`/`meta-pm`), the
+   - **If the source spec's ACs are written as Given-When-Then** (see `kestra-spec`), the
      `generate-tests` stage's brief should say so explicitly: write the frozen tests as BDD scenarios
      that mirror the spec's Given-When-Then structure one-to-one, in whatever the stack's idiomatic
      form is — Gherkin `.feature` files (Cucumber/Behave/SpecFlow) if that tooling is already present

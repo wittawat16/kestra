@@ -11,7 +11,7 @@ clone แล้วรัน `install.sh` ครั้งเดียวเพื
 | กลุ่ม | Skill | ใช้ทำอะไร |
 |---|---|---|
 | [`workflow/`](workflow/README-th.md) | `kestra-spec`, `kestra-build`, `kestra-run` | ตัวลับ spec + ตัวสร้าง + ตัวรัน "stage machine" แบบล็อก TDD — `kestra-spec` แปลงไอเดียที่ลับคมแล้วเป็น `0-spec.md` พร้อมสร้าง (AC เขียนแบบ Given-When-Then/BDD ได้ บวก runtime invariants และ reality constraints ของ dependency ภายนอก), `kestra-build` แปลงเป็น `workflow.yaml`/`state.json` แล้ว `kestra-run` รันจริง ตรวจสอบทุกขั้นตอนแบบ mechanical (ไม่ใช้วิจารณญาณของ AI) |
-| [`meta/`](meta/README.md) | `meta-pm`, `meta-ba`, `meta-designer`, `meta-sa`, `meta-architect`, `meta-dev`, `meta-qa`, `meta-review`, `meta-security`, `meta-devops`, `meta-debug` | 11 skill ตามบทบาทสำหรับ spec→plan→build→review (PM, BA, designer, solution architect, architect, dev, QA, review, security, devops, บวก 4-mantra debugging discipline) — เรียกใช้ตัวเดียวโดยตรง หรือ chain เองก็ได้ ไม่มี orchestrator ตายตัว |
+| [`meta/`](meta/README.md) | `meta-designer`, `meta-dev`, `meta-qa`, `meta-test-review`, `meta-review`, `meta-security`, `meta-devops`, `meta-debug` | 8 skill ตามบทบาทงานส่งมอบ (designer, dev, QA, ตรวจ test double, code review, security, devops, บวก 4-mantra debugging discipline) — เรียกใช้ตัวเดียวโดยตรง chain เอง หรือระบุชื่อใน stage brief ของ `kestra-build` ก็ได้ ส่วนบทบาท spec/plan ที่เคยอยู่กลุ่มนี้ ตอนนี้ `kestra-spec` ทำให้ในตัวแล้ว |
 | [`productivity/`](productivity/README.md) | `givename` | ช่วยตั้งชื่อ (ตัวแปร, ไฟล์, branch, commit, โปรเจกต์/skill ใหม่) โดยหา naming convention จริงที่มีอยู่รอบๆ ก่อน |
 
 รายละเอียดเต็มของแต่ละ skill อยู่ใน README ของกลุ่มนั้นๆ — มันทำอะไร ใช้ยังไง และเอกสารอ้างอิง

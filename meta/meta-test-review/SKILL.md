@@ -1,23 +1,25 @@
 ---
 name: meta-test-review
-description: Independent test-double reviewer that reads tests just written (before implementation exists) against the spec's Reality Constraints, and reports whether each mock/stub/fake actually matches what the real dependency does — not whether the tests pass, they can't yet. Returns CLEAR or CHANGES_REQUESTED, targeting the test-writing stage, not the implementation. The test-quality half of the meta-* pipeline, phase 1.5 (between test-generation and the freeze point), callable standalone or from a wtf-build/wtf-run test-review stage brief. Only relevant when the spec's Reality Constraints name an external dependency or a pair of paths that must agree — skip it for pure-logic features with nothing to fake. Trigger on "review these tests for double fidelity", "check the mocks against the real API", "is this test double honest", "test-review this suite before we freeze it", or when an orchestrator points a test-double reviewer here.
+description: Reviews freshly written tests (before any implementation exists) for test-double fidelity — whether each mock, stub, or fake actually matches what the real dependency does and doesn't guarantee — returning a VERDICT of CLEAR or CHANGES_REQUESTED. Trigger on "review these tests for double fidelity", "check the mocks against the real API", "is this test double honest", "test-review this suite before we freeze it", or when a kestra-build test-review stage names a reviewer.
 ---
 
 # meta-test-review — Independent Test-Double Review
 
 **Role:** Catch a test double that doesn't match the thing it stands in for, before the tests freeze and the gap becomes expensive to fix. Does NOT judge whether the tests pass — nothing is implemented yet, so they're supposed to fail red. Judges whether they'd still tell the truth once something real sits behind them.
 
-Sits between test-generation and the freeze point in the meta-* pipeline — not one of the five fixed phases, because most features don't need it. Self-contained — use directly whenever a test suite mocks an external dependency or straddles two paths that must agree, before those tests get locked.
+The test-fidelity role in the meta-* library. Its natural home is a `kestra-build` `test-review` stage, which sits between `generate-tests` and `freeze-tests` — that ordering is what makes a finding here a cheap bounded fix rather than a `reworking` bounce. Self-contained too: use directly whenever a test suite mocks an external dependency or straddles two paths that must agree, before those tests get locked.
 
 ---
 
 ## When this applies — read off the spec, not a judgment call
 
-Run this only when the spec's **Reality Constraints** (or equivalent section) lists at least one of:
+Run this only when the spec's **Reality Constraints** section (`kestra-spec` writes one; other specs may call it something else) lists at least one of:
 - an external dependency the tests will have to fake (API, provider, queue, another service)
 - a pair of paths that must produce equivalent results (replay vs. live, cached vs. computed, sync vs. async)
 
-If Reality Constraints names neither — pure logic over the project's own types, no I/O, no external contract — skip this skill entirely. That isn't cutting a corner; the defects this skill exists to catch are all forms of *a double drifting from the real thing*, and a feature that fakes nothing cannot have them.
+If it names neither — pure logic over the project's own types, no I/O, no external contract — skip this skill entirely. That isn't cutting a corner; the defects this skill exists to catch are all forms of *a double drifting from the real thing*, and a feature that fakes nothing cannot have them.
+
+**When the spec has no such section at all**, don't skip on that basis — a spec written before the convention existed still has doubles. Derive the constraints from the tests and the real dependency's own docs/SDK, and **label each derived item as inferred rather than specified**, so a reviewer downstream knows which lines a human stood behind and which are your reconstruction.
 
 ---
 
@@ -36,6 +38,8 @@ If Reality Constraints names neither — pure logic over the project's own types
 **Action**
 
 Ask for a table with one row per risk below, each marked applicable or n/a with `file:line` evidence — never a prose write-up. A prose reviewer reports what it happened to notice; a table forces an answer for every row, including the ones nobody thought to mention.
+
+*(This table is duplicated verbatim in [`workflow/kestra-build/references/full-mode-stages.md`](../../workflow/kestra-build/references/full-mode-stages.md), which generates the `test-review` stage brief. Change one, change the other — a stage brief and the skill it names disagreeing about what to check is worse than either version alone.)*
 
 | Risk | The double... | Recognized as |
 |---|---|---|
@@ -91,4 +95,4 @@ First line of the verdict section must read exactly `VERDICT: CLEAR` or `VERDICT
 ## Handoff
 
 - `🟢 CLEAR` → proceed to the freeze point (tests get locked as the frozen baseline)
-- `🔴 CHANGES_REQUESTED` → back to the test-writing stage (e.g. `meta-dev`-authored tests, or whatever generated them) for a bounded fix, then re-review. This loop is only legal **before** the freeze — once tests are frozen, a finding here becomes a `reworking` bounce instead, not a quiet patch.
+- `🔴 CHANGES_REQUESTED` → back to whoever wrote the tests for a bounded fix, then re-review. Under `kestra-run` that's the `generate-tests` stage via `on_fail.target`; standalone it's whoever authored them. This loop is only legal **before** the freeze — once tests are frozen, a finding here becomes a `reworking` bounce instead, not a quiet patch.

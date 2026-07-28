@@ -319,9 +319,10 @@ time.
 
 ## What's intentionally "not done"
 
-- **kestra-spec never touches code or runs anything** — it writes `0-spec.md` and stops; it
-  doesn't replace `meta-pm`/`meta-ba`/`meta-designer`/`meta-sa`/`meta-architect`, which remain
-  available standalone for anyone who wants just one piece of this.
+- **kestra-spec never touches code or runs anything** — it writes `0-spec.md` and stops. It does
+  cover the whole spec→plan front end inline, which is why the old PM/BA/SA/architect role skills
+  were retired; `meta-designer` is the one that stayed, since it produces an openable artifact this
+  skill doesn't.
 - **kestra-build never runs anything** — it doesn't write real code, commit, or call any skill.
 - **kestra-run never generates a workflow itself** — if the file doesn't exist yet, it says so
   instead of improvising one.

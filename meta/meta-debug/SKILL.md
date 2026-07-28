@@ -1,13 +1,13 @@
 ---
 name: meta-debug
-description: Four-mantra debugging discipline — reproduce, trace the fail path, falsify the hypothesis, cross-reference every breadcrumb. Recite the mantra block verbatim at the start of any debugging session, then apply the four steps in order before proposing any fix. Not tied to a fixed phase of the meta-* pipeline — callable standalone whenever a bug needs root-causing, or as the escalation path when meta-qa's verify loop or meta-dev's fix attempts keep failing without converging. Trigger on "/meta-debug" and proactively whenever debugging starts — user reports a bug, says something is broken/throwing/failing, asks to debug/diagnose/investigate an issue, pastes a stack trace or error log, or when meta-qa's circuit breaker fires without a resolved root cause.
+description: Four-mantra debugging discipline — reproduce, trace the fail path, falsify the hypothesis, cross-reference every breadcrumb — applied in order before any fix is proposed. Trigger proactively whenever debugging starts: a bug report, something broken/throwing/failing, a request to debug or investigate, a pasted stack trace, or a fix loop that keeps failing the same way without converging.
 ---
 
 # meta-debug — Debugging Discipline (Reproduce → Trace → Falsify → Cross-reference)
 
 **Role:** Root-cause a real failure before anyone proposes a fix. Reproduce it reliably, trace exactly where it breaks, try to disprove your own theory before trusting it, and keep every experiment in this session cross-referenced against every other one.
 
-Not a fixed phase of the meta-* pipeline (spec → plan → build → review) — self-contained, use directly for any bug. Inside the pipeline, it's the natural escalation when `meta-qa`'s test/runtime loop hits its circuit breaker without converging, or when `meta-dev`'s repeated fix attempts keep failing the same way: both of those are signals that the fix loop is guessing, not root-causing, and this discipline exists precisely to stop that.
+Self-contained — use directly for any bug. It's also the escalation path when a fix loop stops converging: `meta-qa`'s circuit breaker firing after five loops, or a `kestra-run` `fixing` loop burning attempts on the same diff before it escalates to `reworking`. Both are the same signal — the loop is guessing rather than root-causing, which is exactly what this discipline exists to stop.
 
 ---
 
@@ -67,16 +67,14 @@ Maintain a running **ledger** of every experiment in this session. Each entry: w
 
 ## Operating rules
 
-- Recite the mantra block **once** per debug session, in your first response. Do not re-recite mid-session.
-- Recite **verbatim**. Never paraphrase, shorten, or skip lines of the recital.
-- If the user says "skip the mantra" → skip the recital but still apply the four steps silently.
-- Apply the four steps **in order**:
-  - Do not propose a fix before #1 is satisfied (reliable repro exists).
-  - Do not start testing hypotheses before #2 has narrowed the fail path.
-  - Do not commit to a hypothesis before #3 has tried to disprove it.
-  - Do not declare a hypothesis correct until #4 confirms it against every prior breadcrumb.
-- If you catch yourself proposing a fix without a reliable repro, stop and return to step 1.
-- The mantra is a constraint **you** carry through the session — not advice to deliver back to the user.
+Recite the mantra verbatim once, in your first response, then don't repeat it — it's a constraint you carry through the session, not advice to keep delivering back to the user. If asked to skip it, skip the recital and still apply the four steps.
+
+The four gates, in order — each is a "do not proceed until":
+
+1. No fix proposed before a reliable repro exists. Catch yourself skipping ahead → return to step 1.
+2. No hypothesis tested before the fail path is narrowed.
+3. No hypothesis committed to before a disproof was attempted.
+4. No hypothesis declared correct until it holds against every prior breadcrumb.
 
 ---
 

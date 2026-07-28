@@ -42,10 +42,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS=(
   workflow/kestra-spec workflow/kestra-build workflow/kestra-run
   productivity/givename
-  meta/meta-pm meta/meta-ba meta/meta-designer meta/meta-sa meta/meta-architect
-  meta/meta-dev meta/meta-qa meta/meta-review meta/meta-security meta/meta-devops
-  meta/meta-debug meta/meta-test-review
+  meta/meta-designer meta/meta-dev meta/meta-qa meta/meta-test-review
+  meta/meta-review meta/meta-security meta/meta-devops meta/meta-debug
 )
+
+# Retired: meta-pm, meta-ba, meta-sa, meta-architect — workflow/kestra-spec does all four inline
+# in one pass. Removed from ~/.claude/skills on --update so a stale installed copy can't keep
+# triggering after the source is gone.
+RETIRED_SKILLS=(meta-pm meta-ba meta-sa meta-architect)
 
 MODE="copy"          # copy | link
 SCOPE="global"        # global | project
@@ -137,6 +141,14 @@ if [ "$UPDATE" = "1" ] && [ -d "$SCRIPT_DIR/.git" ]; then
 fi
 
 mkdir -p "$TARGET_DIR"
+
+for retired in "${RETIRED_SKILLS[@]}"; do
+  stale="$TARGET_DIR/$retired"
+  if [ -e "$stale" ] || [ -L "$stale" ]; then
+    rm -rf "$stale"
+    echo "removed retired skill: $stale"
+  fi
+done
 
 for skill in "${SKILLS[@]}"; do
   src="$SCRIPT_DIR/$skill"

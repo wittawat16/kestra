@@ -19,38 +19,41 @@ description: >
 # kestra-spec — One-Pass, Build-Ready Spec for kestra-build
 
 **Role:** Turn a sharpened idea into the single `0-spec.md` that `kestra-build` reads to derive a
-`workflow.yaml`. Where the meta-* pipeline splits this across five skills and five files
-(`meta-pm` → `0-spec.md`, `meta-ba` → `ba.md`, `meta-designer` → `design.md`, `meta-sa` → `sa.md`,
-`meta-architect` → `1-plan.md`), this skill does the same underlying work — spec sharpening,
-business-rule clarification, design notes, solution-architecture decisions, and a verified
-codebase survey — in **one pass, one file**, so nobody has to remember to chain five skills by
-hand and `kestra-build`'s stage agents don't have to fill gaps by guessing.
+`workflow.yaml`. This work used to be split across five role skills and five files (a PM pass →
+`0-spec.md`, a BA pass → `ba.md`, a designer pass → `design.md`, a solution-architecture pass →
+`sa.md`, an architect pass → `1-plan.md`); this skill does all of it — spec sharpening,
+business-rule clarification, design notes, solution-architecture decisions, and a verified codebase
+survey — in **one pass, one file**, so nobody has to remember to chain five skills by hand and
+`kestra-build`'s stage agents don't have to fill gaps by guessing.
 
-This is a **separate, new skill** — it does not replace or modify `meta-pm`, `meta-architect`,
-`meta-ba`, `meta-designer`, or `meta-sa`, which remain available standalone for anyone who wants
-just one piece of this (e.g. only a business-analysis pass). Read those five files before using
-this skill if you haven't already — this skill borrows their templates, mindsets, and anti-pattern
-lists directly rather than reinventing them.
+Four of those five (`meta-pm`, `meta-ba`, `meta-sa`, `meta-architect`) have since been retired
+precisely because this file covers them; their templates and anti-pattern lists live on here rather
+than being reinvented. The exception is [`meta-designer`](../../meta/meta-designer/SKILL.md), which
+survives because it produces something this skill doesn't: an actual openable artifact (HTML mockup
+or wireframe) rather than the tables-only Design Notes below. When a UI feature warrants that
+artifact, this spec's Design Notes are the input to it, not a competing copy — keep the two
+consistent.
 
 ---
 
 ## Why one pass, one file (read before writing anything)
 
-The problem this skill exists to fix: running `meta-pm` then `meta-architect` (and sometimes
-`meta-ba`/`meta-designer`/`meta-sa`) separately produces a spec that still isn't detailed enough —
-`kestra-build`'s stage agents end up interpreting gaps themselves, and the loop keeps bouncing
-back to "fix the spec" after implementation has already started. Two things cause that gap:
+The problem this skill exists to fix: running a PM pass, then an architect pass (and sometimes BA,
+designer, and solution-architecture passes) as separate invocations produced a spec that still
+wasn't detailed enough — `kestra-build`'s stage agents ended up interpreting gaps themselves, and
+the loop kept bouncing back to "fix the spec" after implementation had already started. Two things
+caused that gap:
 
-1. **`0-spec.md` alone never touches real code.** `meta-pm` reads only the rough spec and
-   `CLAUDE.md` — it has no mechanism to know if a referenced file exists, what the surrounding
+1. **A spec-sharpening pass alone never touches real code.** Working from the rough spec and
+   `CLAUDE.md` only, it has no mechanism to know if a referenced file exists, what the surrounding
    pattern looks like, or whether an assumption in the spec even holds against the real codebase.
-   That's `meta-architect`'s job, but it runs as a separate stage later, often *after* code review
-   has already started asking "wait, which file was this supposed to touch?"
-2. **Splitting the work across five skills means five separate invocations to remember**, and each
-   boundary is a place state gets lost — `meta-ba`'s resolved business rules have to make it into
-   `meta-designer`'s and `meta-architect`'s hands accurately, `meta-sa`'s chosen approach has to
-   reach `meta-architect` before it plans files, and so on. When a human has to manually chain
-   these, gaps slip through at the handoffs, not because any one skill did its job badly.
+   That's the architect pass's job, but it ran separately and later — often *after* code review had
+   already started asking "wait, which file was this supposed to touch?"
+2. **Splitting the work across five skills meant five separate invocations to remember**, and each
+   boundary is a place state gets lost — resolved business rules had to reach the designer and
+   architect passes accurately, the chosen architecture had to reach the architect before it planned
+   files, and so on. When a human has to manually chain these, gaps slip through at the handoffs,
+   not because any one skill did its job badly.
 
 Doing it as one continuous pass with one agent removes both failure modes: the same agent that
 just resolved a business rule is the one deciding which files that rule touches, and nothing has to
@@ -68,7 +71,7 @@ whatever the grilling session settled on directly; don't re-litigate decisions i
 idea** ("add CSV export", "let users reset their password"): run a short clarifying pass first —
 a handful of pointed questions about scope, error states, and any obvious ambiguity — before
 writing anything. Don't silently invent acceptance criteria for gaps you could have just asked
-about. This is the one place this skill behaves like `meta-pm`'s own interview loop; skip it
+about. This is the one place this skill runs its own interview loop; skip it
 entirely when the input already arrived pre-sharpened.
 
 ---
@@ -79,7 +82,7 @@ Work through these steps in order, in a single sitting, for a single output file
 call another skill for steps 3–4 — do the same *kind* of work those skills do, inline, using their
 templates below as your guide for structure and rigor.
 
-### 1. Sharpen into testable acceptance criteria (meta-pm's job)
+### 1. Sharpen into testable acceptance criteria (the PM pass)
 
 For each requirement: is it testable by QA without a follow-up question? ("users can filter" ❌ →
 "filter returns results in <200ms on 10k rows" ✅). Add missing error states and edge cases the
@@ -115,7 +118,7 @@ counter-example map directly onto a Given-When-Then pair.
 
 ### 2. Set the flags — mechanically, not as a vibe check
 
-Set each flag from the criteria `meta-pm` uses:
+Set each flag from these criteria:
 
 * `needs_ba` — complex domain/business rules, multi-stakeholder requirements, or a spec that's
   vague on *what* rather than *how*.
@@ -162,7 +165,7 @@ result directly into the sections of `0-spec.md` below (not a separate file):
 If a flag is `false`, do nothing for it — an unnecessary business-rules section for a
 straightforward CRUD change is just noise.
 
-### 4. Survey the real codebase and verify every file path (meta-architect's job)
+### 4. Survey the real codebase and verify every file path (the architect pass)
 
 This is the step that most directly closes the "agent has to interpret" gap, so don't shortcut it.
 
@@ -415,7 +418,7 @@ Done once:
 
 If **Open Items** is non-empty, say so plainly when handing this off — `kestra-build` (or whoever
 reads this next) should decide whether to pause on those before generating stages, the same way
-`meta-ba`'s "still needs human decision" pauses the old pipeline.
+the old BA pass's "still needs human decision" paused the old pipeline.
 
 ## Mindset
 

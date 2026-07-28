@@ -1,21 +1,20 @@
 ---
 name: meta-designer
-description: Designer agent that turns a spec into a build-ready design.md — an artifact (HTML mockup, Figma link, or Mermaid wireframe), a component-reuse-vs-new audit, real design-token mapping, responsive breakpoints, and all four screen states (empty/loading/success/error) per view, turned into testable acceptance criteria. The UI-design atom part of the meta-* pipeline, phase 0.5 (only when needs_ui: true), callable standalone or from a wtf-build/wtf-run stage brief. Trigger on "design this UI", "write design.md", "what components/tokens should this screen use", "spec out the screen states for X", or when an orchestrator points a Designer agent here.
+description: Turns a spec into a build-ready design.md plus a real artifact (HTML mockup or Mermaid wireframe) — component reuse-vs-new audit, real token names, breakpoints, and all four screen states as testable ACs. Trigger on "design this UI", "write design.md", "what components/tokens should this screen use", "spec out the screen states for X", or when a kestra-build design stage names a designer skill.
 ---
 
 # meta-designer — UI Design Handoff
 
 **Role:** Produce a design so clear that Dev can implement it without guessing about components, colors, or layout.
 
-Phase 0.5 of the meta-* pipeline (spec → plan → build → review) — run only when `0-spec.md` sets `needs_ui: true`. Self-contained — use directly whenever a feature needs a UI spec before implementation.
+The UI-design role in the meta-* library — relevant when the spec sets `needs_ui: true`. Self-contained — use directly whenever a feature needs a UI spec before implementation. Note that `kestra-spec` already writes tables-only Design Notes into `0-spec.md`; what this skill adds beyond those is the **artifact** (something openable and inspectable) and the review gate that checks the artifact against reality — so when both exist, build on the spec's notes rather than re-deriving them, and keep the two consistent.
 
 ---
 
 ## Inputs to read (in order)
 
-1. `0-spec.md` — feature intent + ACs
-2. `ba.md` — **if exists**: read before designing. Business rules affect UI (permission-gated fields, conditional flows, role-based states).
-3. `CLAUDE.md` — stack, existing component library paths, token locations
+1. `0-spec.md` — feature intent, ACs, any Business Rules section (permission-gated fields, conditional flows, role-based states all change the UI)
+2. `CLAUDE.md` — stack, existing component library paths, token locations
 
 ## The handoff problem
 
@@ -68,19 +67,9 @@ Required AC coverage per view:
 
 ---
 
-## Checklist before marking `design.md` READY
-
-- [ ] `ba.md` read (if exists) — business rules applied to UI
-- [ ] Codebase surveyed — real token names, not invented ones
-- [ ] Artifact created + works (opens/renders)
-- [ ] Component audit table complete (every UI element: reuse or new)
-- [ ] Token mapping done (real names, or "no design system" note)
-- [ ] Responsive breakpoints explicit (if multi-device)
-- [ ] All 4 screen states defined for every view
-- [ ] Acceptance criteria testable, no prose-only descriptions
-- [ ] Every new component justified
-
 ## Output: `design.md`
+
+Every section of the template below is required — it doubles as the readiness checklist, so a section you can't fill honestly is the signal that the design isn't ready, not something to leave blank.
 
 ```markdown
 # 🎨 [<feature-id>] Design — <feature title>
