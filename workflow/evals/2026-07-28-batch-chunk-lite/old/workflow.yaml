@@ -1,0 +1,145 @@
+feature: batch-chunk
+source_spec: /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/lite/0-spec.md
+mode: lite   # decided in SKILL.md step 2/3: no 2+ independent components (single file, single
+             # export), no test doubles (Reality Constraints: "External dependencies: None" and
+             # "Paths that must agree: None"), needs_devops: false, and Runtime Invariants is
+             # explicitly "None" with a justification that nothing here can fail silently — none of
+             # the full-mode trigger conditions hold, and the user did not ask for full. This is a
+             # record only; every stage below is still enforced identically to a full-mode workflow.
+
+stages:
+  # spec-review's checks are folded into this stage's brief per the lite shape (SKILL.md step 3):
+  # the spec is small enough that a dedicated subagent stage buys nothing, but the checks
+  # themselves (AC testability, Runtime Invariants vs. Edge Cases contradiction check, Reality
+  # Constraints filled in) still have to happen before a single test is written.
+  - id: generate-tests
+    depends_on: []
+    brief: >
+      First, do the spec-review checks inline against
+      /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/lite/0-spec.md
+      before writing anything: confirm every acceptance criterion is testable without a follow-up
+      question (they already name exact inputs/outputs, e.g. chunkByCap([1,2,3,4,5], 2) ->
+      [[1,2],[3,4],[5]] — spot-check this); confirm the Runtime Invariants section's claim that
+      there are none holds up — the section's own reasoning is that every failure mode (bad `cap`,
+      bad `items`) is a synchronous thrown TypeError already covered by Edge Cases/ACs, so re-check
+      that no case exists where a bad input could silently proceed instead of throwing; confirm
+      Reality Constraints are honestly "None" (no clock/fs/network/shared state touched). If you
+      find a contradiction, stop and report it instead of writing tests against a broken spec.
+
+      Then write tests in test/queue.test.js (append after the two existing tests, per this
+      codebase's convention of one test file per source file) covering every acceptance criterion:
+      basic chunking exact partition, empty input -> [], cap >= length -> one chunk, cap 0/-1/1.5 ->
+      TypeError, non-array items -> TypeError, and no-mutation of the original array (check
+      reference equality of each original element position after the call). Use node:test /
+      node:assert/strict, matching the existing file's style exactly. Import chunkByCap from
+      '../src/queue.js' even though it doesn't exist yet — these tests are expected to fail once
+      actually run (a later stage's job), not now. This stage's own exit_criteria is a
+      syntax-only check (see below) because this fixture explicitly forbids third-party
+      dependencies (CLAUDE.md: "No third-party dependencies; keep it that way"), so there is no
+      linter available in this repo to catch an undefined name the way a full-mode workflow would —
+      say plainly in your notes that this is a known gap of the syntax-only check, not a hidden one.
+    write_scope: ["test/queue.test.js"]
+    exit_criteria:
+      type: command
+      run: "node --check test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # The freeze is its own act, deliberately separate from writing the tests (SKILL.md step 3). It
+  # writes nothing — it owns test/queue.test.js solely so test_hash has something to snapshot, and
+  # re-runs the same check against the exact commit being locked.
+  - id: freeze-tests
+    depends_on: [generate-tests]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test file
+      (test/queue.test.js) as the frozen baseline every later stage is held to.
+    write_scope: ["test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "node --check test/queue.test.js"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own syntax check at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-chunk-by-cap
+    depends_on: [freeze-tests]
+    brief: >
+      Implement chunkByCap(items, cap) as a new named export in src/queue.js against the frozen
+      tests in test/queue.test.js — do not modify test/**. Per the spec: splits items into
+      consecutive sub-arrays of at most cap elements each, preserving order, never mutating items,
+      last chunk unpadded. Throw TypeError synchronously (before touching items) when cap is not a
+      positive integer, or when items is not an array. The spec's Runtime Invariants section is
+      explicitly "None" (every failure mode is already a synchronous thrown TypeError covered by
+      the ACs/Edge Cases) — there is no additional guard to install beyond what the tests already
+      check. Match the existing file's style: named exports only, no default export.
+    write_scope: ["src/queue.js"]
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 5
+      escalate_at: 3
+
+  # Sibling of review, not its successor — both depend on implement-chunk-by-cap directly so
+  # kestra-run can run them concurrently (neither writes code: write_scope: [] on both). Per the
+  # lite table (SKILL.md), verify costs no subagent: it's a mechanical re-run of the same real test
+  # command implement-chunk-by-cap's own exit_criteria already runs, executed directly by the
+  # orchestrator.
+  - id: verify
+    depends_on: [implement-chunk-by-cap]
+    brief: >
+      Mechanical re-check only — no subagent needed. Re-run the full suite (node --test
+      test/*.test.js via `npm test`) and confirm every acceptance criterion in the spec is actually
+      exercised by a passing test, not just that the suite as a whole is green.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-chunk-by-cap
+
+  - id: review
+    depends_on: [implement-chunk-by-cap]
+    brief: >
+      Review the real diff to src/queue.js since the last stage commit for correctness and edge
+      cases: does chunkByCap actually preserve order, avoid padding the last chunk, avoid mutating
+      items, and throw synchronously (before touching items) for every invalid-cap/invalid-items
+      case in the spec's Edge Cases section? Passing tests only prove the spec's own acceptance
+      criteria — this stage exists to catch what the spec never thought to test for (e.g. an
+      accidental off-by-one, a mutation via slice() vs a manual copy, a cap check that runs after
+      partially reading items). No injection/authn/secrets surface exists here (pure function, no
+      I/O), so that part of the usual review checklist is not applicable — say so rather than
+      silently skipping it. Whatever code-review skill you have available fits this stage well; try
+      it, proceed with a direct review if none is available. Write the verdict to review-verdict.md,
+      first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-chunk-by-cap
+
+  - id: done
+    depends_on: [verify, review]
+    brief: >
+      Every upstream stage passed. Write a one-page completion-summary.md: what shipped
+      (chunkByCap in src/queue.js), which commits, the review verdict, and confirmation that no
+      deploy-readiness stage was needed (needs_devops: false).
+    write_scope: ["completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

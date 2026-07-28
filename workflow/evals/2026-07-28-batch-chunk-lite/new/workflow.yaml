@@ -1,0 +1,171 @@
+feature: batch-chunk
+source_spec: /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/lite/0-spec.md
+mode: lite
+# mode: lite — none of the full-mode trigger conditions hold for this spec:
+#   - 2+ independent components: no, single file (src/queue.js), single export (chunkByCap)
+#   - test doubles: no, Reality Constraints section is "None" on all three subsections
+#     (no external dependencies, no paths that must agree, no non-determinism)
+#   - needs_devops: false
+#   - Runtime Invariants non-trivial: no, spec's Runtime Invariants section is explicitly "None",
+#     with the reasoning that every failure mode is a synchronous thrown TypeError at the call site,
+#     already covered by Edge Cases/ACs — nothing here is a silent-in-production condition
+#   - user asked for full: no
+# So: lite. Stage list is the fixed lite shape — generate-tests -> freeze-tests (freeze point) ->
+# implement -> {verify, review} -> done. spec-review is folded into generate-tests's brief (below)
+# rather than a separate stage; test-review is dropped (no doubles to check); deploy-readiness is
+# dropped (needs_devops: false).
+
+stages:
+  - id: generate-tests
+    depends_on: []
+    brief: >
+      Before writing any test, do the spec-review check inline (this is lite mode — spec-review has
+      no stage of its own, its checks are folded in here): read
+      /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/lite/0-spec.md
+      in full and confirm every acceptance criterion is testable without a follow-up question, that
+      the Runtime Invariants section's "None" claim actually holds (no condition here could go
+      undetected in production), and that the Reality Constraints subsections are all genuinely
+      "None" and don't contradict the Acceptance Criteria. If you find a contradiction or a gap,
+      stop and say so plainly instead of writing tests against it.
+
+      Then write tests for `chunkByCap(items, cap)` in test/queue.test.js (appended after the two
+      existing tests, per this repo's CLAUDE.md convention of one test file per source file), using
+      Node's built-in test runner (`node:test` + `node:assert/strict`, already used by the existing
+      tests in this file — no new dependencies; CLAUDE.md says to keep it that way). No
+      implementation exists yet — `chunkByCap` is not yet exported from src/queue.js, so these tests
+      must fail for the right reason (missing export/behavior), not error out from a typo or a bad
+      import path elsewhere in the file.
+
+      Cover every acceptance criterion in the spec exactly:
+      - chunkByCap([1,2,3,4,5], 2) -> [[1,2],[3,4],[5]]
+      - chunkByCap([], 3) -> []
+      - chunkByCap([1,2], 10) -> [[1,2]]
+      - chunkByCap([1,2,3], 0) throws TypeError
+      - chunkByCap([1,2,3], -1) throws TypeError
+      - chunkByCap([1,2,3], 1.5) throws TypeError
+      - chunkByCap("not an array", 2) throws TypeError
+      - calling chunkByCap does not mutate the input array (check original element references/values
+        are unchanged after the call)
+
+      The spec's ACs are plain testable prose, not Given-When-Then, so write ordinary node:test
+      `test()` blocks, not BDD-style scenarios.
+    write_scope: ["test/queue.test.js"]
+    exit_criteria:
+      type: command
+      # node --check is syntax-only, not full name resolution (it does not resolve import targets
+      # or catch a ReferenceError inside a test body — confirmed by hand: `node --check` on a file
+      # importing a nonexistent module exits 0). A proper undefined-name check would need a linter
+      # (eslint no-undef or equivalent), but this fixture's CLAUDE.md says "no third-party
+      # dependencies; keep it that way" and there is no node_modules/eslint available here — so this
+      # is the strongest static check available under that constraint, not a full substitute for one.
+      # The grep is a cheap non-vacuousness check: the new tests must actually reference chunkByCap.
+      run: "node --check test/queue.test.js && grep -q 'chunkByCap' test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # The freeze is its own act, separate from writing the tests, so a defect found while the tests
+  # are still editable costs a bounded fixing loop here rather than a reworking bounce later. It
+  # writes nothing; it owns test/queue.test.js only so the test-hash has something to snapshot, and
+  # re-runs the same static checks against the exact commit being locked.
+  - id: freeze-tests
+    depends_on: [generate-tests]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test suite (the chunkByCap
+      tests added in test/queue.test.js) as the frozen baseline every later stage is held to.
+    write_scope: ["test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "node --check test/queue.test.js && grep -q 'chunkByCap' test/queue.test.js"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-chunk-by-cap
+    depends_on: [freeze-tests]
+    brief: >
+      Implement `chunkByCap(items, cap)` as a new named export in src/queue.js (do not modify
+      test/queue.test.js — it is frozen) against the frozen tests in test/queue.test.js. Follow this
+      repo's convention: named exports only, no default exports, plain ES modules, no third-party
+      dependencies.
+
+      Behavior per the spec: splits `items` into consecutive sub-arrays of at most `cap` items each,
+      preserving order; concatenating the result reproduces `items` exactly; the last chunk may be
+      shorter than `cap` and is never padded; `items` is never mutated. Empty `items` returns `[]`
+      (not `[[]]`). `cap >= items.length` returns a single chunk containing all of `items`. A `cap`
+      that is not a positive integer (zero, negative, non-integer, or not a number) throws
+      `TypeError` synchronously before touching `items`. A non-array `items` throws `TypeError`
+      synchronously, same reasoning.
+
+      The spec's Runtime Invariants section is explicitly "None" — there is no guard beyond the
+      synchronous TypeError validation already covered by the acceptance criteria above, so there is
+      no additional runtime-invariant logic to install here beyond correct argument validation.
+    write_scope: ["src/queue.js"]
+    exit_criteria:
+      type: command
+      run: "node --test test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 5
+      escalate_at: 3
+
+  # verify and review are siblings, not a chain — both depend on implement-chunk-by-cap directly.
+  # Neither writes code (write_scope: [] on both), so kestra-run can run them concurrently; review's
+  # diff is already final the moment implement-chunk-by-cap passes, it doesn't need verify to finish
+  # first.
+  - id: verify
+    depends_on: [implement-chunk-by-cap]
+    brief: >
+      Costs no subagent: exit_criteria alone re-runs the full frozen suite (test/queue.test.js, which
+      includes both the pre-existing queue tests and the new chunkByCap tests) and that suite maps
+      1:1 onto every acceptance criterion in the spec — there's no broader end-to-end surface beyond
+      what the unit tests already assert, since chunkByCap is a pure function with no I/O. Nothing
+      further to manually exercise here.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "node --test test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-chunk-by-cap
+
+  - id: review
+    depends_on: [implement-chunk-by-cap]
+    brief: >
+      Review the real diff to src/queue.js since the freeze-tests commit for correctness, edge
+      cases, and injection/authn/secrets risk. Passing tests only prove the spec's own acceptance
+      criteria — this stage exists to catch what the spec never thought to test for. In particular
+      check: the TypeError validation happens before any read/mutation of `items` (per the spec's
+      edge cases), the function performs no mutation of the input array (not just that the tests
+      happen to pass), and no unnecessary copying/behavior was introduced beyond what the spec asks
+      for. Whatever code-review skill you have available fits this stage well; try it, proceed with
+      a direct review if none is available. Write the verdict to review-verdict.md, first line
+      exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by a findings table
+      (severity, one-line claim, file:line).
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-chunk-by-cap
+
+  - id: done
+    depends_on: [verify, review]
+    brief: >
+      Every upstream stage passed. Write a one-page completion-summary.md: what shipped (chunkByCap
+      in src/queue.js), which commits, and the review verdict.
+    write_scope: ["completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

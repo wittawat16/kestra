@@ -1,0 +1,3 @@
+{"stage": "generate-tests", "attempt": 1, "tokens": 116275, "duration_seconds": 28.636, "tool_uses": 5}
+{"stage": "implement-chunk-by-cap", "attempt": 1, "tokens": 113082, "duration_seconds": 18.518, "tool_uses": 3}
+{"stage": "review", "attempt": 1, "tokens": 114935, "duration_seconds": 28.364, "tool_uses": 4}
