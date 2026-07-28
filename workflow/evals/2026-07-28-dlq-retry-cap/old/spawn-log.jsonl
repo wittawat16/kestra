@@ -1,0 +1,10 @@
+{"stage": "spec-review", "attempt": 1, "tokens": 126112, "duration_seconds": 54.283, "tool_uses": 3}
+{"stage": "generate-tests", "attempt": 1, "tokens": 137852, "duration_seconds": 144.361, "tool_uses": 6}
+{"stage": "test-review", "attempt": 1, "tokens": 137436, "duration_seconds": 75.906, "tool_uses": 5}
+{"stage": "implement-queue-retry", "attempt": 1, "tokens": 137049, "duration_seconds": 113.399, "tool_uses": 7}
+{"stage": "verify-acceptance-criteria", "attempt": 1, "tokens": 121575, "duration_seconds": 17.4, "tool_uses": 4}
+{"stage": "review", "attempt": 1, "tokens": 125573, "duration_seconds": 86.085, "tool_uses": 4}
+{"stage": "implement-queue-retry", "attempt": 2, "tokens": 119102, "duration_seconds": 57.927, "tool_uses": 3, "note": "fix for review CHANGES_REQUESTED"}
+{"stage": "review", "attempt": 2, "tokens": 144796, "duration_seconds": 175.757, "tool_uses": 8, "note": "re-review after fix attempt 1"}
+{"stage": "implement-queue-retry", "attempt": 3, "tokens": 117212, "duration_seconds": 50.807, "tool_uses": 7, "note": "fix attempt 2 for review CHANGES_REQUESTED (pending-push assertion)"}
+{"stage": "review", "attempt": 3, "tokens": 147309, "duration_seconds": 169.560, "tool_uses": 9, "note": "re-review after fix attempt 2 -- CLEAR"}

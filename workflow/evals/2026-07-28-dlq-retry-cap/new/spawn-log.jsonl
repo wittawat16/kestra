@@ -1,0 +1,8 @@
+{"stage": "spec-review", "attempt": 1, "tokens": 130851, "duration_seconds": 99.419, "tool_uses": 8}
+{"stage": "generate-tests", "attempt": 1, "tokens": 141432, "duration_seconds": 173.788, "tool_uses": 6}
+{"stage": "test-review", "attempt": 1, "tokens": 134188, "duration_seconds": 89.895, "tool_uses": 5}
+{"stage": "implement-queue", "attempt": 1, "tokens": 127221, "duration_seconds": 96.335, "tool_uses": 8}
+{"stage": "verify", "attempt": 1, "tokens": 128007, "duration_seconds": 130.643, "tool_uses": 8}
+{"stage": "review", "attempt": 1, "tokens": 120301, "duration_seconds": 76.881, "tool_uses": 7}
+{"stage": "verify", "attempt": 1, "tokens": 141397, "duration_seconds": 179.273, "tool_uses": 21}
+{"stage": "review", "attempt": 1, "tokens": 138948, "duration_seconds": 111.251, "tool_uses": 11}

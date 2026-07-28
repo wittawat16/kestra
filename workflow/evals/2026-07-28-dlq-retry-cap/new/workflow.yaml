@@ -1,0 +1,248 @@
+feature: dlq-retry-cap
+source_spec: /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/out-new/0-spec.md
+mode: full
+# mode: full — forced by TWO conditions (either alone would have been enough):
+#   1. Reality Constraints lists external dependencies (Date.now, caller-supplied handler fn,
+#      caller-supplied alert-sink fn) AND three "paths that must agree" pairs (stats.deadLettered
+#      vs dead.length, stats.ok vs done.length, nextAttemptAt vs the backoff policy) -> the frozen
+#      tests will contain doubles/injected values that can drift from what they stand in for ->
+#      test-review earns its round-trip.
+#   2. Runtime Invariants has 4 rows whose violation is silent in production if unguarded
+#      (RetryCapViolationError, UnhandledMessageTypeError, StatsDriftError, dead-letter shape
+#      assertion) -> a dedicated spec-review earns its round-trip.
+# NOT forced by: component count (single file, src/queue.js — one implement stage, no siblings),
+# needs_devops (false), or an explicit user request for full.
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review the spec at /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/out-new/0-spec.md
+      for defects that are cheap to fix now and expensive to fix after tests are frozen. Check: every
+      acceptance criterion (AC-1..AC-15) is testable without a follow-up question; each of the 4
+      Runtime Invariants (RetryCapViolationError on a 4th attempt, UnhandledMessageTypeError on a
+      missing handler with no sink, the dead-letter-entry-shape assertion, StatsDriftError) names
+      what actually happens on violation and none of them resolve to "log it and continue" (all four
+      currently say "halt"/"refuse" — confirm that still holds); the Reality Constraints subsections
+      (External dependencies, Paths that must agree, Non-deterministic inputs) are filled in, in
+      particular the "does not guarantee" column for Date.now/handler fn/alert sink/test runner; and
+      none of these contradict the acceptance criteria or the Edge Cases section (the spec's own
+      "Cross-checked against Edge Cases and ACs" note claims the unhandled-type invariant and AC-8's
+      no-op message state don't contradict each other — verify that claim rather than trusting it).
+      Since needs_ba: true and needs_sa: true, confirm the Business Rules section (BR-1..BR-5) and
+      the Solution Architecture section (chosen approach A vs. rejected B/C) are both present and
+      non-empty — cite them in your verdict rather than re-deriving them. Also look at the two
+      ⚠️ OPEN items (the 1000ms base backoff delay, and throw-vs-alert-sink for a missing handler):
+      confirm they are genuinely open judgment calls rather than something that should already be a
+      contradiction requiring CHANGES_REQUESTED — an open item the spec has already committed to a
+      concrete default for (as both of these have) is fine to proceed on, not a blocker.
+      Write the verdict to spec-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by a findings table.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+    on_fail:
+      action: reworking
+      reason: "spec has gaps or contradictions — resolve before any test or code exists"
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      Append tests to test/queue.test.js covering every acceptance criterion AC-1..AC-15 in the
+      spec. Do NOT touch the two existing tests ('runs a registered handler', 'retries a throwing
+      handler') — they must stay byte-identical, per AC-14. This repo mirrors src/queue.js ->
+      test/queue.test.js one-to-one (CLAUDE.md) — there is no second test file to create.
+
+      Pin the clock per the spec's Non-deterministic-inputs table: every new test passes an explicit
+      integer `now` as step's second argument, EXCEPT the one dedicated AC-13 test for the default
+      `now = Date.now()` argument, which must bracket two real `Date.now()` reads around the call and
+      assert the written `nextAttemptAt` falls within that window — never assert an exact value
+      against the live clock elsewhere.
+
+      The module-level HANDLERS map (src/queue.js) is global and never cleared across the whole test
+      process — use unique `type` strings per new test case (e.g. 'boom-cap', 'ghost', 'plain-throw')
+      and never reuse 'boom' or 'email' from the two existing tests, or AC-14's compatibility fence
+      can be perturbed by test ordering.
+
+      No implementation of dead-lettering / backoff / the alert sink / stats-drift guards exists yet
+      — most of these new tests are expected to fail red for the right reason (missing feature) the
+      first time anyone actually runs them. This stage's own exit_criteria does not run them for that
+      reason (see below) — don't be alarmed that you can't get a passing run at this point.
+    write_scope: ["test/queue.test.js"]
+    exit_criteria:
+      type: command
+      # Node's built-in test runner has no jest-style `--listTests` (enumerate without importing).
+      # `node --check` is syntax-only and deliberately does NOT resolve module imports at parse time
+      # (verified: `node --check` exits 0 even against a test file importing a named export that
+      # doesn't exist yet in src/queue.js, and even against a test body that references an undeclared
+      # local variable) — which is exactly why it can pass before implement-queue has run. The
+      # trade-off: it will NOT catch an undeclared/typo'd local identifier inside a test body, or a
+      # named import that never lands in src/queue.js's real export list. CLAUDE.md forbids adding a
+      # third-party dependency (so no ESLint no-undef-style check is available here) — test-review's
+      # brief below is asked to close this specific gap by hand, since no mechanical command can.
+      run: "test -f test/queue.test.js && node --check test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # Triggered because the spec's Reality Constraints list external dependencies (Date.now, the
+  # caller-supplied handler fn, the caller-supplied alert-sink fn) and three explicit
+  # paths-that-must-agree pairs — the tests will contain doubles/injected values that can drift from
+  # what they stand in for. Sits before the freeze: a finding here is a bounded fixing loop against
+  # generate-tests, not a reworking bounce.
+  - id: test-review
+    depends_on: [generate-tests]
+    brief: >
+      Read test/queue.test.js against the spec's Reality Constraints and report a table with one row
+      per risk (ordering/preconditions, response realism, type/shape drift, path parity, own shared
+      logic, non-determinism), each marked applicable or n/a with file:line evidence. In particular:
+      does any test assert the real dependency guarantees something its own "does not guarantee"
+      column says it doesn't (e.g. asserting a handler always throws an Error, when the spec says it
+      may throw a string/null/undefined); does any test read the real Date.now() outside the one
+      AC-13 test; do the three "paths that must agree" pairs actually get asserted as pairs (not just
+      each side checked in isolation).
+
+      generate-tests' own exit_criteria is syntax-only (see its brief for why — no linter dependency
+      is available in this zero-third-party-dependency repo). Close that specific gap by hand here:
+      read every assertion in test/queue.test.js and confirm every identifier it references is either
+      declared earlier in the same test file or is one of the real named exports `createQueue`,
+      `enqueue`, `registerHandler`, `step`, `setUnhandledTypeAlert`, `successRate`,
+      `UnhandledMessageTypeError` (per the spec's Files-to-Touch / AC coverage map) — flag anything
+      else as a finding rather than assuming it's fine.
+
+      Add rows this codebase's own conventions imply (e.g. the shared, never-cleared HANDLERS map)
+      and say which you added. Judgment only — don't re-derive the mechanical syntax check.
+      Write the verdict to test-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  # The freeze is its own act, deliberately separate from writing the tests — see
+  # design-principles.md. Writes nothing; owns test/queue.test.js only so the test-hash has
+  # something to snapshot, and re-runs the same static checks against the exact commit being locked.
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test/queue.test.js as the
+      frozen baseline every later stage is held to.
+    write_scope: ["test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "test -f test/queue.test.js && node --check test/queue.test.js"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-queue
+    depends_on: [freeze-tests]
+    brief: >
+      Implement the frozen tests' requirements in src/queue.js — do not modify test/queue.test.js.
+      Cover: the retry cap (dead-letter on the failure that takes attempts to >= 3, never a 4th
+      retry); exponential backoff stored as an absolute `nextAttemptAt = now + 1000 * 2 ** (attempts - 1)`
+      at requeue time; step(queue, now = Date.now())'s due-scan picks the first pending message whose
+      nextAttemptAt is absent or <= now, leaving the relative order of the rest unchanged, and returns
+      { status: 'waiting', nextDueAt } with zero mutation when nothing is due; the dead-letter branch
+      moves the message out of pending into queue.dead with lastError + deadLetteredAt and increments
+      stats.deadLettered; lastError = err instanceof Error ? err.message : String(err); the
+      `!handler` branch restores the message to pending untouched, then either calls the registered
+      alert sink (setUnhandledTypeAlert) exactly once, or throws the exported UnhandledMessageTypeError
+      if no sink is registered; successRate(queue) = stats.ok / (stats.ok + stats.deadLettered), or
+      null when that denominator is 0; the existing ok/retry/idle status shapes and the `enqueue`
+      spread (`{ attempts: 0, ...message }`) stay exactly as they are today, per AC-14 and the Edge
+      Cases section.
+
+      Also install the spec's Runtime Invariants as real runtime guards, not just green tests — the
+      frozen tests were derived from anticipated cases; these guards are for the cases nobody
+      anticipated, and no exit_criteria can verify they exist:
+      (1) after the failure-branch increment, if the message's attempts >= 3 the ONLY legal path is
+      the dead-letter branch — otherwise throw the exported RetryCapViolationError instead of pushing
+      back to pending;
+      (2) in the `!handler` branch, the alert sink must be invoked when set, and step must throw
+      UnhandledMessageTypeError when it isn't — always restore the message to pending first so the
+      throw loses no data;
+      (3) assert a dead-letter entry has both lastError and a numeric deadLetteredAt before pushing it
+      into queue.dead, else throw before the push;
+      (4) before every step() return, assert stats.deadLettered === queue.dead.length and
+      stats.ok === queue.done.length, else throw the exported StatsDriftError.
+      Every one of these halts or refuses — none of them may log and continue.
+    write_scope: ["src/queue.js"]
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 5
+      escalate_at: 3
+
+  # Sibling of review, not its successor — both depend on implement-queue directly so kestra-run can
+  # run them concurrently (neither writes code: write_scope: [] on both).
+  - id: verify
+    depends_on: [implement-queue]
+    brief: >
+      Run the full suite and confirm every acceptance criterion (AC-1..AC-15) is genuinely met, not
+      just that `npm test` exits 0 — `npm test` already re-runs the exact same command this stage
+      would otherwise ask for, so don't re-paste that output as new evidence. Instead spot-check by
+      hand the ACs most likely to pass on a shallow implementation: AC-6/AC-7 (the due-scan actually
+      skips forward without reordering `pending`, and the none-due branch truly mutates nothing);
+      AC-9 (the throw-with-no-sink path really restores the message before throwing, so no data is
+      lost); AC-12 (stats stay in lockstep with dead.length/done.length across a 12-step mixed
+      sequence you drive yourself, not just the two single-step tests); AC-13 (the default `now`
+      argument really reads the live clock rather than defaulting to something fixed).
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-queue
+
+  - id: review
+    depends_on: [implement-queue]
+    brief: >
+      Review the real diff since the freeze-tests commit for correctness, edge cases, and
+      injection/authn/secrets risk. Passing tests only prove the spec's own acceptance criteria —
+      this stage exists to catch what the spec never thought to test for. In particular: confirm the
+      four Runtime Invariant guards from implement-queue's brief are real halt/refuse checks and not
+      merely logged; confirm BR-1..BR-5 hold as stated; confirm the shared HANDLERS map is not cleared
+      (explicitly out of scope) and `enqueue`'s caller-overridable `attempts` spread is preserved.
+      Low injection/authn/secrets surface here (in-memory module, no I/O, no user-facing input
+      parsing) — say so plainly rather than padding the review with irrelevant findings. Whatever
+      code-review skill you have available fits this stage; try it, proceed with a direct review if
+      none is available. Write the verdict to review-verdict.md, first line exactly "VERDICT: CLEAR"
+      or "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-queue
+
+  - id: done
+    depends_on: [verify, review]
+    brief: >
+      Every upstream stage passed. Write a one-page completion-summary.md: what shipped (retry cap,
+      exponential backoff, dead-letter list, unhandled-type alert/throw, stats/successRate), which
+      commits, and the test-review/review verdicts.
+    write_scope: ["completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

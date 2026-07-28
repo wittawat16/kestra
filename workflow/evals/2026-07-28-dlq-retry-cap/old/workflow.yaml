@@ -1,0 +1,247 @@
+feature: dlq-retry-cap
+source_spec: /private/tmp/claude-501/-Users-army-git-elide-projects-kestra/5071df50-a443-4507-aecc-d05a1486cdda/scratchpad/eval/out-old/0-spec.md
+mode: full
+# Forced to full by two independent conditions (either alone would suffice):
+#   1. Reality Constraints lists external dependencies with real preconditions/non-guarantees
+#      (the HANDLERS map, caller-supplied handler functions, Date.now()) and the tests will contain
+#      doubles for them (mock handlers, an injected clock, a mock alert sink) -> test-review earns
+#      its round-trip.
+#   2. Runtime Invariants has four rows whose violation is silent in production if omitted
+#      (unhandled-type swallowed, attempts cap exceeded, dead-letter with no reason, stats/array
+#      divergence) -> spec-review has real contradictions to check for.
+# Not forced by "2+ independent components": the entire feature is one file (src/queue.js) with one
+# test file (test/queue.test.js) -> exactly one implement-* stage, verify/review as siblings.
+# Not forced by needs_devops: spec sets it false (no env vars/migrations/flags/infra).
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review the spec (0-spec.md, feature dlq-retry-cap) for defects that are cheap to fix now and
+      expensive to fix after tests are frozen. Confirm: every acceptance criterion is testable
+      without a follow-up question (this spec's ACs are Given-When-Then with exact numeric values,
+      e.g. nextAttemptAt 1100/1300 - check they stay that precise); every row in Runtime Invariants
+      names what actually happens on violation and none resolve to "log it and continue" (this spec's
+      four rows all throw or alert - confirm none were weakened); Reality Constraints' "does not
+      guarantee" column is filled for every dependency (HANDLERS map, handler functions, Date.now(),
+      node:test) - it is, confirm it still is; needs_ba: true is backed by a real, non-empty Business
+      Rules section (BR-1..BR-4 with example/counter-example pairs - confirm present) and needs_sa:
+      true is backed by a real Solution Architecture section (approach A chosen with rejected
+      alternatives - confirm present); and that no Runtime Invariant contradicts an Edge Case
+      describing the same condition (specifically: the "no handler registered" edge case says the
+      message is left byte-for-byte unchanged and re-queued, and Runtime Invariant 1 agrees the
+      message passes through untouched while only the *caller* is alerted/crashed - confirm this
+      reading holds, it is not a contradiction). Write the verdict to spec-verdict.md, first line
+      exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+    on_fail:
+      action: reworking
+      reason: "spec has gaps or contradictions - resolve before any test or code exists"
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      Write tests in test/queue.test.js covering every acceptance criterion in the spec, appended to
+      the existing file (CLAUDE.md: test/<name>.test.js mirrors src/<name>.js - do not create a new
+      file). No implementation exists yet for dead-lettering, backoff, unhandled-type alerting,
+      registerAlertSink, or deadLetterRate - these tests must fail for the right reason (missing
+      feature / missing export), not error out from a typo. The spec's acceptance criteria are
+      written as Given-When-Then; mirror that structure one-to-one in the test names/bodies (plain
+      node:test describe/test blocks, this stack has no BDD framework and none should be added -
+      CLAUDE.md forbids third-party dependencies). Every test that touches time must pass an explicit
+      integer `now` to step() per the spec's Non-deterministic inputs table - exactly one test may
+      exercise the Date.now() default, and it must assert only nextAttemptAt > 0, never a specific
+      value. Because HANDLERS and any alert-sink binding are process-global and never cleared
+      (existing tests already rely on this), give every new test its own unique message `type` string
+      not used by any other test in the file, and order the "no sink registered" test before any test
+      that registers a sink, or otherwise ensure sink registration doesn't leak into it. Cover in
+      particular: the exact three-call failure sequence (retry/retry/dead with attempts 1,2,3 and the
+      handler never called a 4th time), the exact nextAttemptAt values 1100 and 1300, the `waiting`
+      status when called before nextAttemptAt and that the handler is not invoked, both the
+      alert-sink and no-sink branches of the unhandled-type case, a non-Error throw normalizing to a
+      string lastError, the stats/array-length identity after a 9-ok/1-dead run and deadLetterRate
+      returning 0.1, deadLetterRate returning 0 on a fresh queue without dividing by zero, idle on an
+      empty queue, and that the two pre-existing tests in the file still pass unmodified.
+
+      Known stack limitation, be aware of it rather than silently working around it: this repo has no
+      linter and CLAUDE.md forbids adding one, so there is no zero-dependency way to statically catch
+      an undefined-name typo in the test file before implementation exists (confirmed by hand: `node
+      --check` only catches syntax errors, not undefined references, and `vm.SourceTextModule`
+      linking doesn't catch them either since JS resolves free variable references at evaluation time,
+      not at parse/link time). The exit_criteria for this stage is therefore `node --check` alone
+      (syntax-only) - narrower than ideal. Compensate by proofreading every referenced import/export
+      name against the exact function/field names this spec's Functional Requirements and Solution
+      Architecture specify (createQueue, enqueue, step, registerHandler, registerAlertSink,
+      deadLetterRate, HANDLERS) before finishing.
+    write_scope: ["test/queue.test.js"]
+    exit_criteria:
+      type: command
+      run: "node --check test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # Triggered because the spec's Reality Constraints lists external dependencies the tests must
+  # double (HANDLERS-registered handler functions, an injected clock, a registered alert sink) and
+  # names a pair of paths that must agree (stats counters vs array lengths). Runs before the freeze
+  # so any finding here is a bounded fixing loop against generate-tests, not a reworking bounce.
+  - id: test-review
+    depends_on: [generate-tests]
+    brief: >
+      Read test/queue.test.js against the spec's Reality Constraints and report a table with one row
+      per risk below, each marked applicable or n/a with file:line evidence.
+      - Ordering/preconditions: do the tests respect that registerHandler must run before step() sees
+        that type, and do they exercise a message type with genuinely no handler registered (not just
+        one registered late)?
+      - Response realism: is the throwing handler tested with more than one Error message, and is a
+        non-Error throw (e.g. a plain string) also exercised, not just the happy-path Error case?
+      - Type/shape drift: does the alert-sink assertion check the exact shape
+        `{ kind: 'unhandled-type', type, id }` rather than a loose subset?
+      - Path parity: is there a test that asserts `queue.stats` against `queue.done.length` /
+        `queue.dead.length` directly, per the spec's "paths that must agree" note, rather than only
+        checking `stats` in isolation?
+      - Own shared logic: do any tests bypass step()'s real cap/backoff logic by hand-constructing a
+        `dead` entry or a `stats` value instead of driving it through step()?
+      - Non-determinism: does exactly one test read the Date.now() default, and does it assert only
+        `> 0`? Do all other clock-touching tests pass an explicit `now`?
+      Also add a row for this codebase's own known risk: process-global HANDLERS/alert-sink leakage
+      across tests in the same file (no deregister exists) - confirm every new test uses a message
+      `type` unique to itself and that sink-registration ordering can't make the no-sink test flaky.
+      Write the verdict to test-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by the findings table.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  # The freeze is its own act, deliberately separate from writing the tests. Writes nothing; owns
+  # test/queue.test.js only so the test-hash has something to snapshot, and re-runs the same static
+  # check the writing stage used, against the exact commit being locked.
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      No edits. Snapshot and commit the approved test/queue.test.js as the frozen baseline every
+      later stage is held to.
+    write_scope: ["test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "node --check test/queue.test.js"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point - resolve upstream, don't patch here"
+
+  - id: implement-queue-retry
+    depends_on: [freeze-tests]
+    brief: >
+      Implement dead-letter capping, attempt-based backoff, and loud unhandled-type handling in
+      src/queue.js against the frozen tests - do not modify test/**. Follow the spec's Solution
+      Architecture (approach A, already chosen - don't re-litigate it): extend src/queue.js in place,
+      add a `now` parameter to step() defaulting to Date.now(), add a module-level alert-sink binding
+      with a named `registerAlertSink` export mirroring the existing `registerHandler`/`HANDLERS`
+      convention, and add `deadLetterRate`.
+
+      Also install the four checks listed under the spec's Runtime Invariants as actual guards, not
+      just code that happens to make the frozen tests pass - the frozen tests were derived from
+      anticipated cases, and these four exist for the unanticipated ones the tests can't force:
+      (1) a message with no registered handler must never pass through step() unnoticed - call the
+      registered alert sink with { kind: 'unhandled-type', type, id }, and if no sink is registered,
+      throw UnhandledMessageTypeError instead of returning, so the caller finds out one way or the
+      other, every time; (2) attempts must never exceed 3 for any message ending up in `pending` or
+      `dead` - assert this before placing the message anywhere and throw RangeError naming the id if
+      it's violated; (3) every entry pushed to queue.dead must have a string lastError - assert this
+      at the push site and throw TypeError naming the id if not; (4) queue.stats.ok +
+      queue.stats.deadLettered must equal queue.done.length + queue.dead.length at the end of every
+      step() call that terminated a message - assert this and throw if it diverges. None of these may
+      merely log and continue - that satisfies the letter of having a check while providing none of
+      its value.
+
+      Respect the Reality Constraints the frozen tests may not fully exercise: normalize any thrown
+      value to a string via String(thrown) rather than assuming err.message exists; do not assume
+      Date.now() is monotonic (the `waiting` branch must tolerate now going backwards without
+      throwing); HANDLERS and any alert-sink registration are process-global and never cleared -
+      don't add a deregister mechanism unless the frozen tests require one.
+    write_scope: ["src/queue.js"]
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 5
+      escalate_at: 3
+
+  # Sibling of review, not its successor - both depend on implement-queue-retry directly so
+  # kestra-run can run them concurrently (write_scope: [] on both, nothing to collide on; review's
+  # diff is already final the moment implement-queue-retry passes).
+  - id: verify-acceptance-criteria
+    depends_on: [implement-queue-retry]
+    brief: >
+      Confirm every acceptance criterion in the spec is actually met by the implementation, not just
+      that `npm test` exits 0 - the frozen test file already encodes essentially every AC directly
+      (exact nextAttemptAt values, exact stats/array-length equalities, the sink and no-sink unhandled
+      branches, the non-Error normalization), so this is largely already covered by exit_criteria;
+      don't re-derive that mechanically-covered ground by hand. The one thing worth spot-checking by
+      hand rather than trusting the frozen suite alone: run the implementation directly (a short node
+      -e snippet importing src/queue.js) with a queue built via createQueue() and confirm
+      deadLetterRate() on it returns exactly 0 with Number.isFinite(...) true, since this specific
+      "fresh queue, never touched by step()" construction may not be exactly how the frozen test built
+      its fixture.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-queue-retry
+
+  - id: review
+    depends_on: [implement-queue-retry]
+    brief: >
+      Review the real diff to src/queue.js since the last commit for correctness, edge cases, and
+      injection/authn/secrets risk - passing tests only prove the spec's own acceptance criteria, not
+      code quality or a security hole the spec never thought to test for. A code-review-focused skill
+      or a security-review-focused skill, if you have either installed, both fit this stage well - try
+      them, otherwise review directly. Specifically check: that the four Runtime Invariants are real
+      guards (halt/throw/alert) and not a console.log/comment that only looks like one; that a thrown
+      non-Error value is normalized to a string everywhere lastError is set, not just in the common
+      path; that the `waiting` branch tolerates a clock moving backwards without throwing; that no
+      change silently added a deregister/reset for HANDLERS or the alert sink that the spec didn't ask
+      for (that would change the process-global leakage behavior the existing tests already depend
+      on); and that step() still only dequeues one message per call. Write the verdict to
+      review-verdict.md, first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED",
+      followed by findings.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-queue-retry
+
+  - id: done
+    depends_on: [review, verify-acceptance-criteria]
+    brief: >
+      Every upstream stage passed. Write a one-page completion-summary.md: what shipped (dead-letter
+      cap, backoff, unhandled-type alerting/throw, registerAlertSink, deadLetterRate), which commits,
+      and the spec-review/test-review/review verdicts.
+    write_scope: ["completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

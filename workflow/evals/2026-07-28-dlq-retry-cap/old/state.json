@@ -1,0 +1,15 @@
+{
+  "feature": "dlq-retry-cap",
+  "current_stage": ["spec-review"],
+  "test_hash": null,
+  "stages": {
+    "spec-review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "generate-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "test-review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "freeze-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "implement-queue-retry": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "verify-acceptance-criteria": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "done": { "status": "pending", "attempt": 0, "seen_diffs": [] }
+  }
+}
