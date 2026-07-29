@@ -122,6 +122,24 @@ Ambiguity resolves toward **full** — the cost of a wrong `lite` is a missed de
 wrong `full` is a slower run. State which condition (or the absence of all of them) decided it when
 you show the workflow to the user, so the choice is auditable rather than a mood.
 
+**One more factor, read separately from the table above: is the root cause established, or still to
+be found?** Every row above describes the *shape of the risk* — components, doubles, invariants,
+devops flags — and none of them asks how much of the problem the spec already solved before arriving
+here. A spec that arrives with a reproduced failure, the responsible `file:line`, and a fix direction
+already spelled out is a fundamentally different task from one with an open design space, even when
+the two have identical risk shapes by the table's own terms. The stages that pay for themselves on
+the second kind are the discovery stages (`spec-review` finding a wrong assumption, `test-review`
+catching a double that drifted); on the first kind, those same stages mostly re-derive a conclusion
+someone already reached — measured directly: a `mode: full` run on a fully-diagnosed 300-line fix
+spent 37.5% of all subagent tokens on four rounds of `spec-review` alone, three of which were the
+spec catching up to facts the originating issue already stated. This factor does **not** flip a
+`full` verdict to `lite` on its own — the risk shape still governs what must be checked, and a
+correctly-diagnosed bug can still need doubles or trip an invariant. But when the table above is
+otherwise borderline, treat an already-established root cause as a reason to prefer `lite`, and say
+so explicitly in the same audit line as the table's own verdict — "root cause was pre-established;
+risk shape was borderline; chose lite" is exactly the kind of reasoning this line exists to make
+visible instead of silent.
+
 ### What lite actually is
 
 Lite is the same machine with the same three primitives — **write-scope allowlist, test-hash
