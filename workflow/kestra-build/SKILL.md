@@ -302,7 +302,12 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      that skill arrives having already cleared it and this stage costs one cheap pass instead of a
      bounce; keep the two lists in sync if you change either. When the spec lacked these sections
      and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
-     rather than assuming a human already blessed it.
+     rather than assuming a human already blessed it. Give it the same `on_fail` shape as `review`
+     too: `action: fixing`, `max_attempts: 2`, `escalate_at: 2`, `write_scope` covering `source_spec`
+     itself (there's no separate stage to `target` the way `review` targets an `implement-*` stage),
+     falling through to `reworking` only once that's exhausted or the same diff repeats — see
+     `references/design-principles.md`'s "Default HITL posture" for why a brief this substantive
+     shouldn't skip straight to the one human stop on its first finding.
    - **`test-review`, the harness contract, evidence-artifact reuse, and sibling `implement-*` /
      shared-contract stages are covered in
      [`references/full-mode-stages.md`](references/full-mode-stages.md) — open it now, this is the

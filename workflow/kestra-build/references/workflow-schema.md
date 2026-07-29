@@ -244,13 +244,18 @@ stages:
       the brief above — review the inference itself, don't assume a human already approved it.
       Write the verdict to spec-verdict.md, first line exactly "VERDICT: CLEAR" or
       "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+    write_scope: ["workflows/runs/csv-export/0-spec.md"]
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' spec-verdict.md"
     on_fail:
-      action: reworking
-      reason: "spec has gaps or contradictions — resolve before any test or code exists"
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+      reason: >
+        bounded attempt to fix the spec in place (see design-principles.md's "Default HITL
+        posture") — falls through to reworking if unresolved after 2 attempts or the same diff
+        repeats without progress
 
   - id: generate-tests
     depends_on: [spec-review]

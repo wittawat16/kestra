@@ -146,10 +146,26 @@ instead of inventing a second one.
 
 Concretely, in kestra-build's default generated template:
 
-- **`spec-review`** becomes a mechanical sanity check on the frozen spec artifact (e.g. does
-  `0-spec.md` have a non-empty `acceptance_criteria` list) — `exit_criteria.type: command`,
-  `on_fail.action: reworking` (a malformed spec is exactly a "what we're building from is wrong"
-  case, so it escalates the same way an exhausted `fixing` loop would).
+- **`spec-review`** becomes a mechanical check on the spec artifact — `exit_criteria.type: command`
+  greps a `VERDICT: CLEAR` / `VERDICT: CHANGES_REQUESTED` line the same way `review` does. This
+  bullet originally described that check as trivial (e.g. "does `0-spec.md` have a non-empty
+  `acceptance_criteria` list"), which is why it went straight to `reworking` on any failure — for a
+  check that shallow, any failure really was a "what we're building from is fundamentally wrong"
+  case. In practice the brief this generator writes for `spec-review` is not that shallow: it checks
+  contradictions between Runtime Invariants and Edge Cases, unfilled Reality Constraints columns, AC
+  testability, and (since the execution-verified self-check) whether the spec's own claims survive
+  actually being run. Most of what it catches at that depth is exactly as fixable in place as what
+  `review` catches in a diff — a missing file in Files-to-Touch, an uncounted reference, a stale
+  cross-reference — not a case where the feature's intent itself is in question. So `spec-review`
+  now gets the same bounded attempt `review` gets: `on_fail.action: fixing`, `max_attempts: 2`,
+  `escalate_at: 2`, with `write_scope` covering `source_spec` itself (there's no separate
+  implement-the-spec stage to `target`, unlike `review`, so `spec-review` owns that path directly
+  rather than through a `target`). Only once that bounded loop is exhausted, or the same diff to the
+  spec repeats without resolving the finding, does it fall through to `reworking` — still the one
+  human stop, just reached the same way every other judgment stage reaches it instead of skipping
+  straight there. A defect that genuinely calls the feature's own intent into question — not a fixable
+  gap but a "we don't actually agree what this should do" — usually announces itself by failing to
+  converge inside those two attempts, which is exactly what `reworking` is for.
 - **`review`** (and `security` alongside it) spawns the same automated agents as before, but their
   verdict becomes a real artifact (`VERDICT: CLEAR` / `VERDICT: CHANGES_REQUESTED` on its own
   line) that `exit_criteria.type: command` greps for a real exit code — no human reads the diff
