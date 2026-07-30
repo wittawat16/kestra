@@ -162,67 +162,80 @@ no separate `ba.md`/`design.md`/`sa.md`/`1-plan.md`.
 Default: `<repo>/workflows/runs/<feature-id>/0-spec.md` (next to `kestra-build`'s output). Ask if the
 repo uses a different convention.
 
-```markdown
-# ☕ [<feature-id>] Spec — <feature title>
+**Write for the readers this file actually has: `kestra-build`'s own stage-derivation pass, and
+whatever subagent each generated stage spawns — not a human approver.** `kestra-run`'s context pack
+now pastes this file's full text, verbatim, into *every single spawn* of the workflow it produces
+(see `kestra-run`'s `SKILL.md` step 2) — so every sentence here is paid for again on every stage,
+not once at write time. Bias hard toward density over narrative: bullet fragments over full
+sentences wherever the meaning doesn't need a verb; never restate a heading's own words in the prose
+under it ("Problem Statement" doesn't need a sentence starting "The problem is..."); one line beats
+two when both convey the same fact. This changes *density*, never *content* — every fact the
+template asks for (an invariant's on-violation behavior, a dependency's non-guarantee, an AC's exact
+inputs) still has to be there in full; cutting a fact to save a sentence just relocates the token
+cost to whichever stage discovers the gap later, at a worse exchange rate. The headings below carry
+no emoji for the same reason — a decorative prefix a human would scan past is pure overhead for a
+subagent grepping section names.
 
-> **Status:** 🟢 READY_FOR_BUILD | **Created:** YYYY-MM-DD
-> **Next:** 🏗️ kestra-build
+```markdown
+# [<feature-id>] Spec — <feature title>
+
+> Status: READY_FOR_BUILD | Created: YYYY-MM-DD | Next: kestra-build
 
 ---
 
-## ☕ Overview
-[1–2 sentences: what this delivers and why.]
+## Overview
+[one line: what this delivers, why.]
 
-## 🪵 Problem Statement
-* [context / current behaviour]
-* 🎯 **Goal:** [the measurable outcome]
+## Problem Statement
+* [current behaviour]
+* Goal: [measurable outcome]
 
-## 🥑 Functional Requirements
+## Functional Requirements
 * [ ] [requirement — specific enough to implement]
-* [ ] [behavioral requirement — Given-When-Then where it clarifies a scenario, else plain prose]
+* [ ] [behavioral requirement — Given-When-Then where it clarifies a scenario, else a bullet fragment]
 
-## 🌤️ Edge Cases & Error States
+## Edge Cases & Error States
 * **[edge case]:** [how it's handled]
 * **[failure mode]:** [expected behaviour]
 
-## 🛡️ Runtime Invariants
+## Runtime Invariants
 *(must hold every time this runs — a violation halts, refuses, or alerts; never proceeds silently.)*
 | Invariant — what must be true | Detected at runtime by | On violation |
 |-------------------------------|------------------------|--------------|
 | [condition] | [the actual check, and where it sits in the flow] | [halt / refuse / alert — who finds out] |
 
-## 📜 Business Rules  *(only if needs_ba: true)*
+## Business Rules  *(only if needs_ba: true)*
 * **BR-1:** [rule + example + counter-example, Given-When-Then]
-* 👥 **Stakeholder variations:** [role/locale/state → behaviour difference]
+* Stakeholder variations: [role/locale/state → behaviour difference]
 
-## 🎨 Design Notes  *(only if needs_ui: true)*
+## Design Notes  *(only if needs_ui: true)*
 ### Component Audit
 | Component | Reuse? | Token ref | Notes |
 |-----------|--------|-----------|-------|
-| `[Name]` | ✅ reuse `@path/to/Component` | `token.name` | [usage] |
-| `[Name]` | 🆕 new | `token.name` | [why existing ones didn't fit] |
+| `[Name]` | reuse `@path/to/Component` | `token.name` | [usage] |
+| `[Name]` | new | `token.name` | [why existing ones didn't fit] |
 ### Token Mapping
-* [usage]: `token.name` (or ⚠️ no design system — hardcoded baseline noted)
+* [usage]: `token.name` (or "no design system" — hardcoded baseline noted)
 ### Screen States
 | View | Empty | Loading | Success | Error |
 |------|-------|---------|---------|-------|
 | [Name] | [desc] | [desc] | [desc] | [desc] |
 
-## 🔭 Solution Architecture  *(only if needs_sa: true)*
-**Chosen approach:** [A] — [one-sentence rationale]
+## Solution Architecture  *(only if needs_sa: true)*
+Chosen approach: [A] — [one-sentence rationale]
 | Approach | Pros | Cons | Verdict |
 |----------|------|------|---------|
-| [A] | ... | ... | ✅ chosen |
-| [B] | ... | ... | ❌ rejected — [why] |
-* **Integration contracts:** [service A → service B: what's exposed/consumed]
-* **Data model impact:** [new tables/columns/migrations — or "none"]
-* **NFR targets:** [latency / throughput / fault-tolerance / compliance]
+| [A] | ... | ... | chosen |
+| [B] | ... | ... | rejected — [why] |
+* Integration contracts: [service A → service B: what's exposed/consumed]
+* Data model impact: [new tables/columns/migrations — or "none"]
+* NFR targets: [latency / throughput / fault-tolerance / compliance]
 
-## 🔎 Codebase Survey
-* **Explored:** [dirs/files actually read]
-* **Integrate with:** [existing modules/patterns/conventions to follow]
+## Codebase Survey
+* Explored: [dirs/files actually read]
+* Integrate with: [existing modules/patterns/conventions to follow]
 
-## 🌐 Reality Constraints
+## Reality Constraints
 *(what the world outside this feature actually does — verified by running/reading, not assumed.
 Omit a subsection only when genuinely not applicable, and say so.)*
 
@@ -232,44 +245,44 @@ Omit a subsection only when genuinely not applicable, and say so.)*
 | `[name]` | [e.g. X must be released before Y — or "none known"] | [real types as observed/documented] | [completeness / ordering / uniqueness / timeliness it won't promise] |
 
 ### Paths that must agree
-* `[path A]` ↔ `[path B]` — **equivalent means:** [what must match] · **may differ:** [what's
-  allowed to diverge, and why] — *(or "none — single path")*
+* `[path A]` ↔ `[path B]` — equivalent means: [what must match] · may differ: [what's allowed to
+  diverge, and why] — *(or "none — single path")*
 
 ### Non-deterministic inputs
 | Input | Pinned or floating in tests | Why |
 |-------|-----------------------------|-----|
-| [clock / randomness / timezone / locale / network / filesystem / env] | 📌 pinned \| 🌊 floating | [reason] |
+| [clock / randomness / timezone / locale / network / filesystem / env] | pinned \| floating | [reason] |
 
-## 🗂️ Files to Touch
+## Files to Touch
 | File | Change | Verified? | Why |
 |------|--------|-----------|-----|
-| src/... | edit | ✅ exists | ... |
-| src/... | new | ✅ follows pattern at src/... | ... |
+| src/... | edit | exists | ... |
+| src/... | new | follows pattern at src/... | ... |
 
-## 🔗 Dependencies
+## Dependencies
 * [new packages / schema changes / migrations — or "none"]
 
-## 🎯 Acceptance Criteria
+## Acceptance Criteria
 * [ ] [testable, measurable — includes design ACs; Given-When-Then for behavioral ACs]
 
-## 🎯 AC Coverage Map
+## AC Coverage Map
 | AC | Covered by (files/steps) |
 |----|--------------------------|
 | [ac text] | [file(s) / step] |
 
-## ⚠️ Risks & Watch-outs
+## Risks & Watch-outs
 * [shared files, race conditions, migrations needing care — or "none"]
 
-## 🚫 Out of Scope
+## Out of Scope
 * [explicitly excluded — point to future work if relevant]
 
-## 🔀 Flags
+## Flags
 * `needs_ba`: [true|false] — [reason]
 * `needs_ui`: [true|false] — [reason]
 * `needs_sa`: [true|false] — [reason]
 * `needs_devops`: [true|false] — [reason]
 
-## ❓ Open Items
+## Open Items
 * [anything genuinely unresolvable — or "none"]
 ```
 

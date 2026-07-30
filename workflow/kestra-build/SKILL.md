@@ -635,6 +635,22 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      respect and the frozen tests may well not cover. Point the `review` stage's brief at the same
      section, since reading the diff for a missing guard is exactly the kind of judgment `review`
      exists to apply and `verify` structurally cannot.
+   - **Give `generate-tests` and every `implement-*` brief an explicit comment-discipline
+     instruction — this is not covered by any mechanical check, so it has to be said.** Default to
+     no comments; write one only when the *why* is genuinely non-obvious from the code itself (a
+     hidden constraint, a workaround for a specific bug, a reason a simpler approach doesn't work) —
+     never one that restates what a well-named identifier already says. Two failure modes to name
+     explicitly, both real and both compound: **(1)** a multi-line comment block where one line would
+     do — a spawned agent left to its own judgment tends to over-explain a non-obvious constraint
+     across three or four lines when one covers it. **(2)** a comment that references *this specific
+     run* — a task, a spec, an AC id, or (worst) a copy-provenance path like "copied from
+     `workflows/runs/<other-feature-id>/...`". That kind of reference belongs in the commit message,
+     never the file: it rots the moment the referenced run is archived or deleted, and it means
+     nothing to the next feature that copies the same pattern forward. Both failure modes now compound
+     directly with the richer context pack — every over-commented line in a frozen test or an
+     implementation file gets re-pasted, verbatim, into every subsequent spawn that reads that file's
+     diff (`test-review`, `verify`, `review`, and any `fixing` retry), so a comment that costs one
+     line to write costs that line again on every stage downstream of it.
 5. **Write `workflow.yaml`** — schema and a full worked example in `references/workflow-schema.md`.
 6. **Write `state.json`** — initial state matching the stage list, schema + example in
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
