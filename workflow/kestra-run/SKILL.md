@@ -82,7 +82,10 @@ do when one or both of them fail.
    test paths (the `write_scope` of whichever stage had `freeze_after: true`) and compare. **Any
    mismatch is an immediate hard stop** — report it plainly (something rewrote frozen tests) and do
    not proceed. This is not a `fixing`/`reworking` situation; it's a "someone/something violated
-   the one invariant everything else depends on" situation.
+   the one invariant everything else depends on" situation. Run this once per loop iteration
+   (once per batch), not once per stage in a multi-stage batch — the hash covers a fixed set of
+   frozen paths regardless of which stages are running this iteration, so recomputing it per-sibling
+   in a `verify`+`review` batch checks the identical thing twice for nothing.
 
 2. **Do the stage's work, if the stage's `brief` describes any.** This runs *before* the
    `human_approval` check below, regardless of the stage's `exit_criteria.type` — a `human_approval`
@@ -134,13 +137,35 @@ do when one or both of them fail.
        agent the starting state — red, green, or broken — without it burning a turn to find out, and
        it costs you nothing you weren't going to run in step 3 anyway. When `exit_criteria.type` is
        `artifact_exists` instead, say whether the artifact is currently present.
-     - the files and line ranges the previous stage touched — `git diff --name-only` and
-       `git diff -U0` against that stage's commit, pasted, not summarized
+     - the files and line ranges the **most recent stage commit with a non-empty code diff**
+       touched — `git diff --name-only` and `git diff -U0` against that commit, pasted, not
+       summarized. This is deliberately not just "the previous stage": a stage immediately
+       downstream of a no-diff stage (`implement-*` follows `freeze-tests`, whose own commit is
+       essentially a `state.json` update) would otherwise get a near-empty diff pasted while the
+       diff it actually needs — `generate-tests`'s — goes unmentioned. Walk `state.json`/`git log`
+       back past any stage whose commit touched no code paths. For `implement-*` specifically, also
+       paste the frozen test suite's file list (the freeze stage's `write_scope`, resolved to real
+       paths) alongside the diff — that's what it's implementing against.
      - the previous stage's verdict artifact path **and its verdict line**
      - anything under `<run-folder>/evidence/` and `<run-folder>/harness/` (see the artifact-reuse
        and harness notes in `references/efficiency-notes.md`) — path plus one line on what each holds
      - on a `fixing` retry: the specific findings being fixed, which you already have from the
        failing stage's own output. Not "it failed" — the actual claims.
+     - on a **post-`reworking` re-run** of a judgment stage: never resume across the transition (the
+       frozen baseline genuinely changed, so a fresh spawn with a fresh pack is mandatory) — but the
+       fresh pack itself still doesn't need to be blank. For `review`/`verify` (whose review scope is
+       already just the diff — the pack already hands them nothing but `git diff -U0` against the
+       previous stage), add the rework diff and one scope line: "re-verify the changed lines and
+       every test/scenario sharing their AC or fixtures — not the whole suite from scratch." Do
+       **not** apply that same diff-only narrowing to `test-review`'s post-reworking re-run — its
+       whole job is catching relations *between* test files, which a diff-scoped pack would hide by
+       construction. Instead, for `test-review` specifically: compute per-file changed-vs.-identical
+       status against the prior verdict pass (`git diff --stat` plus the file hashes already computed
+       for the freeze), and hand the reviewer "the standalone correctness of byte-identical files
+       stands as previously verified; re-verify the changed lines, their ACs, and every interaction
+       between the changed content and any prior finding" — cross-file contradictions stay in scope
+       because they're by definition an interaction with the changed content, even when the other
+       file involved is byte-identical to what was reviewed before.
 
      Every field here is read off the workflow's own files or off `git`, so none of it assumes a
      language, a test runner, or a project layout. Omit a field only when it genuinely has no value
@@ -190,19 +215,42 @@ do when one or both of them fail.
 5. **On pass (non-`human_approval` stages only):** stage → `passed`. If this stage has
    `freeze_after: true`, compute and store the test-hash into `state.json` now. Commit everything
    (code + `state.json` — see `references/enforcement.md` for the exact sequence; no `git tag` per
-   stage, the commit itself is the rollback point). Remove this stage from `current_stage` and add
+   stage, the commit itself is the rollback point). **When multiple `write_scope: []` siblings pass
+   in the same batch** (the `verify`+`review` case), make one commit naming every stage id that
+   passed, instead of one commit per sibling — a `write_scope: []` stage's commit contains only the
+   `state.json` update, so there's no per-stage code state a separate commit would need to preserve
+   as a rollback point; combining them loses nothing. Make sure the commit message still names every
+   stage id individually so a later `git log --grep "stage(<feature-id>): <stage-id> passed"` lookup
+   resolves for each one (see `enforcement.md`'s rollback-grep convention). A sibling with a
+   non-empty `write_scope` still gets its own commit as before. Remove this stage from `current_stage` and add
    every stage that now has all its dependencies satisfied, then continue the loop automatically.
    Mirror both moves with TaskUpdate: the stage that just passed → `completed`; every newly-ready
    stage entering `current_stage` → `in_progress`. Keep this in the same breath as the state.json
    update — a stale checklist is worse than none, since it actively tells the user the wrong thing.
-   If a subagent was spawned for this stage, append one line to `<run-folder>/run-log.md` — stage id,
-   its reported token count, wall-clock time — alongside the state.json update. This is what makes
-   the `done` stage's per-stage cost table (see kestra-build's `done`-stage guidance) real instead of
-   aspirational: nothing else in this loop tracks it, so if this line is skipped the table has
-   nothing to source from.
+   If a subagent was spawned for this stage, record its metrics in the same breath as the status
+   update: append one line to `<run-folder>/run-log.md` **and** write the same facts into this
+   stage's `state.json` entry under `metrics` (see `state-schema.md`) — stage id, its reported token
+   count, wall-clock time, whether this attempt was a fresh spawn or a resumed one, and the final
+   `attempt` count. Source all of it from data you already hold at commit time (the Agent tool
+   result's usage numbers, and timestamps you captured before/after the spawn) — never spawn an
+   extra subagent or add an `exit_criteria` check just to fetch it, and never let `metrics` or
+   `seen_failures` be read by `exit_criteria`, `write_scope` diffing, or the test-hash computation;
+   they're informational only. This is what makes the `done` stage's per-stage cost table (see
+   kestra-build's `done`-stage guidance) real instead of aspirational — nothing else in this loop
+   tracks it, so a skipped line means an absent row in that table, never a stage failure. The
+   spawn-type/attempt-count columns only mean something across a pause/resume if this was actually
+   persisted at the time — a `done` summary spanning a multi-session run that finds no `metrics` for
+   an attempt should say "N/A — not tracked for this attempt," not reconstruct a guess.
 
 6. **On fail:** increment `attempt` (on the failing stage's own entry in `state.json`, even when
    `on_fail.target` points elsewhere), hash the (normalized) diff and check it against `seen_diffs`.
+   Also record a normalized hash of this attempt's `exit_criteria` failure output into a
+   `seen_failures` array alongside `seen_diffs` (normalization recipe in `enforcement.md`, next to
+   the semantic-diff hashing it mirrors — strip timestamps/durations/paths the same way). This is
+   diagnostic only, no transition changes: `seen_diffs` alone can't catch the case where a too-narrow
+   `write_scope` or a broken environment blocks every fix attempt identically — each attempt still
+   produces a *different* diff (a different, equally futile edit), so `seen_diffs` never repeats even
+   though nothing is converging.
    - **If more than one stage in this step's batch failed and shares the same `on_fail.target`**
      (the `verify`+`review` sibling case above is the common one) — **do not spawn two concurrent
      fix attempts on that target**, they'd collide on the same `write_scope`. Combine every failing
@@ -226,7 +274,48 @@ do when one or both of them fail.
      it edit within `target`'s `write_scope` **at the target stage's own `model`/`effort`** (see
      step 2's exception above — not the failing reviewer's), then re-run the failing stage's own work
      (step 2) and `exit_criteria` (step 3) again — the loop re-checks the *same* stage's
-     exit_criteria, it doesn't just trust the fix. TaskUpdate the stage's task's `activeForm` to
+     exit_criteria, it doesn't just trust the fix.
+     - **Scope-cap the recheck itself — this is where most of a `fixing` loop's cost lives.**
+       Applies to any `on_fail.target`-based retry re-run of `test-review`, `review`, or a security
+       stage (never `spec-review`'s own self-edit loop — that stage owns no `target`, edits its own
+       source, and must re-run its full contradiction checklist — Runtime Invariants vs. Edge
+       Cases/ACs, Reality Constraints vs. ACs — on every attempt regardless of edit size; a spec
+       edit can introduce a contradiction anywhere, not just near the edited lines). No size
+       threshold needed — for a large fix diff the scoped pass naturally approaches a full review,
+       so the cap is safe at every size rather than gated on "provably small." Compose the retry
+       prompt to ask for exactly two things: (a) confirm each prior finding is addressed by the fix
+       diff, and (b) check the changed lines against the stage's own risk checklist *including their
+       interactions with unchanged files* — explicitly stating that unchanged-to-unchanged relations
+       already cleared on an earlier full pass stand, because step 3's `write_scope` check-and-revert
+       already mechanically guarantees nothing outside the fix diff changed. Three guards, always
+       together:
+       1. **Baseline** — "changed lines" means the cumulative diff against the commit the
+          **last full-scope pass** reviewed (`git diff <last-full-pass-commit> -- <target's
+          write_scope>`), never just the latest attempt's incremental delta — otherwise on attempt
+          ≥2, content an earlier failed fix already touched inherits a "cleared" status it never
+          earned.
+       2. **Indirect effects** — the standing-clearance claim covers only relations the diff cannot
+          affect even indirectly. Require the reviewer to trace the changed lines' effects through
+          imports, shared helpers, and fixtures before treating any unchanged-to-unchanged relation
+          as settled — a fix to a shared helper can alter the semantics of two files with zero
+          changed lines of their own. When respawning fresh rather than resuming (the respawned agent
+          has no memory of the original full pass), this also means scanning call sites and consumers
+          of anything the fix diff changed — signatures, exported symbols, shared config — not just
+          the diff's own lines.
+       3. **Boundaries** — this scoping applies only *inside* a `fixing` loop against a live
+          `on_fail.target`. It stops being safe at the moment of a `reworking` transition, which is
+          always a full fresh review with no scope narrowing (see the post-reworking pack rule under
+          step 2). And "don't re-derive the whole review" must never be read as "don't run the
+          commands needed to confirm one specific prior finding" — those stay allowed; what's capped
+          is re-scanning content the diff provably didn't touch, not verification itself.
+
+       Where a blocking finding in the verdict artifact carries a runnable check (a command whose
+       exit code flips once the finding is addressed — extend the existing numeric-claim rule to any
+       blocking finding that admits one, "where possible," never inventing a fake command for a
+       judgment-only finding), run that command directly as part of composing the retry pack instead
+       of asking the reviewer to re-derive it — mechanical confirmation costs zero subagent turns and
+       narrows the recheck's remaining judgment to the fix's new-risk surface only.
+     TaskUpdate the stage's task's `activeForm` to
      something like
      "implement-csv-export — attempt 2/5, retrying after test failure" so a retry loop reads as
      visible progress from outside instead of silence; status stays `in_progress` throughout.
@@ -244,7 +333,14 @@ do when one or both of them fail.
      `reworking` — the one transition the design explicitly reserves for a human, and now the *only*
      stop condition that's always present in every generated workflow regardless of what
      `exit_criteria` types it uses. Report clearly: which stage, how many attempts, what kept
-     failing, and that the frozen spec/tests are the suspected problem, not the code. TaskUpdate the
+     failing, and that the frozen spec/tests are the suspected problem, not the code. If
+     `seen_failures` shows the same normalized failure signature across attempts that produced
+     different diffs, add that as a raw signal, not a conclusion — e.g. "N of these M attempts
+     produced different diffs but the same failure signature, worth checking whether `write_scope`
+     or the environment is structurally blocking a fix" — **never** phrase it as "suspect
+     write_scope/environment, not the frozen spec/tests"; the default explanation (the frozen
+     spec/tests are wrong) stays live, this is an additional lead, not a replacement for it.
+     TaskUpdate the
      task's `activeForm` to name the stop plainly, e.g. "reworking — attempt 5/5 exhausted, needs
      human"; leave status `in_progress` (not `completed` — nothing here finished), so the checklist
      itself flags which item is the one actually blocking the run.

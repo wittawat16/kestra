@@ -15,6 +15,34 @@ frozen test doesn't cover). This is about cutting *redundant* LLM round-trips, n
 independent verification — step 3 still runs unconditionally either way, so this never reopens the
 self-cert hole the design exists to close.
 
+**All five of the following must hold before skipping the spawn — treat any ambiguity as "spawn":**
+1. the stage has `write_scope: []` and `exit_criteria.type: command`;
+2. the `exit_criteria.run` was pre-run **fresh in this same visit**, after every dependency stage's
+   commit had already landed — never a carried-over exit code from an earlier pack, a prior fixing
+   attempt, or a resume (the pack-staleness rule in step 2 applies here too);
+3. it exited `0`;
+4. the brief names no check beyond that command;
+5. the command's `exit 0` is **recomputed live from the current working tree** — a test run, a
+   lint, a build. Never skip when the command instead gates on a file *this stage's own brief*
+   instructs it to produce or update (a verdict-artifact grep, or any check of a stage-authored
+   file) — that kind of `exit 0` can be evidence computed against an older commit (a leftover CLEAR
+   from a prior pass, an earlier fixing round, or a resume), which the orchestrator cannot tell
+   apart from a fresh pass without spawning something to actually look.
+
+**Extending this to `verify` specifically, when its brief is a real e2e/integration command:** the
+stage still exists and its `exit_criteria` still runs either way — this drops only the redundant
+spawn, so it is not the forbidden "merge verify into review" anti-pattern (that trims the *stage*
+away; this trims a spawn a stage doesn't need). Beyond the five guards above, `verify` needs one
+more: the claim that the e2e command actually exercises every AC in the spec's Coverage Map must
+already be independently confirmed by an earlier stage (`test-review`, or a static AC-coverage
+cross-check baked into `generate-tests`'s own `exit_criteria` mapping AC ids to test names) — never
+trusted on the Coverage Map's own prose alone, which is a design-time claim nothing at runtime has
+verified against actual test coverage. And the spec's Reality Constraints must show no external
+dependencies, doubles, or paths-that-must-agree, with trivial Runtime Invariants — the same
+conditions that make a spec `mode: lite`-eligible in the first place, checked here per-stage. Those
+are exactly the gaps a passing e2e exit code cannot rule out on its own: it proves the suite's own
+assertions pass, not that the suite's assertions are complete.
+
 ## The terminal `done` stage is a case of the above
 
 Even though its `write_scope` isn't empty. Writing `completion-summary.md` needs synthesis (what
@@ -29,12 +57,15 @@ don't spawn an agent to rediscover context you already hold.
 A fresh subagent spawned for `generate-tests`, `implement-*`, or `verify` has no memory of whether
 a prior stage already ran `npm install`/`pip install`/etc. in this same repo, so left to its own
 judgment it may re-run the install defensively "just in case" — a real wall-clock cost (real
-network/disk time, not token cost) paid again for nothing when the lockfile hasn't changed. Tell
-each such subagent, as part of its brief or a standing note: check whether the dependency
-directory already exists and matches the current lockfile (e.g. `node_modules/` present and newer
-than `package-lock.json`) before installing, and skip the install if so. This is purely about not
-repeating unchanged setup work — it must still install for real the first time, and again any time
-the lockfile actually changed.
+network/disk time, not token cost) paid again for nothing when the lockfile hasn't changed. Don't
+hand this over as a judgment call for the subagent to re-derive with its own stat/compare commands
+— the orchestrator already knows the answer, because the pack's mandatory pre-run of the stage's
+own `exit_criteria.run` (step 2) just executed under whatever dependency state is currently on disk,
+and either succeeded or failed for a reason that has nothing to do with dependencies. State the
+conclusion directly in the pack as a fact: "dependencies are installed and current as of this
+pre-run — do not install unless you are the one changing the lockfile." Only drop that line (and let
+the subagent decide for itself) on the one stage that might actually change the lockfile in this
+run; every other stage gets the fact, not the judgment call.
 
 ## Combining fix attempts across failing siblings
 

@@ -126,23 +126,43 @@ Ambiguity resolves toward **full** — the cost of a wrong `lite` is a missed de
 wrong `full` is a slower run. State which condition (or the absence of all of them) decided it when
 you show the workflow to the user, so the choice is auditable rather than a mood.
 
-**One more factor, read separately from the table above: is the root cause established, or still to
-be found?** Every row above describes the *shape of the risk* — components, doubles, invariants,
-devops flags — and none of them asks how much of the problem the spec already solved before arriving
-here. A spec that arrives with a reproduced failure, the responsible `file:line`, and a fix direction
-already spelled out is a fundamentally different task from one with an open design space, even when
-the two have identical risk shapes by the table's own terms. The stages that pay for themselves on
-the second kind are the discovery stages (`spec-review` finding a wrong assumption, `test-review`
-catching a double that drifted); on the first kind, those same stages mostly re-derive a conclusion
-someone already reached — measured directly: a `mode: full` run on a fully-diagnosed 300-line fix
-spent 37.5% of all subagent tokens on four rounds of `spec-review` alone, three of which were the
-spec catching up to facts the originating issue already stated. This factor does **not** flip a
-`full` verdict to `lite` on its own — the risk shape still governs what must be checked, and a
-correctly-diagnosed bug can still need doubles or trip an invariant. But when the table above is
-otherwise borderline, treat an already-established root cause as a reason to prefer `lite`, and say
-so explicitly in the same audit line as the table's own verdict — "root cause was pre-established;
-risk shape was borderline; chose lite" is exactly the kind of reasoning this line exists to make
-visible instead of silent.
+**One more factor: is the root cause established, or still to be found?** Every row above describes
+the *shape of the risk* — components, doubles, invariants — and none of them asks how much of the
+problem the spec already solved before arriving here. A spec that arrives with a reproduced failure,
+the responsible `file:line`, and a fix direction already spelled out is a fundamentally different
+task from one with an open design space, even when the two have identical risk shapes by the table's
+own terms. The stages that pay for themselves on the second kind are the discovery stages
+(`spec-review` finding a wrong assumption, `test-review` catching a double that drifted); on the
+first kind, those same stages mostly re-derive a conclusion someone already reached — measured
+directly: a `mode: full` run on a fully-diagnosed 300-line fix spent 37.5% of all subagent tokens on
+four rounds of `spec-review` alone, three of which were the spec catching up to facts the
+originating issue already stated.
+
+This is a **guarded row-override**, not a tiebreaker to consult only when the table already looks
+close — the table triggers `full` on **any** row holding, so a factor that only acts "when otherwise
+borderline" can in practice never fire and was dead weight as written. The override applies only
+under all three of: (a) a pasted, **executed** repro command with real output — not a prose
+assertion of the bug; (b) the responsible `file:line`; (c) a stated fix direction — the same bar
+`kestra-spec` step 6 item 5 already holds a spec to ("execution-verified", not self-consistency-only).
+For a foreign spec that never went through `kestra-spec`, fold "is the root cause already established
+and reproduced?" into the single user question step 4 already asks — it costs no extra round-trip.
+
+**Which rows the override can touch, and which it never can:** "2+ independent components", `needs
+devops`, and "the user asked for full" are **never** overridden — none of them are about *discovery*
+risk in the first place, so a known root cause says nothing about whether they still hold. "Runtime
+Invariants is non-trivial" **is** safe to override as written — the invariant guards this factor
+would otherwise force a dedicated `spec-review` round-trip for are already preserved regardless,
+via the lite-mode `generate-tests`-brief fold (see the lite table above), so overriding this row
+loses no coverage. "The tests will contain test doubles" needs one more guard before it's safe to
+override: the spec's Reality Constraints must **affirmatively state** the fix needs no test double
+(real fixtures suffice) — re-verified the same static way the test-review fold-in above already
+verifies its own premise, not assumed from the root-cause finding alone. A confirmed root cause says
+nothing about whether the *fix* touches an external dependency; only the Reality Constraints section
+can say that. Without that fourth guard, drop test doubles from the overridable set entirely.
+
+Record which condition fired — root-cause override, or the base table's own verdict — in the same
+audit line either way: "root cause was pre-established; overriding the doubles/invariants row; chose
+lite" is exactly the kind of reasoning this rule exists to make visible instead of silent.
 
 ### What lite actually is
 
@@ -268,25 +288,37 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      discover it from a confusing halt. Its `on_fail` is `reworking`, not `fixing`: if the tests no longer
      pass their own checks at the moment of freezing, something is wrong upstream and quietly
      patching them here would bypass whatever review already approved them.
-   - **Optionally split `generate-tests` itself into a `design-tests` stage (scenario list) and a
-     `generate-tests` stage (test code)** when the spec has enough ACs/BRs/edge cases that
-     scenario-coverage gaps are a real risk on their own, independent of the code that will
-     eventually express them — same reasoning as the writing/freezing split above, one level
-     earlier. `design-tests` writes nothing but a table (AC/BR/edge-case → scenario title →
-     Given/When/Then), `depends_on` the same stage `generate-tests` would have, `write_scope`d to
-     that table artifact only, `exit_criteria.type: artifact_exists`. `generate-tests` then
-     `depends_on: [design-tests]` and translates the approved table into real test code 1:1 —
-     its own judgment burden shrinks to "does this code match the plan," not "did I think of
-     everything," so a coverage gap is a one-row table edit instead of a rewritten test file. Skip
-     this split on a small/simple spec — it's overhead when there's nothing near enough to a
-     coverage gap to be worth a dedicated stage for. Two traps, both hit on a real attempt: if the
-     `generate-tests` brief already enumerates every scenario by name (BRs, edge cases, states),
-     the plan table just duplicates the brief at the cost of a full extra spawn — the split only
-     pays when the brief *can't* enumerate everything up front; and on a `needs_ui` spec,
-     `design-tests` must stay downstream of `design`, because running them as parallel siblings
-     means design.md's screen states can't appear in a plan written before design.md exists, while
-     `generate-tests` is simultaneously forbidden from inventing rows the plan lacks — a coverage
-     gap with no legal path to close it.
+   - **Default: have `generate-tests` write its own scenario table as a first artifact in the same
+     spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1 traceable), *before* writing
+     test code — not as a separate `design-tests` stage. Be honest about what a separate stage with
+     `exit_criteria.type: artifact_exists` actually buys: nobody reviews that table (nothing gates
+     on more than its existence, and `kestra-run`'s default HITL posture auto-advances through an
+     `artifact_exists` check), so a coverage gap in the table would translate 1:1 into the frozen
+     tests exactly as it would without the split — the split buys decomposition (a smaller, focused
+     spawn per stage), not assurance, and presenting it as the latter is the defect this bullet used
+     to have. The same-spawn table still gets you the traceability benefit — `test-review` and a
+     human glancing at the diff can recognize a missing scenario as a missing table row — at zero
+     extra spawn cost, and `on_fail.target: generate-tests` can legally edit both the table and the
+     tests together since they're the same stage's `write_scope`.
+   - **Only split into a real, separate `design-tests` stage in two cases**, both narrow: (1) the
+     user explicitly asks to approve the scenario list before any test code exists — then give it
+     `exit_criteria.type: human_approval` on the table, never `artifact_exists`, so the split
+     actually buys the assurance its name implies rather than recreating the same
+     assurance-without-a-mechanism gap one level up; or (2) the spec is genuinely too large for one
+     spawn to write the full scenario table plus all test code — context-size decomposition, the one
+     benefit user opt-in alone can't reach, since the user won't know to ask for it. Flag this case
+     explicitly in the mode/stage audit line ("spec too large for one spawn to write table plus all
+     test code — splitting for context size, not for coverage assurance") rather than silently
+     defaulting to it. In either case: `design-tests` writes nothing but the table,
+     `write_scope`d to that artifact only, `depends_on` the same stage `generate-tests` would have;
+     `generate-tests` then `depends_on: [design-tests]` and translates the approved table into real
+     test code 1:1 — its own judgment burden shrinks to "does this code match the plan," not "did I
+     think of everything." Two traps either way: if the `generate-tests` brief could already
+     enumerate every scenario by name up front (BRs, edge cases, states), a separate table just
+     duplicates the brief at the cost of a full extra spawn; and on a `needs_ui` spec, `design-tests`
+     must stay downstream of `design`, because design.md's screen states can't appear in a plan
+     written before design.md exists, while `generate-tests` is simultaneously forbidden from
+     inventing rows the plan lacks — a coverage gap with no legal path to close it.
    - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
      The obvious version of this stage checks that the spec file exists, is non-empty, and contains
      an acceptance-criteria heading. That passes for any spec-shaped document, including one that's
@@ -309,7 +341,31 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      that skill arrives having already cleared it and this stage costs one cheap pass instead of a
      bounce; keep the two lists in sync if you change either. When the spec lacked these sections
      and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
-     rather than assuming a human already blessed it. Give it the same `on_fail` shape as `review`
+     rather than assuming a human already blessed it.
+
+     **Chain a mechanical pre-check ahead of the verdict grep.** Emit
+     `scripts/validate_spec.py` (ships with `kestra-build`) into the run folder alongside
+     `workflow.yaml`/`state.json` — same convention as `harness/` and `evidence/` — so the frozen
+     `exit_criteria` field carries no dependency on the `kestra-build` skill being installed on
+     whatever machine later executes the workflow. Set `exit_criteria.run` to
+     `python3 <run-folder>/validate_spec.py <source_spec> <repo-root> && grep -q '^VERDICT: CLEAR$' spec-verdict.md`.
+     The script only FAILs (non-zero exit) on facts that are both format-independent and fixable
+     within spec-review's own `write_scope` (the spec file itself) — a Files-to-Touch row marked
+     `edit`/`exists` whose path is absent; everything else (missing sections, empty columns, an
+     unparseable table) prints as `WARN` and never fails, so a foreign-format spec or `kestra-build`'s
+     own inferred-sections path still passes the mechanical layer. Because `kestra-run`'s context
+     pack already runs `exit_criteria.run` before every spawn (see its step 2), a `FAIL` line lands
+     in the reviewer's hands before it burns a single turn discovering the same thing itself. State
+     the delineation explicitly in the brief — **do not** reuse `test-review`'s "the mechanical checks
+     already ran, don't re-derive them" sentence verbatim, because the two stages' mechanical and
+     judgment layers don't split the same way: `test-review`'s script and its subagent check disjoint
+     things, while `validate_spec.py` and this stage's subagent read the *same* columns at different
+     depths. Say instead: "the mechanical layer verified presence/existence only — the semantic
+     content of every column is still yours to judge: no on-violation resolving to log-and-continue,
+     no contradiction between invariants/edge-cases/ACs, every AC testable, every checkable claim
+     actually run." A reviewer told the checks "already ran" in the borrowed phrasing can rationally
+     skip that semantic read, which is exactly the false-CLEAR-over-a-real-defect failure this whole
+     stage exists to prevent. Give it the same `on_fail` shape as `review`
      too: `action: fixing`, `max_attempts: 2`, `escalate_at: 2`, `write_scope` covering `source_spec`
      itself (there's no separate stage to `target` the way `review` targets an `implement-*` stage),
      falling through to `reworking` only once that's exhausted or the same diff repeats — see
@@ -346,7 +402,18 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      a `test-review` stage at all — fold its check into `generate-tests`'s own `exit_criteria` instead
      (a static grep/check for real-fixture patterns — `execFile`, a real temp-repo helper — vs. mock-library
      imports) rather than paying for a full separate subagent pass to confirm what the brief already
-     predicted.
+     predicted. **This fold-in has one condition, not a blanket green light:** a real measured run
+     with no doubles at all still had its first `test-review` pass catch a genuine test-vs-test
+     contradiction (two frozen test files disagreeing about the same behavior) — a defect that is
+     double-independent and not something a mock-import grep can ever detect, since nothing about it
+     involves a double. So only take the fold when `generate-tests`'s own brief also gains an
+     explicit cross-file consistency self-check: "before finishing, cross-check assumptions shared
+     across test files — formats, fixtures, orderings — and name each pair you checked." If you omit
+     that instruction, say so plainly in the mode/stage audit line shown to the user ("test-review
+     folded in; cross-test-consistency is no longer independently reviewed") rather than letting the
+     loss pass silently — a self-check by the same stage that wrote the contradiction is weaker than
+     an independent reader catching it, and the user should get to see that trade-off, not just its
+     absence.
    - **`verify` and `review` are siblings, not a chain — both `depends_on` the implement stage
      directly, not each other.** Confirmed by direct benchmarking: chaining them
      (`review: depends_on: [verify]`) costs a whole extra sequential subagent round-trip for no
@@ -401,7 +468,15 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
        worth a line in the brief: stating the quantity costs the reviewer one sentence, while a
        mismeasured finding costs a whole extra stage cycle to resolve. So: a numeric finding names
        the quantity, the inputs, and the exact command or script, with the output pasted. A numeric
-       finding without them isn't a finding yet.
+       finding without them isn't a finding yet. **Widen this to any blocking finding that admits a
+       runnable check, not just numeric ones** — where possible, a blocking row carries a command
+       whose exit code flips once the finding is addressed. Keep it to "where possible": a
+       judgment-only finding (missing error handling, an unclear naming choice) has no such command,
+       and forcing one invites a reviewer to invent a fake one just to comply with the format. The
+       payoff shows up on a `fixing` retry: `kestra-run`'s scope-capped recheck (see its step 6) can
+       run that command directly instead of asking the reviewer to re-derive whether the finding was
+       addressed, which is exactly the "mechanical confirmation costs zero subagent turns" saving
+       that recheck cap exists to realize.
      - **When there are 2+ sibling `implement-*` stages**, `review` (and sometimes `verify`) needs
        splitting one-per-component so `on_fail.target` has an unambiguous single stage to route a
        fix to — see the "Splitting `review`" section of
@@ -430,11 +505,14 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      kestra-run's own "do the stage's work if the brief describes any" rule for zero benefit — this
      is the canonical case that rule's efficiency note (see `kestra-run`'s
      `references/efficiency-notes.md`) exists to let the orchestrator skip.
-   - **If the spec sets (or implies) a devops-relevant flag, add a `deploy-readiness` stage** —
-     see [`references/full-mode-stages.md`](references/full-mode-stages.md) for what it checks and
-     why. This appends to **either** mode: on a `mode: lite` spec it's the one extra stage added
-     before `done` (the lite table above already reflects this); it's never itself a reason to
-     choose `full`.
+   - **If the spec's `needs_devops` flag is true, add the deploy checklist** — see
+     [`references/full-mode-stages.md`](references/full-mode-stages.md)'s `deploy-readiness` section
+     for the exact trigger wording, what the checklist checks, and the default: fold it into
+     `review`'s own brief and verdict artifact (with mechanically-enforced freshness) rather than a
+     separate stage, falling back to a standalone `deploy-readiness` stage only when that enforcement
+     can't be wired in or the user wants a distinct milestone. Either shape appends to **either**
+     mode: on a `mode: lite` spec it's the one addition before `done` (the lite table above already
+     reflects this); it's never itself a reason to choose `full`.
    - **End with a mechanical `done` stage**, not `waiting_approval` — `write_scope` scoped to a
      single summary file, `exit_criteria.type: artifact_exists` on a generated completion summary.
      By the time execution reaches it, every judgment-bearing check already ran and already had its
@@ -446,7 +524,14 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      two pre-diagnosed bugs, the cost/rigor trade-off (~803k subagent tokens / ~27min, against an
      estimated 100k–180k / 10–15min for a single ungated fix) only became visible because the user
      asked for it after the fact — without the table in the summary by default, every run's
-     mode-vs-cost trade-off stays invisible unless someone remembers to ask.
+     mode-vs-cost trade-off stays invisible unless someone remembers to ask. Add two more columns
+     when the data supports them: **attempt count** (free and accurate today — kestra-run already
+     tracks it per stage) and **spawn type** (fresh / resumed / none) — but only populate the
+     spawn-type column for a stage whose attempts all happened within one session; across a
+     pause/resume, say "N/A — multi-session resume, not tracked" for that row rather than
+     reconstructing a guess. These calibration columns are what turns the ~150k resume-vs-respawn
+     threshold and the 3/2 attempt caps from one measured run each into something with real
+     cross-run data behind it.
 4. **Before writing briefs, ask the user once whether they have a preferred skill for any stage**
    (e.g. "use `meta-dev` for implementation", "use `meta-qa` for verify") — don't guess or default
    silently. This matters because of an observed failure mode: a brief that names a skill only
@@ -477,7 +562,15 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
    "also manually exercise the API end to end" pays off when it targets a property the frozen tests
    genuinely don't cover yet, but the same instruction applied blanket-style across every stage
    multiplies token/time cost without multiplying confidence. When a stage's automated exit_criteria
-   already proves the property, say so in the brief and let it stop there.
+   already proves the property, say so in the brief and let it stop there. **For `verify` specifically,
+   write the brief as a binary check, not a blanket instruction** — see the worked example's
+   `verify-acceptance-criteria` brief in `references/workflow-schema.md`: it can't be decided at
+   generation time whether the frozen suite fully covers every AC, since the tests don't exist yet
+   when you write this brief. So the brief itself asks the spawned agent to make that determination
+   *at run time*, against the real test files: if every AC in the Coverage Map maps to a real,
+   running assertion, say so and stop — that's exit_criteria.run's exit code being the whole
+   verification, and kestra-run can skip spawning this stage on a future run of the same shape (see
+   its efficiency notes). Only the genuinely uncovered ACs, if any, get a manual runtime exercise.
    - **If the user asked for faster/cheaper runs, set `model` on `implement-*` stages only** — see
      `references/workflow-schema.md`'s `model` section for the full reasoning. In short:
      `implement-*`'s output is never trusted on its own say-so (`verify` and `review` both
@@ -699,6 +792,27 @@ matters or how to fix it well.
   when the spec's Reality Constraints say those must be pinned. Anything a command can settle
   belongs here rather than in `test-review`: it costs no subagent, and unlike a reviewer it cannot
   be reasoned out of its answer.
+
+  One more mechanical check worth adding the same way, **kept strictly to what it can actually
+  prove**: an AC-coverage presence-and-vacuity lint. Ask the `generate-tests` brief for each test
+  scenario to carry its AC/BR id (natural under the Given-When-Then-mirror instruction above), then
+  add a loop to `exit_criteria` grepping every spec AC id against the test `write_scope` for at
+  least one tagged test, plus an "at least one non-trivial assertion" check (an
+  `expect(x).toBeDefined()`-only body doesn't count) — labelled explicitly, in the brief and to
+  yourself, as **presence, not sufficiency**. It passes pre-implementation (a grep over test files,
+  not a suite run), so it clears the polarity rule above. Two overclaims to actively avoid when
+  adding this, both real traps: **(1)** it does *not* shrink the `design-tests` split's own trigger
+  surface — `design-tests` exists for scenario-*coverage-completeness* risk (did every AC/BR/edge
+  case, including GWT counter-examples, get a distinct *correct* scenario), which an id-presence grep
+  structurally cannot establish. A test tagged `AC-3` with one trivial assertion passes this new
+  check while leaving exactly the gap `design-tests` exists to catch — the lite/full and
+  `design-tests` trigger decisions stay governed by their own real trigger conditions, never by
+  whether this grep passes. **(2)** it is not "layered under `test-review`" — none of `test-review`'s
+  actual checklist rows (ordering/preconditions, response realism, type/shape drift, path parity,
+  shared logic, non-determinism) are AC-sufficiency or vacuousness checks, and `test-review` doesn't
+  even run under `mode: lite` or on a spec with no doubles — so for a large share of real workflows
+  this check has nothing "layered" under it to lean on. State both limits plainly if you mention this
+  check anywhere else in the generated workflow's audit line.
 - Putting `freeze_after: true` on `generate-tests`. This *was* the guidance and is now wrong — see
   the two-stage split in step 3. Freezing at the moment tests are written locks them before anyone
   has read them, and buys nothing, because the confirmation loop the freeze prevents needs an

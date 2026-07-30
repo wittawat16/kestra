@@ -19,10 +19,15 @@ cat <source_spec>
 #    informative answer, not a failure to hide.
 <the stage's exit_criteria.run command>; echo "exit=$?"
 
-# 2. What the previous stage actually did. <prev-sha> is the commit that stage ended with,
-#    recorded in state.json / findable via `git log --oneline`.
+# 2. What the most recent CODE-touching stage actually did — not just "the previous stage":
+#    a stage right after a no-diff stage (implement-* after freeze-tests, whose own commit is
+#    essentially a state.json update) needs the diff from further back, or this pastes a near-empty
+#    diff and omits the one that matters. <prev-sha> is that commit, recorded in state.json /
+#    findable via `git log --oneline` by skipping any stage whose diff --name-only was empty.
 git diff --name-only <prev-sha>^ <prev-sha>
 git diff -U0 <prev-sha>^ <prev-sha>
+# For implement-*, also resolve and paste the frozen suite's file list (the freeze stage's
+# write_scope, resolved to real paths) — that's what it's implementing against.
 
 # 3. Verdict artifact from the previous stage, and its verdict line only.
 ls <run-folder>/*verdict*.md
@@ -159,6 +164,25 @@ git diff HEAD -- src/ | grep -E '^[+-]' | grep -v '^[+-][+-][+-]' | sort | sha25
 Compare this hash against the stage's `seen_diffs` list in `state.json`. Same hash reappearing =
 no progress = escalate to `reworking` immediately, even if `attempt < max_attempts`.
 
+### Failure-signature hashing (for `seen_failures`, diagnostic only)
+
+Mirrors the recipe above but hashes the `exit_criteria.run` command's *failure output*, not the
+diff — this catches a case `seen_diffs` structurally can't: a too-narrow `write_scope` or a broken
+environment blocking every fix attempt identically, where each attempt still produces a genuinely
+*different*, equally futile diff (so `seen_diffs` never repeats even though nothing is converging).
+Normalize the same way — strip anything that varies for reasons unrelated to the actual failure
+(timestamps, durations, absolute paths, PIDs) before hashing:
+
+```bash
+<exit_criteria.run command> 2>&1 | grep -viE '([0-9]{2}:){2}[0-9]{2}|took [0-9.]+ ?m?s|pid [0-9]+' \
+  | sed -E 's#/[^ ]*/([a-zA-Z0-9_.-]+)#\1#g' | sha256sum | awk '{print $1}'
+```
+
+Append to the stage's `seen_failures` array in `state.json` (see `state-schema.md`). This is a
+diagnostic signal only — it never changes a transition decision on its own, and its only consumer
+is the `reworking` report's wording (see kestra-run `SKILL.md` step 6): surface the raw count as a
+lead, never as a conclusion that overrides the default "the frozen spec/tests are the suspect."
+
 ## Commit-per-stage
 
 Before the first commit in a repo that doesn't already have one, make sure build/test-runner
@@ -176,7 +200,13 @@ git commit -m "stage(<feature-id>): <stage-id> passed"
 
 `state.json` must be part of that same commit — update it (status, test_hash if this was the
 freeze stage, attempt/seen_diffs reset if this followed a `reworking`) and stage it alongside the
-code changes before committing, not as a separate commit afterward. One commit per stage, always.
+code changes before committing, not as a separate commit afterward. One commit per stage, always —
+**with one exception**: when multiple `write_scope: []` stages pass in the same batch (e.g.
+`verify`+`review`), combine them into a single commit naming every stage id
+(`stage(<feature-id>): verify-acceptance-criteria, review passed`), since a `write_scope: []`
+stage's commit contains only the `state.json` update and there's no per-stage code state a separate
+commit would preserve. Name every id individually in the message so the rollback grep below still
+resolves per stage.
 
 No `git tag` per stage — the commit itself is the rollback point (see Rollback below). Tags
 accumulate quickly across a multi-stage run without adding anything a commit SHA doesn't already

@@ -253,7 +253,10 @@ stages:
     write_scope: ["workflows/runs/csv-export/0-spec.md"]
     exit_criteria:
       type: command
-      run: "grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+      # validate_spec.py is emitted into this run folder at generation time (see SKILL.md's
+      # spec-review bullet) — it FAILs only on format-independent, spec-fixable facts (an
+      # edit/exists row whose path is absent); everything else WARNs without failing.
+      run: "python3 validate_spec.py workflows/runs/csv-export/0-spec.md . && grep -q '^VERDICT: CLEAR$' spec-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -350,8 +353,13 @@ stages:
   - id: verify-acceptance-criteria
     depends_on: [implement-csv-export]
     brief: >
-      Run the full e2e suite and confirm every acceptance criterion in the spec is actually
-      met by the implementation, not just that unit tests pass.
+      Before doing anything else, check the frozen test suite (now real, unlike at generation time)
+      against the spec's AC Coverage Map: does every AC map to an assertion that actually exists and
+      actually runs under exit_criteria.run? If yes for all of them, there is no judgment work here
+      — say so plainly and stop; running exit_criteria.run's real exit code IS the verification,
+      kestra-run can execute it directly without spawning you next time. If one or more ACs are NOT
+      covered by any frozen assertion, name exactly which ones and exercise only those at runtime by
+      hand, reporting what you observed against what the AC requires.
     write_scope: []
     exit_criteria:
       type: command
@@ -385,10 +393,17 @@ stages:
       escalate_at: 2
       target: implement-csv-export
 
-  # Conditional — only include this stage when the spec sets needs_devops: true (or otherwise
-  # implies env vars / DB migrations / feature flags / infra changes). Omit entirely otherwise.
-  # Depends on BOTH siblings, not just review — it needs the full diff to be finished-and-passed,
-  # and verify-acceptance-criteria passing is part of that, even though it ran in parallel.
+  # Conditional on the spec's needs_devops flag alone (never on scanning the spec text for
+  # deploy-related keywords — see full-mode-stages.md's deploy-readiness section). DEFAULT shape:
+  # fold this into `review` above instead of a standalone stage — review already writes
+  # review-verdict.md, so it additionally writes deploy-checklist.md and its exit_criteria becomes
+  # `grep -q '^VERDICT: CLEAR$' review-verdict.md && test -f deploy-checklist.md`, with freshness
+  # mechanically enforced (see full-mode-stages.md for both enforcement points). This standalone
+  # block is the FALLBACK shape — use it only when that freshness enforcement can't be wired into
+  # the target project/CI, or the user explicitly wants a distinct deploy milestone. When using the
+  # fallback: depends on BOTH siblings, not just review — it needs the full diff to be
+  # finished-and-passed, and verify-acceptance-criteria passing is part of that even though it ran
+  # in parallel. Omit entirely when needs_devops is false.
   - id: deploy-readiness
     depends_on: [review, verify-acceptance-criteria]
     brief: >

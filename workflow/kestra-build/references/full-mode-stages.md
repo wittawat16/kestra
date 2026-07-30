@@ -153,12 +153,37 @@ want a single `on_fail.target` default with the ambiguity called out in its brie
 
 ## `deploy-readiness`
 
-If the spec sets (or implies) a devops-relevant flag — e.g. `needs_devops: true` from an upstream
-spec, or the spec text itself mentions env vars, DB migrations, feature flags, or infra changes —
-add a `deploy-readiness` stage between `review` and the terminal stage. `write_scope: []`, brief
-asks for a pre-deploy checklist (env vars, migration order + rollback, feature flags, deploy order,
-monitoring), naming whatever devops-focused skill you have as the suggested skill. Skip this stage
-entirely when the spec has no such flag/signal — don't add it unconditionally the way `review` is
-unconditional. This stage appends to **either** mode: `needs_devops: true` is not a row in `mode:
-lite`'s precondition table (see `SKILL.md`'s lite/full table) — a lite-shaped spec that also sets
-`needs_devops: true` still gets `deploy-readiness` before `done`, on top of the lite stage list.
+**Trigger, precisely:** the spec's `needs_devops` flag alone decides when it's present — never
+overridden by keyword-scanning the spec text. Only fall back to scanning the spec text for NEW or
+CHANGED env vars, DB migrations, feature flags, or infra changes (matching `kestra-spec`'s own flag
+definition) when the spec is a foreign one with no flags table at all. "The spec text merely
+*mentions* deploy-relevant terms" is not the trigger — an existing env var referenced but untouched
+doesn't need a deploy checklist; a flag that's explicitly `false` should never be second-guessed by
+a keyword hit elsewhere in the prose.
+
+**Default: fold the checklist into `review`'s own brief and verdict artifact**, rather than a
+separate stage — `review` already reads the same final diff a deploy-readiness pass would read, and
+its value is read-and-report, not independence from `review` (the same reasoning `meta-review`
+already applies to fold `meta-security` into one pass). `review` writes both `review-verdict.md` and
+`deploy-checklist.md`; `exit_criteria.run` becomes
+`grep -q '^VERDICT: CLEAR$' review-verdict.md && test -f deploy-checklist.md`. This fold is safe
+**only** with checklist freshness mechanically enforced, not assumed:
+- Revoke, for this combined stage specifically, the "a sibling that already passed doesn't need
+  re-running" exemption `kestra-run`'s batch-fixing rule normally grants (see its step 6) — if a
+  fixing attempt lands on `review`'s `on_fail.target` triggered by a *different* failing sibling
+  (e.g. `verify`) after `review` itself already passed, the combined `review` stage re-runs too, so
+  `deploy-checklist.md` never goes stale against a diff it was never written against.
+- `done`'s `exit_criteria` additionally verifies `deploy-checklist.md` was written or committed at
+  or after the last commit touching the implement stage's `write_scope` — a stale checklist fails
+  `done` and routes back to `review` to refresh it, rather than silently shipping a checklist for an
+  earlier diff.
+
+**Keep `deploy-readiness` as its own stage instead** (between `review` and the terminal stage,
+`write_scope: []`, brief asks for the checklist, naming whatever devops-focused skill you have as a
+suggestion) whenever either enforcement point above can't be wired into the specific project/CI
+setup, or the user explicitly asks for a distinct deploy milestone separate from code review. Skip
+the stage/fold entirely when the spec has no devops flag — don't add it unconditionally the way
+`review` is unconditional. Either shape appends to **either** mode: `needs_devops: true` is not a
+row in `mode: lite`'s precondition table (see `SKILL.md`'s lite/full table) — a lite-shaped spec
+that also sets `needs_devops: true` still gets the checklist (folded or standalone) before `done`,
+on top of the lite stage list.

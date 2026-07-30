@@ -30,12 +30,26 @@ yet.
 {
   "status": "pending",       // pending | running | verifying | passed | fixing | reworking | waiting_approval | blocked
   "attempt": 0,
-  "seen_diffs": []             // semantic hashes of prior fix attempts, for no-progress detection
+  "seen_diffs": [],            // semantic hashes of prior fix attempts, for no-progress detection
+  "seen_failures": [],         // OPTIONAL, orchestrator-populated: normalized exit_criteria failure-output
+                                // hashes, diagnostic only (see kestra-run enforcement.md). Never gates a
+                                // transition — a future stage-generator must not start reading this field
+                                // to decide fixing/reworking; it exists only to inform the reworking report.
+  "metrics": {}                // OPTIONAL, orchestrator-populated: { tokens, wall_ms, spawn_type } per
+                                // completed attempt, purely informational. Never read by exit_criteria,
+                                // write_scope diffing, or the test-hash computation — populated by the
+                                // orchestrator itself from data it already holds at commit time (Agent-tool
+                                // usage numbers + timestamps), never by an extra subagent or exit_criteria
+                                // check. A missing/failed metric means an absent row in the done-stage cost
+                                // table, never a stage failure.
 }
 ```
 
-kestra-build initializes every stage to `status: "pending", attempt: 0, seen_diffs: []`, regardless of where
-it sits in the dependency graph — the orchestrator is what advances stages, not the generator.
+kestra-build initializes every stage to `status: "pending", attempt: 0, seen_diffs: []` — `seen_failures`
+and `metrics` are populated later by the orchestrator, not by kestra-build, so the generator may omit
+them entirely at generation time (an orchestrator that supports them adds the keys itself on first use).
+This holds regardless of where the stage sits in the dependency graph — the orchestrator is what advances
+stages, not the generator.
 
 ---
 
