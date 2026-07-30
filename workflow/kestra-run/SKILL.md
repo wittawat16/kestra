@@ -93,17 +93,25 @@ do when one or both of them fail.
    behind it. Only skip this step for a stage whose brief has no real work to describe — a pure
    terminal gate that exists solely to collect sign-off on everything already done.
    To do the work: decide first whether a subagent is even warranted (see the efficiency note
-   below) — if it is, spawn one (Agent tool) with a prompt built from: the stage's `brief`, the path
-   to `source_spec` (let the subagent read the full spec itself — don't paraphrase it down, that's
-   how implementation stages start hallucinating requirements they can't see), the stage's
-   `write_scope` (so it knows its own boundary before enforcement even checks it), and **the context
-   pack below**. If the stage sets `model`, pass it as the spawn's model override; otherwise inherit
-   the orchestrator's own model — don't default a stage to a faster tier on your own initiative, the
-   workflow file is the only place that decision is allowed to live (see kestra-build's `model`
-   guidance for why it's scoped to `implement-*`). Same for `effort`: if the stage sets it, pass it
-   as the spawn's effort override; otherwise inherit the orchestrator's own effort level — `effort`
-   and `model` are independent fields, check and pass each on its own, one can be set without the
-   other. If `brief` names a skill as a suggestion, leave that in
+   below) — if it is, spawn one (Agent tool) with a prompt built from: the stage's `brief`, the full
+   text of `source_spec` pasted verbatim under its path header — never summarized (paraphrase is the
+   failure mode this guards against; a verbatim paste is not a paraphrase, and letting the subagent
+   go re-read the file itself just re-pays the cold-start cost the context pack exists to avoid). A
+   spec too large to paste whole is the one exception — fall back to path-only and say so explicitly
+   in the pack, so the omission reads as "not pasted, go read it" rather than "nothing to see here."
+   Also pass: the stage's `write_scope` (so it knows its own boundary before enforcement even checks
+   it), and **the context pack below**. If the stage sets `model`, pass it as the spawn's model
+   override; otherwise inherit the orchestrator's own model — don't default a stage to a faster tier
+   on your own initiative, the workflow file is the only place that decision is allowed to live (see
+   kestra-build's `model` guidance for why it's scoped to `implement-*`). Same for `effort`: if the
+   stage sets it, pass it as the spawn's effort override; otherwise inherit the orchestrator's own
+   effort level — `effort` and `model` are independent fields, check and pass each on its own, one
+   can be set without the other. **Exception for a target-based fix attempt** (a `write_scope: []`
+   review/verify stage whose `on_fail.target` names an `implement-*` stage — see step 6): that spawn
+   does implement-shaped work inside the target's `write_scope`, so pass the *target* stage's
+   `model`/`effort`, not the failing reviewer's (which is usually unset) — otherwise a workflow that
+   declares `implement-*` at `effort: low` silently loses that setting on every fix attempt routed
+   through a reviewer. If `brief` names a skill as a suggestion, leave that in
    verbatim — the subagent decides whether to use it. Tell the subagent to report back tersely:
    command + exit code + one-line verdict per check it ran, not a narrative essay — you re-verify
    every claim yourself in step 3 regardless, so a long self-justifying writeup has no enforcement
@@ -119,6 +127,7 @@ do when one or both of them fail.
      rediscovering facts the orchestrator is already holding. Those early turns are the expensive
      ones, because every later turn resends their output. So paste the following into the prompt
      rather than letting the subagent go find it:
+     - `source_spec`'s full text, pasted verbatim (see above) — not just its path
      - the stage's `write_scope` globs (above)
      - **the stage's `exit_criteria.run` command, already executed by you, with its real exit code
        and output.** Run it before spawning. This is the single highest-value field: it tells the
@@ -186,6 +195,11 @@ do when one or both of them fail.
    Mirror both moves with TaskUpdate: the stage that just passed → `completed`; every newly-ready
    stage entering `current_stage` → `in_progress`. Keep this in the same breath as the state.json
    update — a stale checklist is worse than none, since it actively tells the user the wrong thing.
+   If a subagent was spawned for this stage, append one line to `<run-folder>/run-log.md` — stage id,
+   its reported token count, wall-clock time — alongside the state.json update. This is what makes
+   the `done` stage's per-stage cost table (see kestra-build's `done`-stage guidance) real instead of
+   aspirational: nothing else in this loop tracks it, so if this line is skipped the table has
+   nothing to source from.
 
 6. **On fail:** increment `attempt` (on the failing stage's own entry in `state.json`, even when
    `on_fail.target` points elsewhere), hash the (normalized) diff and check it against `seen_diffs`.
@@ -200,15 +214,20 @@ do when one or both of them fail.
    - Still under `max_attempts`, and either this is a genuinely new diff, **or** it's a repeat but
      `attempt < escalate_at` (the same diff came back, but not yet often enough to give up on it) →
      stay in `fixing`, record the diff hash, loop back to step 2 with the failure output fed into
-     the next attempt's brief. `escalate_at` exists precisely to give a repeated diff a short grace
-     window — a couple more retries sometimes do break a stall that a repeat alone doesn't prove is
-     unrecoverable — before the harder stop below kicks in. When
+     the next attempt's brief. `escalate_at` exists to give a repeated diff a grace window — but note
+     that `kestra-build` generates `escalate_at: 2` on every stage it emits, and a diff can only
+     repeat starting at attempt 2 (attempt 1 has nothing to compare against yet) — so as generated
+     today, a repeat escalates to `reworking` immediately, with no grace retries in between. The
+     grace window this paragraph describes only actually exists when a workflow sets `escalate_at` to
+     3 or higher; don't assume a generated workflow has one just because this field exists. When
      `on_fail.target` is set (a review/verify stage with `write_scope: []`), the next attempt's
      brief goes to a fix on `target`'s write_scope — hand the subagent the failing stage's own
      output (e.g. `review-verdict.md`'s `CHANGES_REQUESTED` findings) as the thing to address, let
-     it edit within `target`'s `write_scope`, then re-run the failing stage's own work (step 2) and
-     `exit_criteria` (step 3) again — the loop re-checks the *same* stage's exit_criteria, it
-     doesn't just trust the fix. TaskUpdate the stage's task's `activeForm` to something like
+     it edit within `target`'s `write_scope` **at the target stage's own `model`/`effort`** (see
+     step 2's exception above — not the failing reviewer's), then re-run the failing stage's own work
+     (step 2) and `exit_criteria` (step 3) again — the loop re-checks the *same* stage's
+     exit_criteria, it doesn't just trust the fix. TaskUpdate the stage's task's `activeForm` to
+     something like
      "implement-csv-export — attempt 2/5, retrying after test failure" so a retry loop reads as
      visible progress from outside instead of silence; status stays `in_progress` throughout.
      **Resume the previous attempt's subagent while its transcript is still small; respawn with a

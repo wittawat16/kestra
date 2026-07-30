@@ -2,9 +2,13 @@
 
 Read this file **only** when `mode: full` — none of it applies to a `mode: lite` workflow, since
 lite's fixed shape (`generate-tests → freeze-tests → implement → {verify, review} → done`) never
-contains `test-review`, more than one `implement-*` stage, a shared-contract stage, or
-`deploy-readiness`. If you're deriving stages for a `lite` spec, skip this file entirely and go
-straight to `SKILL.md` step 4 — opening this file costs real tokens for content you won't use.
+contains `test-review`, more than one `implement-*` stage, or a shared-contract stage. If you're
+deriving stages for a `lite` spec with no devops flag, skip this file entirely and go straight to
+`SKILL.md` step 4 — opening this file costs real tokens for content you won't use.
+
+Two exceptions, both apply regardless of mode: `deploy-readiness` below (it appends to a lite
+workflow too, on `needs_devops: true` — see its section for what changes), and the evidence-artifact
+convention just below this note.
 
 The one exception: the evidence-artifact convention below (writing an expensive computation's
 result to `<run-folder>/evidence/`) can matter for a `lite` workflow too, if `review` or `verify`
@@ -52,6 +56,14 @@ to be worth asking about every time doubles exist, but they are a starting point
 closed set — a data pipeline's characteristic failure is schema drift, a web app's is authorization
 and N+1 queries, and neither is in the table. Tell the brief to add rows the spec and codebase
 imply, and to say plainly when a row was added.
+
+Give the brief one more sentence for the case where this stage runs again after a `fixing` attempt
+on `generate-tests`: "On a re-review after a fixing attempt (the context pack will include the fix
+diff and your own prior findings), verify the findings are addressed and review the changed lines
+and their interactions with the rest of the suite; do not re-derive relations between unchanged
+files already cleared, which the orchestrator's `write_scope` enforcement guarantees are unchanged."
+This caps the recheck's cost without weakening it — a full-file re-review after a one-line fix has
+no more to find than a scoped one, since nothing outside the diff could have changed.
 
 ## Build the throwaway harness once per run, not once per stage — as a contract, never a bundled script
 
@@ -147,5 +159,6 @@ add a `deploy-readiness` stage between `review` and the terminal stage. `write_s
 asks for a pre-deploy checklist (env vars, migration order + rollback, feature flags, deploy order,
 monitoring), naming whatever devops-focused skill you have as the suggested skill. Skip this stage
 entirely when the spec has no such flag/signal — don't add it unconditionally the way `review` is
-unconditional. `mode: lite` requires `needs_devops: false` as one of its own preconditions (see
-`SKILL.md`'s lite/full table), so this stage never applies to a lite workflow.
+unconditional. This stage appends to **either** mode: `needs_devops: true` is not a row in `mode:
+lite`'s precondition table (see `SKILL.md`'s lite/full table) — a lite-shaped spec that also sets
+`needs_devops: true` still gets `deploy-readiness` before `done`, on top of the lite stage list.

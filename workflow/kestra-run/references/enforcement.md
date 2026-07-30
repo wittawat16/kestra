@@ -10,6 +10,10 @@ The pack SKILL.md's step 2 requires is assembled from commands you already have 
 Gather it immediately before spawning, not once per stage-with-retries — a stale pack misleads.
 
 ```bash
+# 0. The full spec, verbatim — not just its path. Paste this into the prompt under a path header;
+#    fall back to path-only only if the file is too large to paste whole (say so explicitly if so).
+cat <source_spec>
+
 # 1. Starting state: run the stage's own exit_criteria.run yourself first.
 #    Capture the exit code — for a pre-implementation stage a NON-zero code is the expected,
 #    informative answer, not a failure to hide.

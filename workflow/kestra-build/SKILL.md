@@ -114,9 +114,13 @@ So the mode is a function of the spec, decided mechanically before step 3, not a
 |---|---|---|
 | 2+ independent components | the spec's Files-to-Touch spanning genuinely separate write scopes | sibling `implement-*`/`review-*` stages only exist to be split; lite has nothing to parallelize |
 | The tests will contain test doubles | the spec's **Reality Constraints** listing any external dependency, or any pair of paths that must agree | this is the exact and only trigger for `test-review` — no doubles, no defect for it to find |
-| `needs_devops: true` | the flags table | `deploy-readiness` has real content to check |
 | Runtime Invariants is non-trivial | the spec's **Runtime Invariants** having rows whose violation is silent in production | a dedicated `spec-review` earns its round-trip when there's something to contradict |
 | The user asked for full | their words | their call, not yours |
+
+`needs_devops: true` is **not** a row in this table — it doesn't decide lite vs. full, because
+`deploy-readiness` is a stage that appends to either shape (see below), not one that requires the
+full machine around it. A devops-flagged spec that trips none of the rows above still gets the lite
+stage list, plus `deploy-readiness` before `done`.
 
 Ambiguity resolves toward **full** — the cost of a wrong `lite` is a missed defect, the cost of a
 wrong `full` is a slower run. State which condition (or the absence of all of them) decided it when
@@ -160,7 +164,7 @@ generate-tests → freeze-tests (freeze point) → implement → {verify, review
 | `implement-*` | kept, exactly one, `effort: low` | the lite condition table already established there's one component and nothing heavy to reason about — set `effort: low` automatically here (never `model`, that stays opt-in — see the `effort`/`model` sections in `references/workflow-schema.md`) |
 | `verify` | kept | costs no subagent — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
 | `review` | kept, unconditional | passing tests say nothing about injection/authn/secrets or a missing runtime guard. This is the one judgment stage lite keeps, and the reason lite is still safe to use |
-| `deploy-readiness` | **dropped** | `needs_devops: false` was a precondition of choosing lite |
+| `deploy-readiness` | **appended when `needs_devops: true`** | not a lite/full distinction — see below |
 
 Net effect on a typical single-component feature: three subagent-bearing stages instead of six or
 seven, with the freeze and the security/correctness review both intact.
@@ -222,11 +226,14 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
    applies in full to each stage lite keeps (`generate-tests`'s exit_criteria polarity,
    `freeze-tests`'s write_scope, `review`'s verdict artifact and `on_fail.target`), so read it for
    those, not for whether to add more stages. **Do not open
-   [`references/full-mode-stages.md`](references/full-mode-stages.md) for a lite spec** — every
-   stage it covers (`test-review`, sibling `implement-*`, shared-contract, `deploy-readiness`)
-   is structurally impossible under the lite shape, so reading it costs real tokens for nothing a
-   lite workflow can use. Measured directly: skipping it is the difference between `kestra-build`
-   staying flat-cost on a trivial spec and paying a fixed tax for guidance that never applied. The
+   [`references/full-mode-stages.md`](references/full-mode-stages.md) for a lite spec with
+   `needs_devops: false`** — every stage it covers other than `deploy-readiness`
+   (`test-review`, sibling `implement-*`, shared-contract) is structurally impossible under the lite
+   shape, so reading it costs real tokens for nothing a lite workflow can use. Measured directly:
+   skipping it is the difference between `kestra-build` staying flat-cost on a trivial spec and
+   paying a fixed tax for guidance that never applied. If the spec sets `needs_devops: true`, open
+   only that file's `deploy-readiness` section (below), which appends to lite too — nothing else in
+   the file applies. The
    rest of this step is the `mode: full` path, and it's where that file's content is actually
    needed — open it once you reach the bullets below that say so.
    A minimal TDD-honest skeleton looks like:
@@ -321,6 +328,25 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      in which case a small upstream `define-shared-contract` stage isolates just that file. The
      reference file has the full reasoning, the risk table `test-review`'s brief should use, and the
      measured evidence behind each rule — read it there rather than here.
+   - **Reality Constraints listing an external dependency triggers `test-review` by the table above
+     — but check what the *actual chosen test design* does before assuming that pass has real work
+     to do.** A spec can name an external dependency while `generate-tests` legitimately sidesteps
+     it (a real temp git repo instead of a mocked one, a real subprocess instead of a stub) — the
+     trigger condition is about what the spec's Reality Constraints *list*, not about what the tests
+     *actually contain*, so the two can diverge. Measured on a real run: a `test-review` stage
+     predicted in its own workflow-generation audit comment to be "fast/CLEAR-on-first-pass because
+     the test design uses real temp git repos, not mocks" ran twice anyway (~119k then ~105k tokens)
+     and was right both times — CLEAR with nothing to find. This is a *generation-time* decision, not
+     a run-time one: `kestra-build` makes it while writing `generate-tests`'s own brief, not after —
+     there is no run-time path where `kestra-run` drops or skips an already-generated `test-review`
+     stage; the stage list you emit is the stage list that runs (see design-principles.md and
+     `mode`'s "record of a decision" framing in `workflow-schema.md`). So: when the brief you are
+     writing for `generate-tests` mandates real fixtures (a real temp-repo helper, a real subprocess)
+     and its `exit_criteria` already enforces the absence of mock imports mechanically, don't generate
+     a `test-review` stage at all — fold its check into `generate-tests`'s own `exit_criteria` instead
+     (a static grep/check for real-fixture patterns — `execFile`, a real temp-repo helper — vs. mock-library
+     imports) rather than paying for a full separate subagent pass to confirm what the brief already
+     predicted.
    - **`verify` and `review` are siblings, not a chain — both `depends_on` the implement stage
      directly, not each other.** Confirmed by direct benchmarking: chaining them
      (`review: depends_on: [verify]`) costs a whole extra sequential subagent round-trip for no
@@ -395,16 +421,32 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      of `verify`/`review` — all three read the same finished diff and none of them writes, so
      chaining them only costs wall-clock. Name the gate as the repo documents it rather than
      inventing a name, and if the documented command doesn't run standalone, say so instead of
-     generating a stage that can never pass.
+     generating a stage that can never pass. **Give this stage no work-describing brief** — or a
+     one-line brief stating only "kestra-run runs `exit_criteria.run` directly; spawn nothing" —
+     rather than judgment-sounding prose. `write_scope: []` means a subagent can change nothing here,
+     the exit code is identical no matter who runs it, kestra-run re-runs it unconditionally in step
+     3 regardless, and on failure the command's own output already feeds the fixing attempt's
+     context pack. A brief that reads like there's something to reason about triggers a spawn under
+     kestra-run's own "do the stage's work if the brief describes any" rule for zero benefit — this
+     is the canonical case that rule's efficiency note (see `kestra-run`'s
+     `references/efficiency-notes.md`) exists to let the orchestrator skip.
    - **If the spec sets (or implies) a devops-relevant flag, add a `deploy-readiness` stage** —
      see [`references/full-mode-stages.md`](references/full-mode-stages.md) for what it checks and
-     why. Never applies under `mode: lite`, which requires `needs_devops: false` as a precondition
-     of choosing lite in the first place.
+     why. This appends to **either** mode: on a `mode: lite` spec it's the one extra stage added
+     before `done` (the lite table above already reflects this); it's never itself a reason to
+     choose `full`.
    - **End with a mechanical `done` stage**, not `waiting_approval` — `write_scope` scoped to a
      single summary file, `exit_criteria.type: artifact_exists` on a generated completion summary.
      By the time execution reaches it, every judgment-bearing check already ran and already had its
      own escalation path; there's nothing left for a human to approve that hasn't already been
-     mechanically or automatically checked.
+     mechanically or automatically checked. **Brief the `done` stage to include a per-stage
+     token/wall-time table in the completion summary**, sourced from whatever the orchestrator
+     already tracked while running the workflow (it does not need to re-derive this — kestra-run's
+     own progress tracking already has it). Measured directly: on an 8-stage `mode: full` run fixing
+     two pre-diagnosed bugs, the cost/rigor trade-off (~803k subagent tokens / ~27min, against an
+     estimated 100k–180k / 10–15min for a single ungated fix) only became visible because the user
+     asked for it after the fact — without the table in the summary by default, every run's
+     mode-vs-cost trade-off stays invisible unless someone remembers to ask.
 4. **Before writing briefs, ask the user once whether they have a preferred skill for any stage**
    (e.g. "use `meta-dev` for implementation", "use `meta-qa` for verify") — don't guess or default
    silently. This matters because of an observed failure mode: a brief that names a skill only
@@ -475,6 +517,14 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      from assertions. If the spec's ACs are plain testable prose instead, write
      ordinary unit/integration tests as usual; don't force Given-When-Then onto a spec that doesn't
      use it.
+   - **Carry what step 7's dry-run already learned into `generate-tests`'s brief, instead of letting
+     it evaporate.** Verifying the exact `exit_criteria.run` command standalone (the anti-pattern
+     list below requires this) and identifying the runner-plumbing files a test-runner needs to even
+     collect the suite (a `conftest.py`, `pytest.ini`, a `jest.config`, a `pythonpath` entry — see the
+     `write_scope`-too-narrow anti-pattern) are both things `kestra-build` already does at generation
+     time. Put the verified command and the plumbing-file list into the `generate-tests` brief as a
+     sentence, so the spawned agent starts already knowing what a passing collection looks like
+     instead of re-discovering the project's runner setup from scratch.
    - **An `implement-*` brief has to ask for the spec's runtime invariants as actual guards, not
      just for green tests.** This is the one instruction in a brief that can't be replaced by a
      mechanical check, and the reason is structural rather than incidental. The frozen tests were

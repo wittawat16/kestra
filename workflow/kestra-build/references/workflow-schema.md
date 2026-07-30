@@ -78,8 +78,8 @@ it's safe is already computed for another reason: `mode: lite`.
   effort level, so a low-effort implementation that gets something wrong just fails and loops
   through `fixing` rather than silently passing.
 - **`implement-*` under `mode: full` keeps `effort` unset (`"default"`).** `mode: full`'s own
-  trigger conditions (test doubles, non-trivial invariants, 2+ components, `needs_devops`) describe
-  *other* stages' complexity, not `implement-*`'s own — a full-mode workflow can still have a
+  trigger conditions (test doubles, non-trivial invariants, 2+ components) describe *other* stages'
+  complexity, not `implement-*`'s own — a full-mode workflow can still have a
   trivially simple `implement-*` (single file, e.g. because the complexity lived entirely in an
   external dependency `test-review` exists to check). `mode: full` is not evidence either way about
   `implement-*` specifically, so don't extend the lite-only default to it.
@@ -175,7 +175,11 @@ on_fail:
   escalate_at: 2              # required when action: fixing — a repeated diff (no progress) gets
                                # a grace window of retries below this attempt count; once attempt
                                # >= escalate_at, a repeat stops straight to reworking instead of
-                               # retrying again, even if max_attempts hasn't been reached yet
+                               # retrying again, even if max_attempts hasn't been reached yet.
+                               # NOTE: a diff can only repeat starting at attempt 2 (attempt 1 has
+                               # nothing prior to compare against), so at the conventional value of
+                               # 2 there is no actual grace window — a repeat escalates immediately.
+                               # Set 3+ if you want a real grace window; 2 is "no tolerance."
   target: implement-x        # required when action: fixing AND this stage's own write_scope is []
                                # (a review/verify-only stage) — names the upstream stage whose
                                # write_scope the fix attempt is allowed to touch. Omit when the
@@ -241,9 +245,11 @@ stages:
       either filled in or explicitly marked not-applicable with a reason, in particular what each
       external dependency does NOT guarantee; and none of these contradict each other or the
       acceptance criteria. Anything derived rather than stated by the spec is flagged as inferred in
-      the brief above — review the inference itself, don't assume a human already approved it.
-      Write the verdict to spec-verdict.md, first line exactly "VERDICT: CLEAR" or
-      "VERDICT: CHANGES_REQUESTED", followed by findings.
+      the brief above — review the inference itself, don't assume a human already approved it. Any
+      numeric finding must name the exact quantity measured, the inputs, and the command/script used
+      — paste its output; a numeric claim without them isn't a finding yet. Write the verdict to
+      spec-verdict.md, first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed
+      by findings.
     write_scope: ["workflows/runs/csv-export/0-spec.md"]
     exit_criteria:
       type: command
@@ -286,7 +292,11 @@ stages:
       rows this codebase's own conventions imply and say which you added. Judgment only — the
       mechanical checks already ran in generate-tests' exit_criteria; don't re-derive them. Write
       the verdict to test-verdict.md, first line exactly "VERDICT: CLEAR" or
-      "VERDICT: CHANGES_REQUESTED", followed by findings.
+      "VERDICT: CHANGES_REQUESTED", followed by findings. On a re-review after a fixing attempt
+      (the context pack will include the fix diff and your own prior findings), verify the findings
+      are addressed and review the changed lines and their interactions with the rest of the suite;
+      do not re-derive relations between unchanged files already cleared, which write_scope
+      enforcement guarantees are unchanged.
     write_scope: []
     exit_criteria:
       type: command
