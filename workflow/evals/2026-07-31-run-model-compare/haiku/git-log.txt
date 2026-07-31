@@ -1,0 +1,4 @@
+7f10ac9 stage(priority-tier): implement-tier-retry passed
+7377fa6 stage(priority-tier): freeze-tests passed
+17bd26e stage(priority-tier): generate-tests passed
+095f407 baseline: queue-cap fixture + workflow.yaml
