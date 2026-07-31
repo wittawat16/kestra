@@ -1,0 +1,296 @@
+feature: priority-tier
+source_spec: workflow/evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md
+mode: full
+
+# mode: full — two independent triggers off the lite/full table, neither overridable:
+#   1. Runtime Invariants is non-trivial: the spec's two invariants (dropped-record
+#      completeness; literal tier==='free' gating) both halt (throw synchronously) on
+#      violation — a dedicated spec-review round-trip earns its keep here.
+#   2. The tests will contain test doubles / an external dependency: the spec's Reality
+#      Constraints table lists one dependency (the module-level HANDLERS Map) with a real
+#      "does not guarantee" column (no isolation across tests in-process, no guarantee a
+#      handler won't throw a non-Error value).
+# The guarded root-cause override (SKILL.md's "is the root cause established" paragraph)
+# does not apply to either trigger: this is new feature work with no pasted, executed repro
+# command — it's a build spec, not a diagnosed bug fix — so neither row is eligible to be
+# overridden back toward lite.
+# "2+ independent components" does NOT hold (single file, src/queue.js) and the user did not
+# ask for full explicitly — those two rows are silent, only the two above fired.
+#
+# Despite mode: full, `test-review` is NOT generated as a separate stage even though Reality
+# Constraints lists an external dependency (HANDLERS). Per SKILL.md's "check what the actual
+# test design does" guidance: this project has zero third-party dependencies (CLAUDE.md: "No
+# third-party dependencies; keep it that way") and no mocking library is installed or
+# permitted, so the only test design generate-tests can legally produce already uses real
+# fixtures — the real HANDLERS registry via registerHandler() with plain functions, exactly
+# like the two existing tests. There is no double for a reviewer to check for drift against.
+# The check is folded into generate-tests's own exit_criteria (a grep asserting the absence
+# of any mock-library import/call) instead of a separate subagent pass. generate-tests's brief
+# also carries the required same-suite consistency self-check (see its brief below) — this
+# project has exactly one test file, so the specific "two frozen test files disagreeing with
+# each other" failure mode that justifies the fold-in's extra guard cannot occur across files,
+# but the same class of defect (two pieces of frozen test logic silently disagreeing about the
+# same behavior) can still occur within one file, so the self-check is kept rather than
+# dropped.
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review workflow/evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md — the
+      mechanical layer (validate_spec.py, chained ahead of you in exit_criteria) verified
+      presence/existence only: that every Files-to-Touch row marked "edit" points at a real
+      path. The semantic content of every column is still yours to judge, not something
+      already ruled on. Check: (1) both Runtime Invariants rows name a real on-violation
+      action and neither resolves to "log it and continue" — read them: the dropped-record
+      guard and the tier==='free' guard both say "halt" via a synchronous throw, confirm that
+      is genuinely what the described guard code does, not just what the words claim; (2) the
+      Reality Constraints "does not guarantee" column is filled for the one listed dependency
+      (HANDLERS) — it is, confirm it doesn't contradict any Functional Requirement or
+      Acceptance Criterion (e.g. nothing here assumes handler idempotency or isolation across
+      tests, which the table explicitly says isn't guaranteed); (3) every Acceptance Criterion
+      is testable without a follow-up question — exact inputs, exact expected result shapes;
+      (4) the Business Rules section is real (BR-1..BR-4 with example + counter-example each),
+      since needs_ba: true requires it to already exist rather than being deferred to a stage.
+      kestra-build's own generation-time survey already spot-checked several of the spec's
+      factual claims by reading the real fixture (baseline `npm test` was 2/2 passing before
+      any change; the existing 2 tests assert only `.attempts`/`.status`, not full-object
+      equality, so the additive `tier` field on step()'s result is genuinely non-breaking;
+      HANDLERS is confirmed module-level global state) — re-verify these yourself rather than
+      trusting that prior pass, the same way this stage would for a spec it had never seen
+      before. Any numeric finding you raise must name the exact quantity, the command used, and
+      paste its output — a numeric claim without them isn't a finding yet. Write the verdict to
+      workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/spec-verdict.md,
+      first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", then a findings table
+      (severity, claim, file:line) for anything you flag.
+    write_scope: ["workflow/evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md"]
+    exit_criteria:
+      type: command
+      run: "python3 workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/scripts/validate_spec.py workflow/evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md workflow/evals/2026-07-31-build-ablation-antipatterns/fixture && grep -q '^VERDICT: CLEAR$' workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/spec-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      Write tests in
+      workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js
+      (edit the existing file — this repo's convention is one test file mirroring
+      src/queue.js, do not create a new file) covering every row of the spec's AC Coverage
+      Map and every Business Rule (BR-1..BR-4): dropped: [] shape on createQueue(); explicit
+      paid-tier retry with tier echoed in the result; free-tier drop with attempts:1 and
+      error set to the thrown message, removed from pending, pushed to queue.dropped; missing
+      tier defaults to paid; unrecognized tier ('gold') defaults to paid; no-handler path is
+      unaffected by tier (status: 'skipped', pending unchanged); free-tier success goes to
+      done exactly like any tier; getMetrics(queue) returns the exact
+      { paid: {succeeded,dropped}, free: {succeeded,dropped} } shape for a queue with 2 paid
+      successes, 1 free success, 1 free drop. No implementation exists yet — these tests must
+      fail for the right reason (missing feature/wrong result), not error out; do not import
+      or rely on anything the implementation doesn't yet export. The spec's ACs/BRs are
+      written as Given-When-Then — mirror that structure in test names/comments one-to-one
+      (plain node:test `test(...)` blocks named after the Given/When/Then, no BDD framework —
+      none is installed and CLAUDE.md forbids adding third-party dependencies). Tag each new
+      test's name or a same-line comment with the BR id it covers (BR-1, BR-2, BR-3, BR-4) so
+      the mechanical check below can confirm presence. Use only real fixtures: register real
+      handler functions via the existing `registerHandler(type, fn)` — never a mocking
+      library (none exists in this project and none may be added). Pick `type` strings for
+      every new registerHandler() call that are NOT 'email' or 'boom' (the two strings the
+      existing 2 tests already use) — HANDLERS is module-level global state shared across the
+      whole test process, and a collision would silently corrupt an unrelated test. Before
+      finishing, cross-check assumptions shared across the tests you write and the 2
+      pre-existing tests in this same file — tier-string literals, handler `type` strings,
+      ordering/shape assumptions about `step()`'s result — and name each pair you checked in
+      your own notes; this project has only one test file, so the "two test files disagree"
+      failure mode can't occur across files, but the same defect (two pieces of frozen test
+      logic silently disagreeing) can still occur within one file. Do not touch
+      src/queue.js. Comment discipline: default to no comments; write one only when the WHY
+      is genuinely non-obvious; never a multi-line comment where one line does; never
+      reference this spec/feature/AC id inside a code comment (test *names* referencing BR
+      ids are fine — that's traceability, not narration). No runner-plumbing files are needed
+      — Node's built-in test runner (`node --test test/*.test.js`) requires no config file, so
+      nothing besides the test file itself belongs in this stage's write_scope. The
+      exit_criteria command below was verified standalone against a representative draft
+      before this workflow was generated (see its comment) — it link-checks import names
+      against the exports the spec commits the implementation to, without requiring the
+      implementation or any test body to run, so a red exit_criteria at this point means a
+      real defect in the test file, not "of course it's not implemented yet."
+    write_scope: ["workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js"]
+    exit_criteria:
+      type: command
+      # Verified standalone pre-generation (2026-07-31) against a representative draft test
+      # file exercising exactly this shape (real fixtures, BR-tagged tests, importing the
+      # not-yet-existing getMetrics) run from the repo root: LINK_OK / all greps passed, exit
+      # 0 — confirming this passes red/pre-implementation the way generate-tests's own
+      # polarity requires (a plain `node --check` would NOT catch a misspelled import name;
+      # an actual `import` of the test file would fail for the wrong reason — a missing
+      # export — before implementation exists; this link-only check avoids both traps by
+      # linking against a synthetic stand-in for src/queue.js that declares only the names
+      # the spec commits to).
+      run: "node --experimental-vm-modules workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/scripts/check_test_link.mjs workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js createQueue,enqueue,registerHandler,step,getMetrics && ! grep -qE 'jest\.mock|sinon|proxyquire|jest\.fn' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-1' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-2' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-3' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-4' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # The freeze is a separate, deliberate act of acceptance — see design-principles.md. It
+  # writes nothing; it owns the same test path solely so the test-hash has something to
+  # snapshot, and re-runs generate-tests's own static checks against the exact commit being
+  # locked. No plumbing files are frozen alongside the test file because none exist in this
+  # project (Node's built-in test runner needs no config) — there is no dependency-manifest
+  # risk to keep out of scope here.
+  - id: freeze-tests
+    depends_on: [generate-tests]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test suite
+      (workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js) as
+      the frozen baseline every later stage is held to.
+    write_scope: ["workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "node --experimental-vm-modules workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/scripts/check_test_link.mjs workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js createQueue,enqueue,registerHandler,step,getMetrics && ! grep -qE 'jest\.mock|sinon|proxyquire|jest\.fn' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-1' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-2' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-3' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js && grep -q 'BR-4' workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js"
+    on_fail:
+      action: reworking
+      reason: >
+        tests no longer pass their own checks at the freeze point — resolve upstream at
+        spec-review or generate-tests, don't patch here
+
+  - id: implement-queue-tier
+    depends_on: [freeze-tests]
+    brief: >
+      Implement the tier-based retry policy in
+      workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/src/queue.js against the
+      frozen tests — do not modify test/queue.test.js. Add `dropped: []` to createQueue()'s
+      return shape. In step()'s catch block, resolve tier via
+      `message.tier === 'free' ? 'free' : 'paid'` (this exact ternary — the spec's Codebase
+      Survey deliberately keeps it inline and duplicated in getMetrics() rather than
+      extracting a helper, since the codebase has no precedent for small private helpers in
+      this file and it's one line repeated exactly twice; do not refactor this into a shared
+      function). Paid path: unchanged behavior (attempts += 1, push to tail of pending),
+      additionally echo `tier: 'paid'` in the returned `{ status: 'retry', id, tier,
+      attempts }`. Free path: remove the message from pending (do not push it back),
+      attempts += 1, set `message.error` to the thrown error's `.message`, push to
+      `queue.dropped`, return `{ status: 'dropped', id, tier: 'free', attempts }`. Add the
+      new named export `getMetrics(queue)` that scans `queue.done`/`queue.dropped` at call
+      time (never a separately maintained counter) using the same tier ternary, returning
+      `{ paid: { succeeded, dropped }, free: { succeeded, dropped } }`. Also install BOTH
+      guards the spec's Runtime Invariants section calls for, exactly as specified there —
+      these are not covered by the frozen tests (which only exercise anticipated cases) and
+      nothing else in this pipeline can verify they exist except review's own reading of this
+      diff: (1) immediately before `queue.dropped.push(message)`, `if (!message.error) throw
+      new Error(...)` — halts synchronously rather than pushing an incomplete record; (2) at
+      the top of the free-tier branch, `if (message.tier !== 'free') throw new Error(...)` —
+      a defensive assertion guarding against a future refactor loosening the free-tier check.
+      Both must throw (not log-and-continue) — nothing in this codebase wraps step() calls in
+      a try/catch, so the exception is meant to propagate to whatever drives the worker loop.
+      Open Item from the spec (a handler throwing a non-Error value, e.g. `throw 'boom'`,
+      would make `err.message` undefined): default to treating this as correct behavior —
+      let Runtime Invariant #1 catch it and halt, do not add a `String(err)` fallback — this
+      is the safer-default reasoning the rest of this spec already uses throughout (paid as
+      the safe default, halt over silent proceed); only deviate if the frozen tests you're
+      implementing against actually require the fallback, and if so say so explicitly as a
+      deviation from the plan. All changes are additive only — do not rename, remove, or
+      change the type of any existing field on `step()`'s result or on a message object (the
+      2 pre-existing tests, and the new frozen ones, depend on this). Comment discipline:
+      default to no comments; one only when the WHY is genuinely non-obvious (e.g. the
+      deliberate non-extraction of the tier ternary is exactly that kind of non-obvious WHY
+      and is worth one line); never multi-line where one line does; never reference this
+      spec/task/AC id in a code comment.
+    write_scope: ["workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/src/queue.js"]
+    exit_criteria:
+      type: command
+      run: "cd workflow/evals/2026-07-31-build-ablation-antipatterns/fixture && npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # Siblings, not a chain — both depend on implement-queue-tier directly. Neither writes code
+  # (write_scope: [] on both), so kestra-run can run them concurrently: review's diff is
+  # already final the instant implement-queue-tier passes, it doesn't need verify to finish
+  # first.
+  - id: verify
+    depends_on: [implement-queue-tier]
+    brief: >
+      Before doing anything else: check the frozen test suite (now real, unlike at generation
+      time) against the spec's AC Coverage Map — does every AC map to a real, running
+      assertion in
+      workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/test/queue.test.js? If
+      yes for all 8 rows, say so plainly and stop — running exit_criteria.run's real `npm
+      test` exit code IS the verification; kestra-run can execute it directly without
+      spawning this stage again on a future run of the same shape. If one or more ACs are NOT
+      covered by any frozen assertion, name exactly which ones and exercise only those by
+      hand (e.g. a quick node -e snippet against the real module), reporting what you
+      observed against what the AC requires. This is a binary determination, not a blanket
+      "also manually test everything" instruction — the frozen suite is expected to cover all
+      8 rows given generate-tests's brief, so the common case is: confirm the mapping, stop.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "cd workflow/evals/2026-07-31-build-ablation-antipatterns/fixture && npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-queue-tier
+
+  - id: review
+    depends_on: [implement-queue-tier]
+    brief: >
+      Review the real diff to
+      workflow/evals/2026-07-31-build-ablation-antipatterns/fixture/src/queue.js since the
+      last stage commit. Passing tests only prove the spec's own acceptance criteria — this
+      stage exists to catch what they never thought to test for. Specifically confirm: (1)
+      both Runtime Invariant guards described in the spec are actually present in the diff
+      and actually halt via a synchronous throw — not a console.error/log-and-continue, not
+      omitted entirely (the frozen tests cannot fail if a guard is simply missing, since they
+      were derived from anticipated cases and these guards exist for unanticipated ones —
+      this is the one check nothing mechanical in this pipeline can perform); (2) the tier
+      ternary is not accidentally duplicated with a different expression between step() and
+      getMetrics() (the spec requires the exact same classification in both places); (3) all
+      changes are additive — no renamed/removed/retyped field on step()'s result or on
+      message objects; (4) the two new tier tests' handler `type` strings don't collide with
+      the existing 'email'/'boom'; (5) no injection/authn/secrets risk (low a priori for an
+      in-memory library with no I/O, but confirm nothing new reads process.env, the
+      filesystem, or the network, per the spec's Reality Constraints table, which says none
+      of this feature does). Whatever code-review and security-review skills you have
+      available (e.g. meta-review, meta-security, or engineering:code-review, if installed)
+      fit this stage well — try them, proceed with a direct review if none are available. Any
+      numeric finding must name the exact quantity, the command used, and paste its output.
+      Write the verdict to
+      workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/review-verdict.md,
+      first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", then a findings
+      table (severity, claim, file:line).
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-queue-tier
+
+  - id: done
+    depends_on: [verify, review]
+    brief: >
+      Every upstream stage passed. Write a one-page completion-summary.md to
+      workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/completion-summary.md:
+      what shipped (tier-based retry policy: dropped list, per-tier step() behavior,
+      getMetrics()), which commits, the verify/review verdicts, and a per-stage
+      token/wall-time/attempt-count/spawn-type table sourced from state.json's tracked
+      metrics (kestra-run already tracks this while running — do not re-derive it, and for
+      any attempt spanning a pause/resume where spawn-type wasn't tracked, write "N/A —
+      multi-session resume, not tracked" for that row rather than guessing). Note explicitly
+      that needs_ui/needs_sa/needs_devops were all false for this feature, so no
+      design/deploy-readiness stage exists in this run.
+    write_scope: ["workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-output/completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

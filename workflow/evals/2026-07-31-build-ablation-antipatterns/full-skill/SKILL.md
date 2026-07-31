@@ -191,8 +191,8 @@ seven, with the freeze and the security/correctness review both intact.
 
 **Do not invent further savings.** Merging `verify` into `review`, skipping `review` because the
 diff looks small, or dropping `freeze-tests` to save a commit are not lite — they're the full
-machine with its load-bearing parts removed. Lite is a fixed, named shape, not a license to trim
-per-spec.
+machine with its load-bearing parts removed, and each has its own entry in the anti-pattern list
+below. Lite is a fixed, named shape, not a license to trim per-spec.
 
 ## Process
 
@@ -305,10 +305,9 @@ implementation-specific instructions (what a script-only stage's brief should sa
      exact commit being frozen, which is worth doing precisely because that commit is the one every
      later stage will be held to.
 
-     **Choose the freeze stage's `write_scope` deliberately; it defines the test-hash.**
-     `generate-tests`'s own `write_scope` should include whatever runner plumbing the suite needs to
-     be collectible at all (a `conftest.py`, a `jest.config`, a `pythonpath` entry) — that's right for
-     `generate-tests` — but copying the same
+     **Choose the freeze stage's `write_scope` deliberately; it defines the test-hash.** The
+     anti-pattern list below tells you to give the test-writing stage whatever runner plumbing the
+     suite needs to be collectible at all. That's right for `generate-tests` — but copying the same
      globs onto `freeze-tests` verbatim decides something else entirely, because everything in that
      scope becomes part of the hash, and any later change to it is a hard stop rather than a retry.
      A dependency manifest is the case where this bites: it holds test configuration *and* the
@@ -644,10 +643,11 @@ implementation-specific instructions (what a script-only stage's brief should sa
      ordinary unit/integration tests as usual; don't force Given-When-Then onto a spec that doesn't
      use it.
    - **Carry what step 7's dry-run already learned into `generate-tests`'s brief, instead of letting
-     it evaporate.** Verifying the exact `exit_criteria.run` command standalone and identifying the
-     runner-plumbing files a test-runner needs to even collect the suite (a `conftest.py`,
-     `pytest.ini`, a `jest.config`, a `pythonpath` entry) are both things `kestra-build` already does
-     at generation time. Put the verified command and the plumbing-file list into the `generate-tests` brief as a
+     it evaporate.** Verifying the exact `exit_criteria.run` command standalone (the anti-pattern
+     list below requires this) and identifying the runner-plumbing files a test-runner needs to even
+     collect the suite (a `conftest.py`, `pytest.ini`, a `jest.config`, a `pythonpath` entry — see the
+     `write_scope`-too-narrow anti-pattern) are both things `kestra-build` already does at generation
+     time. Put the verified command and the plumbing-file list into the `generate-tests` brief as a
      sentence, so the spawned agent starts already knowing what a passing collection looks like
      instead of re-discovering the project's runner setup from scratch.
    - **An `implement-*` brief has to ask for the spec's runtime invariants as actual guards, not
@@ -688,8 +688,8 @@ implementation-specific instructions (what a script-only stage's brief should sa
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
 7. **Dry-run it before showing it to the user.** Run
    `python3 <skill-dir>/scripts/validate_workflow.py <output-dir>` — a dependency-free, zero-LLM
-   structural check (no third-party packages, works with a plain `python3`) that catches structural
-   mistakes mechanically: a post-freeze `write_scope`
+   structural check (no third-party packages, works with a plain `python3`) that catches exactly
+   the mistakes this file's own anti-pattern list warns about: a post-freeze `write_scope`
    overlapping the frozen test paths (pre-freeze stages are correctly exempt — they own those paths
    on purpose), a missing `on_fail.target` on a `write_scope: []` fixing stage, a dependency cycle,
    a stage unreachable from any start stage, `freeze_after: true` on more than one stage or on a
@@ -712,6 +712,180 @@ implementation-specific instructions (what a script-only stage's brief should sa
 Default to `<repo>/<feature-id>/workflow.yaml` and `<repo>/<feature-id>/state.json` next to the
 spec you generated from (e.g. alongside `workflows/runs/<feature-id>/0-spec.md` if that's where the
 spec lives). Ask if the repo has a different convention already.
+
+## Anti-patterns — don't generate these
+
+Most of the anti-patterns below are exactly what `scripts/validate_workflow.py` (step 7) checks for
+mechanically — read them anyway, since the dry-run tells you *that* something's wrong, not why it
+matters or how to fix it well.
+
+- Setting `model` to a faster/cheaper tier on `spec-review`, `test-review`, `review`, or
+  `generate-tests` to make a run cheaper. These are exactly the stages nothing downstream
+  double-checks — their output *is* the check — and that's precisely the shape of task where a
+  faster model was measured to silently invent an unstated answer and report zero open items where
+  the default model had correctly flagged one. `model` belongs on `implement-*` only, where
+  `verify`/`review` catch a wrong answer on the default model regardless of what wrote it.
+- Setting `effort: low` on a judgment stage (`spec-review`/`test-review`/`review`/`generate-tests`),
+  or on `implement-*` under `mode: full`. Same reasoning as the `model` anti-pattern above — the
+  `mode: lite` precondition table is the only thing that makes `effort: low` safe on `implement-*`,
+  and it doesn't hold for judgment stages or for `implement-*` under `mode: full`, which can still
+  be a genuinely complex piece of work even when the *reason* the workflow is `full` lives elsewhere.
+- Choosing `mode: lite` to make a run cheaper when a condition in the lite table actually holds —
+  most often a spec whose Reality Constraints do list an external dependency, waved away as "only
+  one mock." The doubles are exactly what `test-review` exists to read, so this doesn't save a
+  redundant stage; it removes the only pass that would have caught the double drifting from the
+  thing it stands in for. The table is read off the spec, the same as the `needs_*` flags.
+- A "lite" workflow that drops `freeze-tests`, drops `review`, or merges `verify` into `review`.
+  None of those are lite — lite drops stages that had nothing to examine on this spec, and every
+  one of these three is load-bearing regardless of spec size. A file without `freeze_after` isn't
+  TDD-locked at all; a file without `review` has no pass looking for injection/authn/secrets or a
+  missing runtime guard.
+- A stage's `write_scope` including test paths when that stage runs at or after the freeze point and
+  isn't an unlocked `reworking` pass. This is the single most common way to silently defeat the
+  whole design. Stages *before* the freeze — `generate-tests`, and `freeze-tests` itself — own those
+  paths legitimately; that's how tests get written and revised while revising them is still cheap.
+- A `spec-review` stage whose `exit_criteria` only proves the spec file exists and contains a
+  heading. That check passes for any spec-shaped document, including a confidently wrong one, so the
+  stage costs a step and buys nothing — while sitting at the single cheapest point in the file to
+  catch a defect, before one test has been written. Give it a real verdict artifact to grep, the
+  same shape `review` uses.
+- An `implement-*` brief that asks only for the frozen tests to pass, on a spec that declares runtime
+  invariants. The tests came from anticipated cases and the invariants exist for unanticipated ones,
+  so an implementation with no guards at all goes green — there is no mechanical check anywhere in
+  the file that would notice, which is exactly why the brief has to ask.
+- A "replan" stage, or any `on_fail`/branching condition that reads like a programming language.
+  Branching stays declarative — conditions may only reference an artifact's existence or an exit
+  code, nothing more expressive. If the user wants real replanning mid-run, say so explicitly rather
+  than smuggling it in as a fancy condition.
+- No stage anywhere setting `freeze_after: true`, or the flag landing on a stage with an empty
+  `write_scope`. That flag is the only thing that tells the orchestrator to snapshot the test-hash,
+  and the hash is computed from the flagged stage's own `write_scope` — so a missing flag and a flag
+  on a `write_scope: []` stage fail identically and silently, leaving a pipeline that looks
+  TDD-locked and isn't. `scripts/validate_workflow.py` checks both.
+- A `fixing` block without both `max_attempts` and `escalate_at`, or a `reworking` transition that
+  doesn't reset `attempt`/`seen_diffs` and re-freeze. Half-specified transitions are how a generated
+  workflow ends up looping forever or escalating too eagerly.
+- A `write_scope` for an implementation stage that's too narrow to ever legitimately pass — e.g.
+  scoping `implement-*` to `src/**` only when the test runner needs repo-root config (a
+  `conftest.py`, `pytest.ini`, `pyproject.toml`'s `pythonpath`, a `test/__init__.py`) to resolve
+  imports at all. Confirmed by direct testing: this produces a stage that fails identically on
+  every attempt no matter what the implementation does, and burns through `max_attempts` into a
+  `reworking` escalation that blames the wrong thing (the spec/tests look "wrong" when the real
+  issue is a scoping gap). Test-runner plumbing needed for the tests to even be *collectible/
+  runnable* belongs in the `generate-tests` stage's `write_scope` (it's test infrastructure, not
+  application code) — verify the exact `exit_criteria.run` command actually succeeds standalone
+  before freezing the stage list, don't assume it will.
+- Chaining `implement-*` stages for independent components (`implement-frontend: depends_on:
+  [implement-backend]`) just because they belong to the same feature or spec. If their
+  `write_scope`s don't overlap, there's no reason for one to wait on the other — kestra-run's
+  parallel-stage rule only kicks in when the stage list itself doesn't impose a false ordering.
+  A generated workflow with this shape runs no faster than doing the whole feature as one stage,
+  defeating the entire reason to split by component in the first place.
+- Putting `freeze_after: true` on a `define-shared-contract` stage (or any stage other than the
+  freeze stage). Confirmed by direct testing: this makes `test_hash` snapshot the shared
+  file instead of the test suite, so the frozen tests end up with zero protection against being
+  silently rewritten during `fixing` — the exact false-positive hole the whole invariant exists to
+  close. `write_scope` enforcement alone already protects a shared-contract file (no later stage's
+  `write_scope` includes that path); it does not also need `freeze_after`.
+- Reaching for a `define-shared-contract` stage (or, worse, merging independent components back
+  into one `implement-*` stage) when nothing is actually shared. This split only earns its keep
+  when two siblings truly can't avoid writing the same file — check `write_scope`s for a real
+  overlap before adding it, don't add it defensively "just in case" a monorepo spec might share
+  something.
+- Skipping the `review` stage. Confirmed by direct testing: without it, a generated workflow's
+  only quality gate after tests pass is whatever the terminal stage does — and since that's now a
+  mechanical summary stage, not a human eyeballing the diff, there'd be *no* pass at all checking
+  for injection/authn/secrets risk or correctness issues the spec's own ACs didn't happen to test
+  for. `review` is cheap to add (`write_scope: []`, one more mechanical verdict-check stage) and
+  closes a real gap, not a hypothetical one.
+- A `review`/`verify`-type stage with `write_scope: []` and `on_fail.action: fixing` that omits
+  `target`. Without it the orchestrator has no legal write_scope to apply the fix within — either
+  the fix attempt silently violates `write_scope: []`, or the stage can never recover short of
+  jumping straight to `reworking` on the first `CHANGES_REQUESTED`, which defeats the point of
+  giving it a bounded retry at all.
+- Defaulting `spec-review`, `review`, or the terminal stage back to `human_approval` out of habit.
+  That was the old default; it isn't anymore. Read `references/design-principles.md`'s "Default
+  HITL posture" before generating any of these three — a `human_approval` stage should only appear
+  when the user explicitly asked for that specific checkpoint.
+- A hard-coded `skill:`/`agent:` field naming a specific skill as a required dependency for a stage.
+  Skills aren't invoked by ID from outside a Claude session — whatever Claude gets spawned decides
+  for itself, the same way triggering works normally. A skill name only ever belongs inside `brief`
+  as a suggestion; if it's missing at execution time, the stage must still be able to proceed.
+- A `generate-tests` `exit_criteria` that actually *runs* the test suite expecting it to pass
+  (exit 0). At this stage no implementation exists yet, so the tests are *supposed* to fail red —
+  an exit_criteria phrased that way makes the stage structurally unable to ever pass, no matter how
+  correct the tests are. Confirmed by direct testing: this is exactly why the worked example above
+  uses `npm test -- --listTests <feature>` (enumerate matching tests, don't execute them) instead
+  of `npm test`. For pytest, the equivalent trap is subtler — `pytest --collect-only` still imports
+  the test module to discover its test functions, so it fails on the same `ModuleNotFoundError` a
+  full run would. Whatever language/framework the spec uses, verify the exact `exit_criteria.run`
+  command can actually pass *before* any implementation exists — the same "run it standalone before
+  freezing" discipline as the write_scope anti-pattern above, just checking polarity instead of
+  scope. When the spec is illustrative and there's no repo to run anything against — a worked
+  example, a design sketch — you can't honor that discipline, so say plainly which commands and
+  globs are unverified placeholders instead of presenting them as checked. An unverifiable command
+  labelled as such is useful; the same command presented as verified is a trap for whoever runs it
+  next.
+- Solving that polarity problem with a **syntax-only** check and stopping there. A parse check
+  (`python3 -m py_compile`, `node --check`, and friends) satisfies "passes before an implementation
+  exists," which is why it's the tempting answer — but it accepts a test referencing a variable that
+  was never defined, since that's a runtime error rather than a syntax error. Confirmed the
+  expensive way: a frozen test suite passed exactly this check with an undefined name in it, and
+  the defect surfaced during implementation, after the tests were locked and a fix therefore meant
+  a `reworking` bounce. Ask instead for the property — *static analysis that resolves names without
+  executing or importing the implementation* — and derive the command for the actual stack (many
+  linters do this: pyflakes-style undefined-name checks, `no-undef` rules, a type-checker in
+  no-emit mode). Fold the mechanically detectable test-quality risks into the same command while
+  you're there, most usefully a check that tests don't read a live clock or other ambient state
+  when the spec's Reality Constraints say those must be pinned. Anything a command can settle
+  belongs here rather than in `test-review`: it costs no subagent, and unlike a reviewer it cannot
+  be reasoned out of its answer.
+
+  One more mechanical check worth adding the same way, **kept strictly to what it can actually
+  prove**: an AC-coverage presence-and-vacuity lint. Ask the `generate-tests` brief for each test
+  scenario to carry its AC/BR id (natural under the Given-When-Then-mirror instruction above), then
+  add a loop to `exit_criteria` grepping every spec AC id against the test `write_scope` for at
+  least one tagged test, plus an "at least one non-trivial assertion" check (an
+  `expect(x).toBeDefined()`-only body doesn't count) — labelled explicitly, in the brief and to
+  yourself, as **presence, not sufficiency**. It passes pre-implementation (a grep over test files,
+  not a suite run), so it clears the polarity rule above. Two overclaims to actively avoid when
+  adding this, both real traps: **(1)** it does *not* shrink the `design-tests` split's own trigger
+  surface — `design-tests` exists for scenario-*coverage-completeness* risk (did every AC/BR/edge
+  case, including GWT counter-examples, get a distinct *correct* scenario), which an id-presence grep
+  structurally cannot establish. A test tagged `AC-3` with one trivial assertion passes this new
+  check while leaving exactly the gap `design-tests` exists to catch — the lite/full and
+  `design-tests` trigger decisions stay governed by their own real trigger conditions, never by
+  whether this grep passes. **(2)** it is not "layered under `test-review`" — none of `test-review`'s
+  actual checklist rows (ordering/preconditions, response realism, type/shape drift, path parity,
+  shared logic, non-determinism) are AC-sufficiency or vacuousness checks, and `test-review` doesn't
+  even run under `mode: lite` or on a spec with no doubles — so for a large share of real workflows
+  this check has nothing "layered" under it to lean on. State both limits plainly if you mention this
+  check anywhere else in the generated workflow's audit line.
+- Putting `freeze_after: true` on `generate-tests`. This *was* the guidance and is now wrong — see
+  the two-stage split in step 3. Freezing at the moment tests are written locks them before anyone
+  has read them, and buys nothing, because the confirmation loop the freeze prevents needs an
+  implementation to exist and none does yet.
+- A `test-review` stage placed after `freeze-tests`, or one that owns test paths. Reviewing frozen
+  tests is nearly pointless: the only legal response to a finding is `reworking`, so every typo
+  becomes a human stop. And a reviewer that can edit what it reviews is not an independent check —
+  it's the same agent grading its own homework, which is the failure mode `write_scope` exists to
+  make impossible rather than merely discouraged.
+- A `generate-tests` brief for an AC about surviving a restart (data/state must persist across a
+  process going down and coming back up) that reaches for an in-process simulation — closing and
+  reopening the same object/connection inside one continuous test process — instead of a real
+  process restart. Don't reason your way into "a true OS-process restart is impractical inside a
+  single test run" before checking: most test runners can spawn a real child process, send it a
+  kill signal, and spawn a fresh one against the same on-disk state without much ceremony (Node:
+  `child_process.spawn` + `SIGTERM` + wait-for-ready + spawn again; Python: `subprocess.Popen` +
+  `.terminate()` + relaunch; most other stacks have an equivalent). Confirmed by direct
+  benchmarking: a `with_skill` run's `generate-tests` stage wrote exactly this "impractical"
+  reasoning and shipped an in-process close/reopen test, while a same-task baseline run (no
+  orchestration, same AC) wrote a real spawn/kill/respawn test in one pass with no more effort. The
+  in-process version only proves an object was recreated correctly — it doesn't prove the property
+  the AC actually cares about (data surviving the *process* disappearing, not just an in-memory
+  handle). Default to the real restart; only fall back to an in-process simulation if the specific
+  runtime/environment genuinely can't manage a child process from within a test (rare, and say so
+  explicitly in the brief when you do).
 
 ## What kestra-build does not do
 

@@ -191,8 +191,8 @@ seven, with the freeze and the security/correctness review both intact.
 
 **Do not invent further savings.** Merging `verify` into `review`, skipping `review` because the
 diff looks small, or dropping `freeze-tests` to save a commit are not lite — they're the full
-machine with its load-bearing parts removed. Lite is a fixed, named shape, not a license to trim
-per-spec.
+machine with its load-bearing parts removed, and each has its own entry in the anti-pattern list
+below. Lite is a fixed, named shape, not a license to trim per-spec.
 
 ## Process
 
@@ -305,10 +305,9 @@ implementation-specific instructions (what a script-only stage's brief should sa
      exact commit being frozen, which is worth doing precisely because that commit is the one every
      later stage will be held to.
 
-     **Choose the freeze stage's `write_scope` deliberately; it defines the test-hash.**
-     `generate-tests`'s own `write_scope` should include whatever runner plumbing the suite needs to
-     be collectible at all (a `conftest.py`, a `jest.config`, a `pythonpath` entry) — that's right for
-     `generate-tests` — but copying the same
+     **Choose the freeze stage's `write_scope` deliberately; it defines the test-hash.** The
+     anti-pattern list below tells you to give the test-writing stage whatever runner plumbing the
+     suite needs to be collectible at all. That's right for `generate-tests` — but copying the same
      globs onto `freeze-tests` verbatim decides something else entirely, because everything in that
      scope becomes part of the hash, and any later change to it is a hard stop rather than a retry.
      A dependency manifest is the case where this bites: it holds test configuration *and* the
@@ -644,10 +643,11 @@ implementation-specific instructions (what a script-only stage's brief should sa
      ordinary unit/integration tests as usual; don't force Given-When-Then onto a spec that doesn't
      use it.
    - **Carry what step 7's dry-run already learned into `generate-tests`'s brief, instead of letting
-     it evaporate.** Verifying the exact `exit_criteria.run` command standalone and identifying the
-     runner-plumbing files a test-runner needs to even collect the suite (a `conftest.py`,
-     `pytest.ini`, a `jest.config`, a `pythonpath` entry) are both things `kestra-build` already does
-     at generation time. Put the verified command and the plumbing-file list into the `generate-tests` brief as a
+     it evaporate.** Verifying the exact `exit_criteria.run` command standalone (the anti-pattern
+     list below requires this) and identifying the runner-plumbing files a test-runner needs to even
+     collect the suite (a `conftest.py`, `pytest.ini`, a `jest.config`, a `pythonpath` entry — see the
+     `write_scope`-too-narrow anti-pattern) are both things `kestra-build` already does at generation
+     time. Put the verified command and the plumbing-file list into the `generate-tests` brief as a
      sentence, so the spawned agent starts already knowing what a passing collection looks like
      instead of re-discovering the project's runner setup from scratch.
    - **An `implement-*` brief has to ask for the spec's runtime invariants as actual guards, not
@@ -688,8 +688,8 @@ implementation-specific instructions (what a script-only stage's brief should sa
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
 7. **Dry-run it before showing it to the user.** Run
    `python3 <skill-dir>/scripts/validate_workflow.py <output-dir>` — a dependency-free, zero-LLM
-   structural check (no third-party packages, works with a plain `python3`) that catches structural
-   mistakes mechanically: a post-freeze `write_scope`
+   structural check (no third-party packages, works with a plain `python3`) that catches exactly
+   the mistakes this file's own anti-pattern list warns about: a post-freeze `write_scope`
    overlapping the frozen test paths (pre-freeze stages are correctly exempt — they own those paths
    on purpose), a missing `on_fail.target` on a `write_scope: []` fixing stage, a dependency cycle,
    a stage unreachable from any start stage, `freeze_after: true` on more than one stage or on a
