@@ -96,16 +96,29 @@ a 100% violation regardless of what the subagent actually did.
 The hashed paths are whatever `write_scope` the `freeze_after: true` stage used — don't invent a
 separate list.
 
-**One canonical formula, always — a single `find` over every root, one global sort.** `write_scope`
-often lists more than one root (e.g. `["test/**", "package.json", "package-lock.json",
-"jest.config.js"]`). Confirmed by direct testing: two different but each-internally-consistent ways
+**One canonical formula, always — a single `find` over every root, one global sort, run from the
+repo root.** `write_scope` often lists more than one root (e.g. `["test/**", "package.json",
+"package-lock.json", "jest.config.js"]`). Confirmed by direct testing: two different but
+each-internally-consistent ways
 of handling multiple roots exist if you improvise — a single `find <all roots> | sort` over the
 whole set, versus running `find` per root and concatenating the results in `write_scope`'s
 declaration order without a global re-sort. Both produce a hash that matches itself on
 re-verification, but they produce a **different** hash from each other for the identical file set —
 so if a human, a different tool, or a resumed run ever recomputes the hash without knowing which of
 the two methods the freezing run used, a perfectly-intact test suite reads as MISMATCH. Pick the
-single-`find` form below and never the per-root-concatenation form:
+single-`find` form below and never the per-root-concatenation form.
+
+**A second, easy-to-miss version of the same trap: working directory.** `write_scope` entries are
+always written repo-root-relative (the same basis the `write_scope check` above uses —
+`git diff --name-only HEAD` reports paths relative to the repo root regardless of cwd, never
+relative to wherever you happen to be). Run the `find` below **from the repo root**, with the
+`write_scope` paths exactly as declared — never from inside a directory a particular stage's
+`exit_criteria.run` happens to `cd` into first. Confirmed by direct testing: hashing the identical
+file from the repo root (`find workflow/evals/.../fixture/test/queue.test.js`) versus from inside
+that stage's own working directory (`find test/queue.test.js`) produces two different hashes for
+byte-for-byte identical content — the freeze and every later check must use the same cwd basis, and
+repo root is the canonical one because that's where `write_scope` enforcement and every git command
+in this file already run from.
 
 ```bash
 # Build the root list from write_scope: a "dir/**" entry becomes "dir"; a literal filename entry
