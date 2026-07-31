@@ -44,6 +44,7 @@ SKILLS=(
   productivity/givename
   meta/meta-designer meta/meta-dev meta/meta-qa meta/meta-test-review
   meta/meta-review meta/meta-security meta/meta-devops meta/meta-debug
+  meta/meta-spec meta/meta-test-writer meta/meta-orc
 )
 
 # Retired: meta-pm, meta-ba, meta-sa, meta-architect — workflow/kestra-spec does all four inline

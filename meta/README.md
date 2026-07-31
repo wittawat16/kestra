@@ -1,6 +1,6 @@
 # meta/ — role-based delivery skills
 
-Eight specialized skills, each modeling one role in a software delivery team — no fixed orchestrator
+Ten specialized skills, each modeling one role in a software delivery team — no fixed orchestrator
 chains them; call one directly, chain them yourself, or reference one by name from a stage brief in
 a `workflow/kestra-build`-generated `workflow.yaml`. The name borrows from
 [MetaGPT](https://github.com/geekan/MetaGPT), a multi-agent framework that assigns the same kind of
@@ -17,9 +17,17 @@ choosing an approach, and surveying the codebase — in a single pass, so the sk
 occupy phases 0 through 1 (`meta-pm`, `meta-ba`, `meta-sa`, `meta-architect`) no longer had a phase
 to sit in and were retired. What remains is the set that still does something no other skill does.
 
+`meta-spec` is not those four coming back. They were four separate spawns producing four artifacts
+for a front end that `kestra-spec` now does in one pass; `meta-spec` is a *smaller* pass than
+`kestra-spec`, for work that doesn't need invariant and reality-constraint tables — and it says so
+itself, escalating rather than thinning those sections down to something that only looks like
+coverage.
+
 | Skill | Role |
 |---|---|
+| [`meta-spec/`](meta-spec/) | Lean spec pass — testable ACs, the `needs_ui`/`needs_devops`/`tests_first` flags, verified file paths. Escalates to `workflow/kestra-spec` when silent-failure risk, test-double fidelity, or multi-service contracts are in play rather than covering them thinly |
 | [`meta-designer/`](meta-designer/) | Produces a real UI artifact (HTML mockup / Mermaid wireframe) plus component audit, token mapping, and all four screen states — the part `kestra-spec`'s tables-only Design Notes don't cover |
+| [`meta-test-writer/`](meta-test-writer/) | Writes a deliberately-red BDD suite (scenario table + Given-When-Then tests) from the acceptance criteria, before any implementation exists — hands off, but cannot freeze what it wrote |
 | [`meta-dev/`](meta-dev/) | Implements a plan into real code, scoped to the planned files, handing off rather than self-certifying |
 | [`meta-qa/`](meta-qa/) | Independently verifies the implementation against acceptance criteria with real test runs and a real app start — never trusts a prior "it passed" claim |
 | [`meta-test-review/`](meta-test-review/) | Reviews freshly written tests for test-double fidelity against the spec's Reality Constraints, before the tests are frozen |
@@ -28,8 +36,19 @@ to sit in and were retired. What remains is the set that still does something no
 | [`meta-devops/`](meta-devops/) | Pre-deploy checklist — env vars, migration order + rollback, feature flags, monitoring (when the spec has deploy concerns) |
 | [`meta-debug/`](meta-debug/) | Four-mantra debugging discipline (reproduce → trace fail path → falsify hypothesis → cross-reference breadcrumbs). Callable for any bug, and the escalation when a fix loop stops converging |
 
+**One optional, opt-in exception to "no fixed orchestrator":** [`meta-orc/`](meta-orc/) auto-chains
+the stages above (spawn → wire output to the next stage → stop hard on the first non-clear
+verdict) for users who want the handoffs automated without wanting `kestra-build`/`kestra-run`'s
+write-scope/test-hash/commit machinery. It adds sequencing only, not enforcement — every role
+skill above still works exactly the same standalone. Use it deliberately, not by default; see its
+own `SKILL.md` for the trade-off table against `kestra-build` + `kestra-run`.
+
 Real ordering constraints worth knowing (everything else is free-form):
 
+* `meta-test-writer` → `meta-dev` is the tests-first ordering: the suite is written red, then
+  implemented against. Note what `meta/` can and can't offer here — the *ordering* is real, but
+  nothing mechanically stops a later stage from editing a test to pass. `workflow/`'s test-hash
+  freeze is the only thing in this repo that actually enforces it.
 * `meta-test-review` only makes sense **after** tests are written and **before** they're frozen —
   after the freeze, its only legal outcome is a `reworking` bounce, which turns every finding into a
   human stop.
