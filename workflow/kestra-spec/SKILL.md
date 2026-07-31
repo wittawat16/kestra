@@ -25,6 +25,13 @@ stage agent has to guess. Separate: [`meta-designer`](../../meta/meta-designer/S
 produces an actual openable artifact (HTML mockup/wireframe) that this skill's Design Notes feed
 into, not compete with.
 
+**Suggested model, if spawning this as a subagent with a model to choose:** Opus 5. Measured
+same-effort against Sonnet 5 on this same skill: Opus caught a real spec defect (an execution-
+verified edge case, e.g. a spread-order default-overwrite bug) that Sonnet's read-and-reason pass
+missed entirely, for ~14% more tokens. This is a suggestion to offer the user, not a default to pick
+silently — ask before spawning. Doesn't apply when running inline in an already-active session; a
+skill can't switch that session's model on its own.
+
 ---
 
 ## Input
