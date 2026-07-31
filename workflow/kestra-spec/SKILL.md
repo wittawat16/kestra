@@ -19,13 +19,11 @@ description: >
 # kestra-spec — One-Pass, Build-Ready Spec for kestra-build
 
 **Role:** Turn a sharpened idea into the single `0-spec.md` that `kestra-build` reads to derive a
-`workflow.yaml`. One agent, one pass, one file — spec-sharpening (PM), business-rule clarification
-(BA), design notes, solution-architecture decisions, and a verified codebase survey, so nothing gets
-lost at a handoff between separately-invoked skills and `kestra-build`'s stage agents never have to
-fill a gap by guessing. Retired: `meta-pm`, `meta-ba`, `meta-sa`, `meta-architect` — this file covers
-their jobs. Still separate: [`meta-designer`](../../meta/meta-designer/SKILL.md), which produces an
-actual openable artifact (HTML mockup/wireframe) that this skill's Design Notes feed into, not
-compete with.
+`workflow.yaml` — one pass, one file, covering PM (spec-sharpening), BA (business rules), design
+notes, and SA (architecture decisions) inline plus a verified codebase survey, so no `kestra-build`
+stage agent has to guess. Separate: [`meta-designer`](../../meta/meta-designer/SKILL.md), which
+produces an actual openable artifact (HTML mockup/wireframe) that this skill's Design Notes feed
+into, not compete with.
 
 ---
 
@@ -55,9 +53,8 @@ When the customer cancels it
 Then the payment is refunded in full
 And the order status becomes "cancelled"
 ```
-This matters most where `needs_ba: true` — it forces every branch ("what if it already shipped?")
-into its own visible line instead of hiding inside prose. Don't force it onto pure data-shape/perf
-ACs — no benefit there.
+Matters most where `needs_ba: true` — forces every branch into its own visible line instead of
+hiding inside prose. Skip it for pure data-shape/perf ACs.
 
 ### 2. Set the flags — mechanically
 
@@ -79,8 +76,8 @@ Once derived, each flag's value is a fact for step 3 to act on, not a judgment c
   impossible, don't skip silently. Add design ACs (component + token + state + viewport).
 * **`needs_sa`** → 2–3 approaches, concrete trade-offs, chosen one justified (cost/complexity/risk),
   NFR targets, integration contracts, data-model impact.
-* **`needs_devops`** → no checklist needed now (that's `deploy-readiness`'s job later) — just make
-  sure Edge Cases/Functional Requirements actually name the env vars/migrations/flags involved.
+* **`needs_devops`** → just make sure Edge Cases/Functional Requirements name the env
+  vars/migrations/flags involved — the deploy checklist itself is `deploy-readiness`'s job later.
 
 Flag `false` → do nothing for it.
 
@@ -89,44 +86,34 @@ Flag `false` → do nothing for it.
 * Read the real code in every directory/file this feature touches before deciding anything.
 * **Verify every file in "Files to Touch" exists** (`ls`/`find`/read) before writing it down. New
   files follow the nearest existing convention — name which file you patterned it after.
-* A chosen `needs_sa` approach is a hard constraint here — a conflict is a contradiction to resolve
-  (back to step 3), not something to route around silently.
-* Every AC maps to at least one concrete implementation step — incomplete mapping means the AC or
-  the survey is incomplete; fix before moving on.
+* A chosen `needs_sa` approach is a hard constraint here — a conflict goes back to step 3, not
+  routed around silently.
+* Every AC maps to at least one concrete implementation step — incomplete mapping means fix it now.
 * **For every AC that names a runnable check, actually run it now** — don't take the spec's own
   wording as given.
-* **Read the code behind each Runtime Invariant's on-violation behaviour, even when it's not a file
-  you're changing.** This survey is otherwise scoped to what the feature touches, and "what happens
-  when this fails" is almost never in that set (a plugin loader, a supervisor, a deploy policy) — an
-  invariant whose on-violation claim you never checked outside your own diff sends both the
-  implementer and the reviewer looking for a behavior that cannot happen. This is what step 6
-  grades; do the work here, not there.
+* **Read the code behind each Runtime Invariant's on-violation behaviour**, even outside this
+  feature's own files (a plugin loader, a supervisor, a deploy policy) — an unchecked on-violation
+  claim sends the implementer and reviewer looking for a behavior that cannot happen. Step 6 grades
+  this; do the work here.
 * List new dependencies and name risks (shared files, race conditions, fragile migrations)
   explicitly.
 
 ### 5. Name what the world won't guarantee, and what must hold at runtime
 
-Acceptance criteria cover cases someone thought of. This step covers the ones nobody did — absent
-here, they're absent from every test derived from here, so implementation passes and still misses
-them. Four things, each cheap now, expensive later:
+Acceptance criteria cover cases someone thought of; this step covers the ones nobody did.
 
-**a. Runtime invariants.** Not an AC in a different hat — enforced *forever*, against inputs nobody
-predicted. Test: if this condition went false and the system carried on, would anyone find out
-before the damage was done? If no, it's an invariant: name the condition, how it's detected at
-runtime, and what happens on violation (halt/refuse/alert). "Logged, then continues" is not an
-invariant — it's a comment wearing one's clothes.
-
-**b. What each external dependency actually does — and doesn't guarantee.** Enforced ordering/
-preconditions, real returned types/shapes, and — the column people skip — what completeness/
-consistency it does *not* promise. This is the standard the project's test doubles get judged
-against later.
-
-**c. Pairs of paths that must agree.** Replay vs. live, cached vs. computed, sync vs. async — name
-the pair, what "equivalent" means, what may legitimately differ. Nobody else will ever declare this
-pair for a parity check to test against.
-
-**d. Non-deterministic inputs: pinned or floating.** Clock, randomness, timezone/locale, network,
-filesystem, env — for each one this feature reads, say which, and why.
+* **Runtime invariants.** Enforced *forever*, against inputs nobody predicted. Test: if this
+  condition went false and the system carried on, would anyone find out before the damage was
+  done? If no, name the condition, how it's detected at runtime, and what happens on violation
+  (halt/refuse/alert). "Logged, then continues" is not an invariant — it's a comment wearing one's
+  clothes.
+* **What each external dependency actually does — and doesn't guarantee.** Enforced ordering/
+  preconditions, real returned types/shapes, and — the part people skip — what completeness/
+  consistency it does *not* promise. The standard test doubles get judged against later.
+* **Pairs of paths that must agree.** Replay vs. live, cached vs. computed, sync vs. async — name
+  the pair, what "equivalent" means, what may legitimately differ.
+* **Non-deterministic inputs: pinned or floating.** Clock, randomness, timezone/locale, network,
+  filesystem, env — for each one this feature reads, say which, and why.
 
 Grounding: [`../kestra-build/references/test-quality-taxonomy-research.md`](../kestra-build/references/test-quality-taxonomy-research.md)
 — a starting point, not a complete list; add whatever this codebase's own history says belongs.
@@ -135,16 +122,15 @@ Grounding: [`../kestra-build/references/test-quality-taxonomy-research.md`](../k
 
 Keep this list in sync with `kestra-build`'s spec-review brief — change one, change both.
 
-1. **Each Runtime Invariant vs. the Edge Cases/ACs describing the same condition** — no
-   contradictions (e.g. an invariant that halts where an edge case says "no-op").
-2. **No invariant's on-violation action is "log and continue."**
-3. **Each AC is testable without a follow-up question** — exact inputs named, not "the right subset."
-4. **Each "does not guarantee" column is filled.**
-5. **Every claim checked in items 1–4 was verified by actually running the command or reading the
-   real code in step 4 — not just read internally for self-consistency.** A spec can pass 1–4 by
-   being internally consistent and still be wrong about what the world actually does; that gap is
-   exactly what real `spec-review` catches and this item is what closes it. Don't broaden this into
-   running the full test suite — that's the verify stage's job, at a later point, on frozen tests
+1. Each Runtime Invariant vs. the Edge Cases/ACs describing the same condition — no contradictions
+   (e.g. an invariant that halts where an edge case says "no-op").
+2. No invariant's on-violation action is "log and continue."
+3. Each AC is testable without a follow-up question — exact inputs named, not "the right subset."
+4. Each "does not guarantee" column is filled.
+5. **Every claim in items 1–4 was verified by actually running the command or reading the real code
+   in step 4 — not just cross-checked on paper.** A spec can pass 1–4 by being internally consistent
+   and still be wrong about what the world does; this item is what closes that gap. Don't broaden
+   this into running the full test suite — that's the verify stage's job, later, on frozen tests
    that don't exist yet.
 
 Fix what this turns up. Anything unresolved → **Open Items** — an honest open item passes
@@ -162,19 +148,14 @@ no separate `ba.md`/`design.md`/`sa.md`/`1-plan.md`.
 Default: `<repo>/workflows/runs/<feature-id>/0-spec.md` (next to `kestra-build`'s output). Ask if the
 repo uses a different convention.
 
-**Write for the readers this file actually has: `kestra-build`'s own stage-derivation pass, and
-whatever subagent each generated stage spawns — not a human approver.** `kestra-run`'s context pack
-now pastes this file's full text, verbatim, into *every single spawn* of the workflow it produces
-(see `kestra-run`'s `SKILL.md` step 2) — so every sentence here is paid for again on every stage,
-not once at write time. Bias hard toward density over narrative: bullet fragments over full
-sentences wherever the meaning doesn't need a verb; never restate a heading's own words in the prose
-under it ("Problem Statement" doesn't need a sentence starting "The problem is..."); one line beats
-two when both convey the same fact. This changes *density*, never *content* — every fact the
-template asks for (an invariant's on-violation behavior, a dependency's non-guarantee, an AC's exact
-inputs) still has to be there in full; cutting a fact to save a sentence just relocates the token
-cost to whichever stage discovers the gap later, at a worse exchange rate. The headings below carry
-no emoji for the same reason — a decorative prefix a human would scan past is pure overhead for a
-subagent grepping section names.
+**Written for `kestra-build`'s stage-derivation pass and every generated stage's spawned subagent,
+not a human approver** — `kestra-run`'s context pack pastes this file's full text into *every single
+spawn* (see `kestra-run`'s `SKILL.md` step 2), so every sentence here is paid for again on every
+stage. Bias hard toward density: bullet fragments over full sentences, never restate a heading's own
+words in the prose under it. This changes *density*, never *content* — every fact the template asks
+for still has to be there in full; cutting a fact to save a sentence just relocates the cost to
+whichever stage discovers the gap later, at a worse exchange rate. No emoji in headings — a
+decorative prefix is pure overhead for a subagent grepping section names.
 
 ```markdown
 # [<feature-id>] Spec — <feature title>
@@ -303,15 +284,6 @@ Done once:
 - No silent gaps — unresolved → **Open Items**
 
 Non-empty **Open Items** → say so plainly at handoff.
-
-## Mindset
-
-- **Detective, not tourist** — verify paths and *run/read* real code before naming behavior; never
-  invent, and never trust the spec's own prose as proof of what the world does
-- **Flags are facts, not opinions** — don't re-litigate a derived flag's value
-- **ACs cover what you thought of; invariants cover what you didn't**
-- **One file, no dangling handoffs**
-- **Honest gaps over confident guesses**
 
 ## Handoff
 
