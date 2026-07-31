@@ -182,7 +182,7 @@ generate-tests → freeze-tests (freeze point) → implement → {verify, review
 | `test-review` | **dropped** | its trigger is the presence of test doubles, and the lite condition table already established there are none |
 | `freeze-tests` | kept, unchanged | the freeze is the point of the whole thing; a "lite" mode that skips it is not this skill |
 | `implement-*` | kept, exactly one, `effort: low` | the lite condition table already established there's one component and nothing heavy to reason about — set `effort: low` automatically here (never `model`, that stays opt-in — see the `effort`/`model` sections in `references/workflow-schema.md`) |
-| `verify` | kept | costs no subagent — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
+| `verify` | kept | script-eligible by default (see the script-eligibility table above) — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
 | `review` | kept, unconditional | passing tests say nothing about injection/authn/secrets or a missing runtime guard. This is the one judgment stage lite keeps, and the reason lite is still safe to use |
 | `deploy-readiness` | **appended when `needs_devops: true`** | not a lite/full distinction — see below |
 
@@ -240,6 +240,35 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
    resolve before continuing, not something to leave inconsistent. Include this table in what you
    show the user alongside the final workflow.yaml/state.json, so the inconsistency is visible to
    them too if you miss one.
+
+### Script-eligibility — check this before deriving stages, not per-stage as you go
+
+Same mechanical-table pattern as the flags above, checked once so the per-stage bullets in step 3
+don't each re-derive it. A stage is **script-eligible** — no subagent, `exit_criteria` alone decides
+pass/fail — only when **both** hold: it produces no real diff of new work (`write_scope: []`, or for
+`freeze-tests`, a `write_scope` kept only so the test-hash covers it while the stage's own diff stays
+empty), **and** its `exit_criteria` settles pass/fail without anyone judging content. Missing either
+condition means a real subagent every time. This table is the single source of truth — the per-stage
+bullets below point back to it instead of re-arguing eligibility; they still carry the
+implementation-specific instructions (what a script-only stage's brief should say, what its
+`exit_criteria.run` should invoke) that this table doesn't repeat.
+
+| Stage type | Script-eligible? | Condition | Notes |
+|---|---|---|---|
+| `spec-review` | No — mechanical pre-check only | `write_scope` covers `source_spec`; `exit_criteria.run` chains `validate_spec.py` (a script) + a verdict grep | the script proves presence/existence only (e.g. Files-to-Touch paths exist); judging contradictions/on-violation wording still needs a subagent |
+| `generate-tests` | No | writes real test code | creative work |
+| `design` (`needs_ui: true`) | No | writes `design.md`/artifact | creative work |
+| `design-tests` (rare split) | No | writes the scenario table | creative work, even though `exit_criteria.type` can be `artifact_exists` |
+| `freeze-tests` | **Yes** | `write_scope` = the same test paths (kept only so the hash covers them); the stage itself writes no new diff — `exit_criteria` re-runs `generate-tests`'s own static checks against the exact commit being frozen | mechanical re-check, not a review; `on_fail: reworking`, never `fixing` |
+| `implement-*` | No | writes real code | creative work |
+| `define-shared-contract` | No | writes the shared file | small, but still a design decision |
+| `verify` | **Usually yes** | `write_scope: []`; `exit_criteria.run` is the frozen suite's own exit code | a subagent is only needed for the genuinely-uncovered ACs the brief's binary check flags — see step 4's `verify` brief guidance |
+| `review` | No | `write_scope: []`, but the verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
+| `test-review` | No, or dropped entirely | `write_scope: []`; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
+| `deploy-readiness` | No | reads diff + spec, judges devops risk | folded into `review`'s brief by default; still judgment either way |
+| repo-declared pre-merge test gate (sibling) | **Yes** | `write_scope: []`; `exit_criteria.run` invokes the repo's own documented command | give it no work-describing brief — "kestra-run runs `exit_criteria.run` directly; spawn nothing" |
+| `done` | **Yes** | `write_scope` scoped to one summary file; `exit_criteria.type: artifact_exists` | `kestra-run` writes the summary itself from `state.json`/`git log`, no spawn |
+
 3. **Derive the stage list from what the spec actually needs** — don't default to a fixed phase set.
    **If step 2 settled on `mode: lite`, the stage list is already fixed** by the lite shape above —
    generate exactly those stages and skip ahead to step 4; the per-stage guidance below still
@@ -261,7 +290,9 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
    {verify, review} → done`. Add stages only when the spec calls for them (e.g. a UI-facing spec
    adds a design stage before `generate-tests`; multiple independent components each get their own
    `implement-*` stage so their `write_scope`s don't collide).
-   - **Writing the tests and freezing them are two stages, not one.** It's tempting to put
+   - **Writing the tests and freezing them are two stages, not one** — and `freeze-tests` is
+     script-eligible (see the table above): it writes no new diff, so its `exit_criteria` alone
+     decides pass/fail. It's tempting to put
      `freeze_after: true` straight on `generate-tests` and save a step, and earlier versions of this
      file did exactly that. The reason to separate them: the freeze exists to stop an
      *implementation* from rewriting a test to make itself green, and no implementation exists yet
@@ -483,7 +514,8 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
        [`references/full-mode-stages.md`](references/full-mode-stages.md) for the full reasoning.
        Never applies under `mode: lite`, which has exactly one `implement-*` stage by definition.
    - **If the target repo declares its own mandatory pre-merge test gate, generate a stage that
-     runs it — don't leave it as a suggestion in a brief.** Projects that have been burned by
+     runs it — don't leave it as a suggestion in a brief.** This is the canonical script-eligible
+     sibling stage (see the table above). Projects that have been burned by
      doubles drifting from reality often already have the fix: a recorded contract suite, a local
      fake of the real service, an integration target that must pass before merge, written down in
      `CLAUDE.md` or the repo's own docs. Whether it exists is a fact to look up during the codebase
@@ -515,9 +547,9 @@ below. Lite is a fixed, named shape, not a license to trim per-spec.
      reflects this); it's never itself a reason to choose `full`.
    - **End with a mechanical `done` stage**, not `waiting_approval` — `write_scope` scoped to a
      single summary file, `exit_criteria.type: artifact_exists` on a generated completion summary.
-     By the time execution reaches it, every judgment-bearing check already ran and already had its
-     own escalation path; there's nothing left for a human to approve that hasn't already been
-     mechanically or automatically checked. **Brief the `done` stage to include a per-stage
+     Script-eligible (see the table above): by the time execution reaches it, every judgment-bearing
+     check already ran and already had its own escalation path; there's nothing left for a human to
+     approve that hasn't already been mechanically or automatically checked. **Brief the `done` stage to include a per-stage
      token/wall-time table in the completion summary**, sourced from whatever the orchestrator
      already tracked while running the workflow (it does not need to re-derive this — kestra-run's
      own progress tracking already has it). Measured directly: on an 8-stage `mode: full` run fixing
