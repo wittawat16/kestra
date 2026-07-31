@@ -1,0 +1,26 @@
+file:///Users/army/git/elide/projects/kestra/workflow/evals/2026-07-31-build-model-compare/esm-verification/test/mod.test.js:3
+import { existing, notThere } from '../src/mod.js';
+                   ^^^^^^^^
+SyntaxError: The requested module '../src/mod.js' does not provide an export named 'notThere'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:326:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:429:5)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0
+✖ test/mod.test.js (36.836875ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 41.196041
+
+✖ failing tests:
+
+test at test/mod.test.js:1:1
+✖ test/mod.test.js (36.836875ms)
+  'test failed'
+exit=1

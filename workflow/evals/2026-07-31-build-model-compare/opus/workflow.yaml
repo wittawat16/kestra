@@ -1,0 +1,285 @@
+feature: priority-tier
+source_spec: workflow/evals/2026-07-31-build-model-compare/0-spec.md
+mode: full
+
+# All `write_scope` globs and all `exit_criteria.run` commands are relative to the git repo root
+# (/Users/army/git/elide/projects/kestra) — the same frame `git diff --name-only` reports paths in.
+# The target package lives at workflow/evals/2026-07-31-build-model-compare/fixture and is driven
+# with `npm --prefix <dir> test` rather than a `cd`, so no command depends on the caller's cwd
+# beyond the repo root itself. Verified standalone at generation time (see the generate-tests brief).
+#
+# mode: full was forced by two rows of SKILL.md's lite/full table:
+#   - Reality Constraints lists an external dependency (the module-level HANDLERS registry)
+#   - Runtime Invariants is non-trivial (2 rows, both silent-in-production if violated)
+# Not forced by "2+ independent components" (one source file) and not by user request. The
+# root-cause override does not apply: this is a new feature, not a diagnosed bug with a pasted,
+# executed repro command.
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review workflow/evals/2026-07-31-build-model-compare/0-spec.md for the defects that are cheap
+      to fix now and expensive to fix once tests are frozen. The mechanical layer (validate_spec.py,
+      chained ahead of the verdict grep in this stage's exit_criteria) verified presence/existence
+      only — that every Files-to-Touch row marked edit/exists resolves to a real path. The semantic
+      content of every column is still yours to judge: that each of the two Runtime Invariants names
+      what actually happens on violation and neither resolves to log-and-continue; that the Reality
+      Constraints subsections are filled in or explicitly marked not-applicable with a reason, in
+      particular the "does not guarantee" column for the HANDLERS registry; that no invariant
+      contradicts an Edge Case or an AC (specifically: Invariant 2 halts on any tier other than the
+      literal 'free' reaching the free branch, while the ACs say an unrecognized tier such as 'gold'
+      is retried as paid — confirm those two describe the same control flow rather than colliding);
+      that every AC is testable without a follow-up question; and that every checkable claim in the
+      spec was actually run rather than asserted. This spec carries all sections natively — nothing
+      in it was inferred by the generator, so there is no inference to second-guess here. The spec's
+      Open Items records one genuinely unresolved case (a handler throwing a non-Error value, which
+      would leave `error` undefined and trip Invariant 1) and delegates the choice to
+      generate-tests/implement; an honest open item is not itself a defect — judge only whether
+      leaving it open contradicts an AC or an invariant. Any numeric finding must name the exact
+      quantity measured, the inputs, and the command or script used, with its output pasted; a
+      numeric claim without them is not a finding yet. Any other blocking finding that admits a
+      runnable check should carry that command, so a retry can confirm the fix mechanically instead
+      of re-deriving it — skip the command where the finding is judgment-only rather than inventing
+      one. Write the verdict to workflow/evals/2026-07-31-build-model-compare/opus/spec-verdict.md:
+      first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", then a findings table with
+      one row per finding (severity, the claim in one line, file:line), then any short paragraph a
+      finding needs beyond its row. The format cuts narration, never findings.
+    write_scope:
+      - "workflow/evals/2026-07-31-build-model-compare/0-spec.md"
+    exit_criteria:
+      type: command
+      run: "python3 workflow/evals/2026-07-31-build-model-compare/opus/validate_spec.py workflow/evals/2026-07-31-build-model-compare/0-spec.md workflow/evals/2026-07-31-build-model-compare/fixture && grep -q '^VERDICT: CLEAR$' workflow/evals/2026-07-31-build-model-compare/opus/spec-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      First artifact, before any test code: write
+      workflow/evals/2026-07-31-build-model-compare/opus/test-scenarios.md — a table mapping every
+      acceptance criterion, business rule (BR-1..BR-4) and edge case in the spec to a scenario title
+      and its Given/When/Then, 1:1 and traceable in both directions. Then translate that table into
+      test code in workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js, one
+      test per row. The spec's ACs are written Given-When-Then, so mirror that structure: this repo
+      has no BDD tooling and mandates zero third-party dependencies, so the idiomatic form is the
+      flat node:test style already in the file — `test('Given ..., when ..., then ...', () => {})`
+      with the Given/When/Then steps visible in the body.
+      Runner facts, verified standalone at generation time so you do not have to rediscover them:
+      the suite runs as `npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test`
+      (which is `node --test test/*.test.js`), needs no runner plumbing at all — no config file, no
+      pythonpath equivalent, no dependency install — and the two existing tests pass green today.
+      One trap, confirmed by running it: `import { getMetrics } from '../src/queue.js'` before the
+      implementation exists is a link-time SyntaxError ("does not provide an export named") that
+      kills the entire file, collapsing every scenario in it into one file-level failure and proving
+      nothing per-scenario. Import the not-yet-existing surface through a namespace import
+      (`import * as queue from '../src/queue.js'`) instead — verified to link cleanly and let each
+      test fail on its own assertion or TypeError. Every new test must fail for the right reason
+      (missing feature), not error out at load. This stage's exit_criteria enforces exactly that,
+      plus the absence of any test double.
+      Use real fixtures only: register real handlers through the real `registerHandler` export and
+      let them really throw. Do not import or use node:test's `mock`, and do not hand-roll a stub of
+      the queue module — the dependency under test is this repo's own in-process registry and using
+      it for real costs nothing. HANDLERS is module-level global state shared across the whole test
+      process, so register your new handler `type` strings under names not already used
+      ('email' and 'boom' are taken) or you will silently collide with the existing tests.
+      Before finishing, cross-check the assumptions your tests share with each other and with the
+      two pre-existing tests — handler type strings, message object shape, the exact shape asserted
+      for each `step()` result, the order operations are applied in — and name each pair you checked.
+      Two tests in one file that disagree about the same behaviour is a defect no static check can
+      see, and it becomes a reworking bounce once frozen.
+      The spec's Open Items leaves one case genuinely undecided: a handler throwing a non-Error
+      value makes `err.message` undefined, which would itself trip Runtime Invariant 1. Pick one of
+      the two options the spec names — accept the halt as correct, or coerce with a String(err)
+      fallback — assert your choice in a test, and record which you picked and why in
+      test-scenarios.md so implement and review are held to the same decision.
+      Do not touch src/. Comment discipline: default to no comments; write one only where the *why*
+      is genuinely non-obvious from the code, never restating what a well-named test title already
+      says, never more lines than the point needs, and never a reference to this run, this spec, an
+      AC id, or a provenance path — that belongs in the commit message. Every comment you write here
+      gets re-pasted verbatim into every later stage that reads this file's diff.
+    write_scope:
+      - "workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js"
+      - "workflow/evals/2026-07-31-build-model-compare/opus/test-scenarios.md"
+    exit_criteria:
+      type: command
+      run: "node --check workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js && ! grep -qi 'mock' workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js && test -f workflow/evals/2026-07-31-build-model-compare/opus/test-scenarios.md && ! npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test >/dev/null 2>&1 && ! npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test 2>&1 | grep -q 'does not provide an export named'"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  - id: test-review
+    depends_on: [generate-tests]
+    brief: >
+      Read the tests just written against the spec's Reality Constraints and report a table with one
+      row per risk — ordering/preconditions, response realism, type/shape drift, path parity, own
+      shared logic, non-determinism — each marked applicable or n/a with file:line evidence. The
+      mechanical checks (parse, no mock import, red-for-the-right-reason, scenario table present)
+      already ran in generate-tests' exit_criteria and check disjoint things from you; don't
+      re-derive them. Judgment only. Expect most double-fidelity rows to come back n/a here: the
+      single external dependency the spec names is this repo's own in-process HANDLERS registry,
+      exercised for real. The rows that carry weight on this spec, and two you should add
+      explicitly: (1) own shared logic — do the tests stand in for, weaken, or route around either
+      Runtime Invariant instead of letting the real guard run; (2) HANDLERS cross-test collision —
+      every new handler `type` string must be distinct from 'email' and 'boom' and from every other
+      new one, since the registry outlives each test in the same process; (3) cross-test consistency
+      — any pair of tests in this file that assert incompatible things about the same behaviour, and
+      whether the resolution of the spec's non-Error-throw Open Item is asserted consistently
+      wherever it matters; (4) scenario-table parity — every row in test-scenarios.md has a test and
+      every test has a row. Say plainly which rows you added. Anything costing real computation:
+      write the result and the exact command that produced it under
+      workflow/evals/2026-07-31-build-model-compare/opus/evidence/, and check there first before
+      computing. Write the verdict to
+      workflow/evals/2026-07-31-build-model-compare/opus/test-verdict.md: first line exactly
+      "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", then the risk table, then a findings table
+      (severity, claim, file:line), then any paragraph a finding needs beyond its row. On a
+      re-review after a fixing attempt (the context pack will include the fix diff and your own prior
+      findings), verify the findings are addressed and review the changed lines and their
+      interactions with the rest of the suite; do not re-derive relations between unchanged files
+      already cleared, which write_scope enforcement guarantees are unchanged.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/evals/2026-07-31-build-model-compare/opus/test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test suite as the frozen
+      baseline every later stage is held to. Its exit_criteria re-runs generate-tests' own static
+      checks against the exact commit being locked.
+    write_scope:
+      - "workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js"
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "node --check workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js && ! grep -qi 'mock' workflow/evals/2026-07-31-build-model-compare/fixture/test/queue.test.js && test -f workflow/evals/2026-07-31-build-model-compare/opus/test-scenarios.md && ! npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test >/dev/null 2>&1 && ! npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test 2>&1 | grep -q 'does not provide an export named'"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-tier-policy
+    depends_on: [freeze-tests]
+    brief: >
+      Implement the tier-based retry policy in
+      workflow/evals/2026-07-31-build-model-compare/fixture/src/queue.js against the frozen tests —
+      do not modify test/**, that path is locked and any diff touching it is rejected. The work:
+      add `dropped: []` to createQueue(); branch step()'s catch block on tier; add a named
+      `getMetrics(queue)` export. Follow the repo's conventions (named exports only, ES modules, no
+      third-party dependencies).
+      Green tests are not the whole job. Install both checks the spec's Runtime Invariants section
+      calls for, each detecting its condition and halting rather than proceeding: (1) immediately
+      before pushing to queue.dropped, refuse to push a record that lacks a non-empty `error` string
+      or has attempts < 1 — throw; (2) at the top of the free-tier branch, throw if
+      `message.tier !== 'free'`, guarding against a later refactor loosening the check to
+      case-insensitive or truthy. A guard that logs and continues satisfies the letter of that
+      section and provides none of its value. The frozen tests will pass whether or not these guards
+      exist — they were derived from anticipated cases and the guards exist for unanticipated ones —
+      so their presence is on you here, not on the test run.
+      Two constraints the frozen tests may not cover, both from the spec: the tier-resolution
+      expression `message.tier === 'free' ? 'free' : 'paid'` must be character-identical at both call
+      sites (step()'s catch and getMetrics()) so a future tier value cannot be classified differently
+      by the two; and getMetrics must derive its counts by scanning queue.done/queue.dropped at call
+      time, never from a separately maintained counter that can drift. Field changes are additive
+      only — do not rename or remove `id`, `status`, `attempts` on results, and leave the no-handler
+      'skipped' path untouched and above the tier logic so a free-tier message with no registered
+      handler is never dropped.
+      Comment discipline: default to no comments; only where the *why* is genuinely non-obvious from
+      the code (the two guards may each warrant one line explaining what they are defending against);
+      never restating what a well-named identifier already says, never a multi-line block where one
+      line does, and never a reference to this run, spec, or AC id — that belongs in the commit
+      message, and every comment here is re-pasted into every later stage that reads this diff.
+      An implementation-focused skill, if you have one installed, fits this stage well.
+    write_scope:
+      - "workflow/evals/2026-07-31-build-model-compare/fixture/src/queue.js"
+    exit_criteria:
+      type: command
+      run: "npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  - id: verify-acceptance-criteria
+    depends_on: [implement-tier-policy]
+    brief: >
+      Before doing anything else, check the frozen test suite — now real, unlike when this brief was
+      written — against the spec's AC Coverage Map: does every one of the nine acceptance criteria
+      map to an assertion that actually exists and actually runs under exit_criteria.run? If yes for
+      all of them, there is no judgment work here — say so plainly and stop; exit_criteria.run's real
+      exit code IS the verification and kestra-run can execute it directly without spawning you.
+      If one or more ACs are not covered by any frozen assertion, name exactly which ones and
+      exercise only those by hand against the real module, reporting what you observed against what
+      the AC requires. Do not re-run or re-paste the suite output for ACs that are covered — the
+      orchestrator re-runs the same command itself regardless. A QA-focused skill fits this stage
+      well if you have one installed.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm --prefix workflow/evals/2026-07-31-build-model-compare/fixture test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-tier-policy
+
+  - id: review
+    depends_on: [implement-tier-policy]
+    brief: >
+      Review the real diff since the last stage commit for correctness, edge cases, and
+      injection/authn/secrets risk. Passing tests only prove the spec's own acceptance criteria —
+      this stage exists to catch what the spec never thought to test for. Three things to read the
+      diff for specifically, because no exit_criteria can: (1) both Runtime Invariants are present as
+      real guards that halt, and neither degraded into a log-and-continue or got dropped to make a
+      test pass; (2) the tier-resolution expression is identical at both call sites and getMetrics
+      derives from the arrays rather than a counter; (3) the no-handler 'skipped' path still returns
+      before the tier branch, so a free-tier message whose type has no handler is never dropped.
+      Any numeric finding must name the quantity measured, the inputs, and the exact command, with
+      its output pasted — a numeric claim without them is not a finding yet. Any other blocking
+      finding that admits a runnable check should carry that command so a fixing retry can confirm
+      the fix mechanically; skip it where the finding is judgment-only rather than inventing one.
+      Anything costing real computation: write the result and its exact command under
+      workflow/evals/2026-07-31-build-model-compare/opus/evidence/ and check there first. Write the
+      verdict to workflow/evals/2026-07-31-build-model-compare/opus/review-verdict.md: first line
+      exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", then a findings table (severity,
+      claim in one line, file:line), then any short paragraph a finding needs beyond its row — the
+      format cuts narration, never findings. Whatever code-review and security-review skills you have
+      available both fit this stage well; try them, and proceed with a direct review if none are.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/evals/2026-07-31-build-model-compare/opus/review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-tier-policy
+
+  - id: done
+    depends_on: [verify-acceptance-criteria, review]
+    brief: >
+      Every upstream stage passed. Write
+      workflow/evals/2026-07-31-build-model-compare/opus/completion-summary.md: what shipped, which
+      commits, and the spec-review/test-review/review verdicts. Include a per-stage table sourced
+      from what the orchestrator already tracked while running — stage id, tokens, wall-clock,
+      attempt count, and spawn type (fresh / resumed / none). Do not spawn anything or re-derive
+      these numbers; for any stage whose attempts spanned a pause/resume, write
+      "N/A — multi-session resume, not tracked" for its spawn-type cell rather than reconstructing a
+      guess.
+    write_scope:
+      - "workflow/evals/2026-07-31-build-model-compare/opus/completion-summary.md"
+    exit_criteria:
+      type: artifact_exists
+      artifact: "workflow/evals/2026-07-31-build-model-compare/opus/completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

@@ -650,6 +650,18 @@ implementation-specific instructions (what a script-only stage's brief should sa
      at generation time. Put the verified command and the plumbing-file list into the `generate-tests` brief as a
      sentence, so the spawned agent starts already knowing what a passing collection looks like
      instead of re-discovering the project's runner setup from scratch.
+   - **A polarity check that only verifies syntax can still pass a suite that's actually
+     uncollectable.** Confirmed by direct testing: in an ESM/Node project, a test file statically
+     importing a named export that doesn't exist yet (`import { getMetrics } from '../src/queue.js'`)
+     is a link-time `SyntaxError` — and it collapses the *entire file* into one failure, not just the
+     scenarios that reference the missing export (`node --check` never catches this; it's pure syntax
+     checking and doesn't resolve imports). Two changes this implies: tell `generate-tests`'s brief to
+     reference any not-yet-existing export through a namespace import (`import * as mod from '...'`)
+     instead of a named one, so each scenario still fails on its own assertion rather than the whole
+     file collapsing at once; and don't let the polarity `exit_criteria` rely on syntax-plus-content
+     greps alone — run the real test command and grep its output for the module system's own
+     no-such-export error text (`does not provide an export named`, for Node ESM), so a whole-file
+     collapse reads as a real defect in the tests, not the expected pre-implementation red.
    - **An `implement-*` brief has to ask for the spec's runtime invariants as actual guards, not
      just for green tests.** This is the one instruction in a brief that can't be replaced by a
      mechanical check, and the reason is structural rather than incidental. The frozen tests were
