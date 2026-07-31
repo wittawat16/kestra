@@ -1,0 +1,22 @@
+{
+  "feature": "priority-tier",
+  "current_stage": ["verify-acceptance-criteria", "review"],
+  "test_hash": "658215266261eddfa3c485803e6742aab9edf24658ed09dde4b9880463a03782",
+  "stages": {
+    "spec-review": { "status": "passed", "attempt": 1, "seen_diffs": [] },
+    "generate-tests": { "status": "passed", "attempt": 1, "seen_diffs": [] },
+    "freeze-tests": { "status": "passed", "attempt": 1, "seen_diffs": [] },
+    "implement-tier-retry": {
+      "status": "passed",
+      "attempt": 1,
+      "seen_diffs": [],
+      "metrics": {
+        "spawn_type": "fresh",
+        "attempt_count": 1
+      }
+    },
+    "verify-acceptance-criteria": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "done": { "status": "pending", "attempt": 0, "seen_diffs": [] }
+  }
+}

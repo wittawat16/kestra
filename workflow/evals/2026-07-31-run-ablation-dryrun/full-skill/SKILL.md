@@ -123,20 +123,59 @@ do when one or both of them fail.
    independent test files, or reading several unrelated existing files for context) rather than
    doing them one at a time — this is the same "independent work doesn't need to be serialized"
    idea as the stage-level parallelism above, just applied one level down inside a single stage.
-   - **The context pack — hand over what you already know, every spawn, no exceptions.** Cold-start
-     cost dominates spawn tokens, so paste this into every prompt rather than letting the subagent go
-     find it: `source_spec`'s full text verbatim; the stage's `write_scope` globs; the stage's
-     `exit_criteria.run`, already executed by you, with its real exit code and output (or whether an
-     `artifact_exists` target is currently present); the diff (`git diff --name-only` + `git diff
-     -U0`) against the most recent stage commit that actually touched code (walk back past any
-     no-diff commit) — for `implement-*`, also the frozen test suite's file list; the previous
-     stage's verdict artifact path and verdict line; anything under `<run-folder>/evidence/` and
-     `<run-folder>/harness/` (path + one line each); on a `fixing` retry, the specific findings being
-     fixed, not just "it failed"; on a post-`reworking` re-run, always a fresh spawn with a fresh pack
-     (never resume across that transition) — scope `review`/`verify` to the rework diff plus shared
-     fixtures/ACs, but give `test-review` the full file-by-file treatment since its job is cross-file
-     relations a diff-only pack would hide. Omit a field only when it genuinely has no value yet and
-     say so explicitly. A pack is context, never permission — never widens `write_scope`.
+   - **The context pack — hand over what you already know, every spawn, no exceptions.** Measured on
+     a real run: every spawn cost between 150k and 205k tokens regardless of what it did, and the
+     stage that wrote production code was the *cheapest* one. The dominant cost isn't the work, it's
+     an agent standing up with no idea where it is and spending its first three to five turns
+     rediscovering facts the orchestrator is already holding. Those early turns are the expensive
+     ones, because every later turn resends their output. So paste the following into the prompt
+     rather than letting the subagent go find it:
+     - `source_spec`'s full text, pasted verbatim (see above) — not just its path
+     - the stage's `write_scope` globs (above)
+     - **the stage's `exit_criteria.run` command, already executed by you, with its real exit code
+       and output.** Run it before spawning. This is the single highest-value field: it tells the
+       agent the starting state — red, green, or broken — without it burning a turn to find out, and
+       it costs you nothing you weren't going to run in step 3 anyway. When `exit_criteria.type` is
+       `artifact_exists` instead, say whether the artifact is currently present.
+     - the files and line ranges the **most recent stage commit with a non-empty code diff**
+       touched — `git diff --name-only` and `git diff -U0` against that commit, pasted, not
+       summarized. This is deliberately not just "the previous stage": a stage immediately
+       downstream of a no-diff stage (`implement-*` follows `freeze-tests`, whose own commit is
+       essentially a `state.json` update) would otherwise get a near-empty diff pasted while the
+       diff it actually needs — `generate-tests`'s — goes unmentioned. Walk `state.json`/`git log`
+       back past any stage whose commit touched no code paths. For `implement-*` specifically, also
+       paste the frozen test suite's file list (the freeze stage's `write_scope`, resolved to real
+       paths) alongside the diff — that's what it's implementing against.
+     - the previous stage's verdict artifact path **and its verdict line**
+     - anything under `<run-folder>/evidence/` and `<run-folder>/harness/` (see the artifact-reuse
+       and harness notes in `references/efficiency-notes.md`) — path plus one line on what each holds
+     - on a `fixing` retry: the specific findings being fixed, which you already have from the
+       failing stage's own output. Not "it failed" — the actual claims.
+     - on a **post-`reworking` re-run** of a judgment stage: never resume across the transition (the
+       frozen baseline genuinely changed, so a fresh spawn with a fresh pack is mandatory) — but the
+       fresh pack itself still doesn't need to be blank. For `review`/`verify` (whose review scope is
+       already just the diff — the pack already hands them nothing but `git diff -U0` against the
+       previous stage), add the rework diff and one scope line: "re-verify the changed lines and
+       every test/scenario sharing their AC or fixtures — not the whole suite from scratch." Do
+       **not** apply that same diff-only narrowing to `test-review`'s post-reworking re-run — its
+       whole job is catching relations *between* test files, which a diff-scoped pack would hide by
+       construction. Instead, for `test-review` specifically: compute per-file changed-vs.-identical
+       status against the prior verdict pass (`git diff --stat` plus the file hashes already computed
+       for the freeze), and hand the reviewer "the standalone correctness of byte-identical files
+       stands as previously verified; re-verify the changed lines, their ACs, and every interaction
+       between the changed content and any prior finding" — cross-file contradictions stay in scope
+       because they're by definition an interaction with the changed content, even when the other
+       file involved is byte-identical to what was reviewed before.
+
+     Every field here is read off the workflow's own files or off `git`, so none of it assumes a
+     language, a test runner, or a project layout. Omit a field only when it genuinely has no value
+     yet (no previous stage, no verdict artifact) and say so explicitly — a silently missing field
+     reads to the subagent as "nothing to see here," which is exactly the wrong inference when the
+     truth is "not gathered." Two failure modes to watch: a pack that has gone **stale** (you ran
+     `exit_criteria` before an intervening change) is worse than no pack, since the agent trusts it —
+     regenerate the pack for each attempt rather than reusing the previous one; and a pack is context,
+     never permission — it never widens `write_scope`, and step 3 re-verifies everything regardless
+     of what the pack said.
    - **Efficiency note — not every stage needs a fresh subagent.** Run the check directly instead
      of spawning one when a stage's whole job is a mechanical re-check `exit_criteria` already
      covers (empty `write_scope`, no judgment call). Reserve spawns for work a shell command can't
@@ -236,17 +275,46 @@ do when one or both of them fail.
      step 2's exception above — not the failing reviewer's), then re-run the failing stage's own work
      (step 2) and `exit_criteria` (step 3) again — the loop re-checks the *same* stage's
      exit_criteria, it doesn't just trust the fix.
-     - **Scope-cap the recheck itself**, for any `on_fail.target`-based retry re-run of
-       `test-review`/`review`/a security stage (never `spec-review`'s own self-edit loop, which has
-       no `target` and must always re-run its full checklist). Ask the retry pass for exactly two
-       things: (a) confirm each prior finding is addressed, (b) check the changed lines — diffed
-       against the commit the *last full-scope pass* reviewed, not just this attempt's delta —
-       including their indirect effects through shared imports/helpers/fixtures, not just the literal
-       changed lines. Unchanged-to-unchanged relations already cleared on an earlier full pass stand
-       (step 3's `write_scope` revert already guarantees nothing else changed) — but this scoping
-       never applies across a `reworking` transition, which is always a full fresh review. Where a
-       blocking finding admits a runnable check, run it yourself while composing the retry pack
-       rather than asking the reviewer to re-derive it.
+     - **Scope-cap the recheck itself — this is where most of a `fixing` loop's cost lives.**
+       Applies to any `on_fail.target`-based retry re-run of `test-review`, `review`, or a security
+       stage (never `spec-review`'s own self-edit loop — that stage owns no `target`, edits its own
+       source, and must re-run its full contradiction checklist — Runtime Invariants vs. Edge
+       Cases/ACs, Reality Constraints vs. ACs — on every attempt regardless of edit size; a spec
+       edit can introduce a contradiction anywhere, not just near the edited lines). No size
+       threshold needed — for a large fix diff the scoped pass naturally approaches a full review,
+       so the cap is safe at every size rather than gated on "provably small." Compose the retry
+       prompt to ask for exactly two things: (a) confirm each prior finding is addressed by the fix
+       diff, and (b) check the changed lines against the stage's own risk checklist *including their
+       interactions with unchanged files* — explicitly stating that unchanged-to-unchanged relations
+       already cleared on an earlier full pass stand, because step 3's `write_scope` check-and-revert
+       already mechanically guarantees nothing outside the fix diff changed. Three guards, always
+       together:
+       1. **Baseline** — "changed lines" means the cumulative diff against the commit the
+          **last full-scope pass** reviewed (`git diff <last-full-pass-commit> -- <target's
+          write_scope>`), never just the latest attempt's incremental delta — otherwise on attempt
+          ≥2, content an earlier failed fix already touched inherits a "cleared" status it never
+          earned.
+       2. **Indirect effects** — the standing-clearance claim covers only relations the diff cannot
+          affect even indirectly. Require the reviewer to trace the changed lines' effects through
+          imports, shared helpers, and fixtures before treating any unchanged-to-unchanged relation
+          as settled — a fix to a shared helper can alter the semantics of two files with zero
+          changed lines of their own. When respawning fresh rather than resuming (the respawned agent
+          has no memory of the original full pass), this also means scanning call sites and consumers
+          of anything the fix diff changed — signatures, exported symbols, shared config — not just
+          the diff's own lines.
+       3. **Boundaries** — this scoping applies only *inside* a `fixing` loop against a live
+          `on_fail.target`. It stops being safe at the moment of a `reworking` transition, which is
+          always a full fresh review with no scope narrowing (see the post-reworking pack rule under
+          step 2). And "don't re-derive the whole review" must never be read as "don't run the
+          commands needed to confirm one specific prior finding" — those stay allowed; what's capped
+          is re-scanning content the diff provably didn't touch, not verification itself.
+
+       Where a blocking finding in the verdict artifact carries a runnable check (a command whose
+       exit code flips once the finding is addressed — extend the existing numeric-claim rule to any
+       blocking finding that admits one, "where possible," never inventing a fake command for a
+       judgment-only finding), run that command directly as part of composing the retry pack instead
+       of asking the reviewer to re-derive it — mechanical confirmation costs zero subagent turns and
+       narrows the recheck's remaining judgment to the fix's new-risk surface only.
      TaskUpdate the stage's task's `activeForm` to
      something like
      "implement-csv-export — attempt 2/5, retrying after test failure" so a retry loop reads as
