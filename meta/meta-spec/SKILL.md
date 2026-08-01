@@ -3,20 +3,19 @@ name: meta-spec
 description: >
   Writes a lean, build-ready spec for the meta/ role library — testable acceptance criteria,
   the needs_ui / needs_devops / tests_first flags, edge cases, a verified codebase survey, and
-  explicit out-of-scope — in one short pass, one file. Deliberately lighter than kestra-spec:
-  no runtime-invariant table, no reality-constraints matrix, no execution-verified self-check.
-  Trigger on "write a spec for this", "turn this idea into acceptance criteria", "spec this out
-  before we build", "what are the ACs for this feature", or as meta-orc's first stage. If the
-  work carries silent-failure risk, multi-service contracts, or test doubles whose fidelity
-  matters, escalate to kestra-spec instead — this skill says so itself rather than pretending
-  the lighter pass covers it.
+  explicit out-of-scope — in one short pass, one file. Deliberately lean: no runtime-invariant
+  table, no reality-constraints matrix, no execution-verified self-check. Trigger on "write a
+  spec for this", "turn this idea into acceptance criteria", "spec this out before we build",
+  "what are the ACs for this feature", or as meta-orc's first stage. If the work carries
+  silent-failure risk, multi-service contracts, or test doubles whose fidelity matters, this
+  skill stops and says so rather than pretending the lighter pass covers it.
 ---
 
 # meta-spec — Lean Spec for the meta/ Chain
 
 **Role:** Get from a rough ask to acceptance criteria someone can actually build and test
-against, fast — without the ceremony `kestra-spec` needs to feed a mechanically-enforced stage
-machine. One pass, one file.
+against, fast — without the ceremony a mechanically-enforced stage machine needs upstream of it.
+One pass, one file.
 
 The spec role in the `meta/` library. Feeds [`meta-designer`](../meta-designer/SKILL.md),
 [`meta-test-writer`](../meta-test-writer/SKILL.md), and [`meta-dev`](../meta-dev/SKILL.md),
@@ -26,21 +25,30 @@ and is [`meta-orc`](../meta-orc/SKILL.md)'s first stage when no spec exists yet.
 
 ## When this is the wrong tool — check first, it takes one read
 
-`meta-spec` is lighter because it assumes a human reviews the result downstream and the blast
-radius of a miss is small. Escalate to [`kestra-spec`](../../workflow/kestra-spec/SKILL.md) when
-any of these hold, and say which one:
+`meta-spec` is lean because it assumes a human reviews the result downstream and the blast radius
+of a miss is small. Where that assumption breaks, the honest move is to stop and say which of
+these holds — not to write a thinner version of a section the work actually needed:
 
 * **Silent failure is possible** — a condition could go false and the system carry on, with
-  nobody finding out until damage is done. That's what `kestra-spec`'s Runtime Invariants table
-  exists for, and there's no lightweight substitute.
-* **Test doubles whose fidelity matters** — a faked external dependency where "what it does *not*
-  guarantee" is the interesting question. `kestra-spec`'s Reality Constraints feeds
-  `meta-test-review`; without it, that review has no standard to judge against.
-* **2+ services, or a decision with lasting architectural consequence** — approach comparison and
-  integration contracts belong in a spec that has room for them.
+  nobody finding out until damage is done. That needs a runtime-invariant table: every invariant
+  named, how it's detected at runtime, and what happens on violation (halt / refuse / alert —
+  never "log and continue"). There is no lightweight substitute; a one-line mention of the risk
+  reads as coverage without being any.
+* **Test doubles whose fidelity matters** — a faked external dependency where *what it does not
+  guarantee* is the interesting question. That needs a reality-constraints matrix, and without
+  one a later test-double review has no standard to judge against — it can only check the double
+  against the assumptions the same author already made.
+* **2+ services, or a decision with lasting architectural consequence** — approach comparison,
+  integration contracts, and data-model impact belong in a spec that has room for them.
 
 None of those → this skill is the right size. Deciding by reflex that "more spec is safer" costs
 a longer pass on every small feature, which is the exact overhead `meta/` exists to avoid.
+
+**Where to escalate to is the caller's call, not this skill's.** Name the trigger that fired and
+what the work needs, then stop; whoever called you knows which heavier process is available in
+this environment. (In the repo this skill ships from, that's `workflow/kestra-spec` — a
+suggestion worth mentioning if it's installed, never a dependency. `meta/` skills stay usable on
+a machine where nothing else from that repo exists.)
 
 ---
 
@@ -152,7 +160,8 @@ keeps specs — ask if there's an existing convention.
 * `tests_first`: [true|false] — [reason]
 
 ## Escalation Check
-* [none of kestra-spec's triggers apply — or: escalate because <which one>]
+* [none of the three escalation triggers apply — or: escalate because <which one>, which needs
+  <what the work requires that this spec can't carry>]
 
 ## Out of Scope
 * [explicitly excluded]
@@ -166,8 +175,8 @@ keeps specs — ask if there's an existing convention.
 ## Mindset
 
 - **Lean is the point, not a compromise.** Every section here earns its place by being something
-  a downstream stage actually reads. Adding a section "for completeness" makes this
-  `kestra-spec` with extra steps.
+  a downstream stage actually reads. A section added "for completeness" is one nobody consumes,
+  paid for on every spec.
 - **Verified beats plausible.** A file path you didn't check is a guess wearing a spec's
   authority. Checking costs seconds.
 - **Honest about its own ceiling.** The escalation check is not a formality — a spec that quietly

@@ -39,7 +39,7 @@ If it names neither — pure logic over the project's own types, no I/O, no exte
 
 Ask for a table with one row per risk below, each marked applicable or n/a with `file:line` evidence — never a prose write-up. A prose reviewer reports what it happened to notice; a table forces an answer for every row, including the ones nobody thought to mention.
 
-*(This table is duplicated verbatim in [`workflow/kestra-build/references/full-mode-stages.md`](../../workflow/kestra-build/references/full-mode-stages.md), which generates the `test-review` stage brief. Change one, change the other — a stage brief and the skill it names disagreeing about what to check is worse than either version alone.)*
+*(This table is duplicated verbatim in `workflow/kestra-build/references/full-mode-stages.md` in the repo this skill ships from, which generates the `test-review` stage brief there. Change one, change the other — a stage brief and the skill it names disagreeing about what to check is worse than either version alone.)*
 
 | Risk | The double... | Recognized as |
 |---|---|---|
