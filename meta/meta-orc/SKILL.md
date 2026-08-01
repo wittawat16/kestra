@@ -157,15 +157,70 @@ Run stages **sequentially, not in parallel** — each one's output is the next o
 `meta-review`+`meta-security` spawn, which is a single subagent doing both checklists in one
 pass, not two spawns to parallelize.
 
-**Context pack — what to hand each stage:**
-- The task description / relevant `0-spec.md` sections, pasted in full — not a paraphrase.
-- `design.md`'s path + key constraints, if `needs_ui` and a prior `meta-designer` stage produced
-  one.
-- The previous stage's output artifact, in full (implementation notes, verify report, review
-  verdict) — the next stage's own skill already tells it to treat this as a claim to check, not a
-  fact, so pasting it isn't the same as trusting it.
-- `git diff --stat` since the chain started, once `meta-dev` has run — cheap, and lets every
-  downstream stage orient on the real change instead of the prose describing it.
+**Context pack — hand each stage what it consumes, not everything you hold.**
+
+The obvious version of this pastes the whole spec, the whole previous artifact, and the whole
+diff into every spawn. It's tempting because it can't *omit* anything — but re-sending context a
+stage never reads is the single largest measured waste in multi-agent pipelines (duplication
+rates of 53–86% across frameworks; one task that cost 28 tokens single-agent cost 1,158 across a
+five-agent system), and the named cause is passing whole transcripts where structured outputs
+would do. A `meta-devops` spawn does not need the design's token mapping; a `meta-designer` spawn
+does not need the AC coverage map.
+
+So: paste the sections a stage actually reads, **verbatim** — paraphrase is the failure this
+guards against, and a verbatim excerpt is not a paraphrase — then name the path of the rest so
+the stage can go read it if it turns out to need more. That's the middle between the two failure
+modes: pasting everything wastes tokens on every spawn, pasting nothing makes every stage re-pay
+the cold-start cost the pack exists to avoid.
+
+Every row below pastes **Overview + Acceptance Criteria + Edge Cases & Error States**, plus
+**Business Rules and Design Notes when the spec has them** (a spec from a heavier upstream process
+may; `meta-spec`'s own template doesn't). Call that the **common core** — it's short by
+construction and every stage reads it, so trimming it per-stage saves little and breaks things.
+The table lists what each stage gets *on top of* the core.
+
+| Stage | Plus, verbatim | Path only |
+|---|---|---|
+| `meta-spec` | the raw ask, in full | — (nothing else exists yet) |
+| `meta-designer` | Screen States | Files to Touch, Coverage Map, Codebase Survey |
+| `meta-test-writer` | Screen States; `design.md`'s screen-state table | rest of spec, rest of `design.md` |
+| `meta-test-review` | the test files in full (cross-file relations are its job), spec's dependency/constraint lines | rest of spec |
+| `meta-dev` | Files to Touch, `design.md`'s component audit + token mapping, `meta-test-writer`'s scenario table + the red suite's file list | rest of spec, the test bodies |
+| `meta-qa` | AC Coverage Map, `design.md`, `meta-dev`'s notes (deviations + assumptions), `git diff --stat` | rest of spec, full diff |
+| `meta-review`+`security` | full diff (`git diff -U0`), Out of Scope, `design.md`'s tokens/components, `meta-qa`'s report | rest of spec |
+| `meta-devops` | full diff, Dependencies + Flags + any env/migration/flag lines | Files to Touch, Coverage Map, `design.md` |
+
+Three things are never path-only, because a stage that skips them produces a wrong answer rather
+than a slower one: the **full diff** for `meta-review`/`meta-security`/`meta-devops` (the diff
+*is* the object under review); the **full test files** for `meta-test-review` (a contradiction
+between two test files is invisible in an excerpt of either); and **Edge Cases & Error States**
+for every stage, which is why it sits in the common core rather than in a row. That last one is
+the subtle case: edge cases are stated *outside* the AC list by both spec templates, so withholding
+them from implement, verify, and review in sequence lets a spec-named error path go
+un-implemented, un-verified, and un-reviewed while all three stages report clean.
+
+**Say in every pack that `meta-orc` re-verifies nothing.** Both `meta-qa` and `meta-review`
+deliberately relax their evidence discipline when a *mechanical* orchestrator called them — the
+justification being that such an orchestrator independently re-runs each stage's exit criteria, so
+auditing evidence format would duplicate a check a real exit code already settled. `meta-orc` runs
+no such check. A stage that assumes otherwise drops the only evidence audit in the chain, so state
+the absence explicitly rather than leaving the stage to infer it from the word "orchestrator."
+
+A pack is context, never permission — it never authorizes a stage to touch something its own
+skill wouldn't.
+
+**Record what each spawn cost, as it returns.** The Agent tool's result carries the subagent's
+token usage, and you know when you started it — so one line per stage costs nothing to keep and
+is the only record that will ever exist, since `meta-orc` has no `state.json` to reconstruct it
+from later. Keep a running table: stage id, tokens, wall-clock, and whether the stage was skipped
+(with which flag decided that).
+
+This is not bookkeeping for its own sake. A chain that can't say what it spent can't be tuned —
+every judgment about whether a stage earns its spawn stays a matter of opinion, and the stages
+that quietly dominate cost are exactly the ones nobody suspects. Source it from what you already
+hold; never spawn an extra subagent to measure, and never let these numbers influence a stage's
+verdict — they're informational, and a stage that "cost too much" still passed or failed on its
+own evidence.
 
 ### 3. On stop — first non-clear verdict, no exceptions
 
@@ -193,17 +248,37 @@ trade against `kestra-run`, not an oversight; say so if a user seems to expect r
 
 Once every resolved stage has a clean pass, write a short run summary (in chat, or as
 `meta-orc-log.md` next to the spec if one exists) — which stages ran, which were skipped and why,
-final verdicts, and the real `git diff --stat`. This is the point where the user commits,
+final verdicts, the real `git diff --stat`, and the cost table below. This is the point where the user commits,
 opens a PR, or hands off to whatever human review process the task actually needs — `meta-orc`
 does not commit or push on its own.
+
+```markdown
+| Stage | Tokens | Wall-clock | Outcome |
+|---|---|---|---|
+| meta-spec | 42k | 1m10s | flags: needs_ui=true, tests_first=false |
+| meta-designer | 88k | 2m03s | design.md written |
+| meta-dev | 131k | 3m47s | 4 files, matches plan |
+| meta-qa | 96k | 2m31s | 🟢 VERIFIED |
+| meta-review+security | 104k | 2m18s | VERDICT: CLEAR |
+| meta-devops | — | — | skipped (needs_devops: false) |
+| **total** | **461k** | **11m49s** | |
+```
+
+Print it on a stop, too, not only on a clean finish — a run that stopped at `meta-qa` having
+already spent four stages is exactly the case where the number is worth seeing. Report it as
+measured; if a stage's usage wasn't captured (an interrupted spawn, a resumed session), write
+"not tracked" for that row rather than estimating, since a made-up number here is worse than a
+gap — it would be used to tune the pipeline.
 
 ---
 
 ## Optional stages — not in the default chain, insert deliberately
 
 * **`meta-test-writer`** — gated on `tests_first` (see flag table). When on, it runs before
-  `meta-dev` and its scenario table + red suite go into `meta-dev`'s context pack as the thing to
-  implement against. `meta-dev`'s brief in that case should say the suite is the contract: make it
+  `meta-dev`. Its **scenario table** goes into `meta-dev`'s pack verbatim as the contract, with the
+  suite's file paths rather than the test bodies — the table already states every Given/When/Then,
+  and `meta-dev` reads the code around each file it edits anyway, so pasting the bodies duplicates
+  what it is about to read. `meta-dev`'s brief in that case should say the suite is the contract: make it
   green, and if a test looks *wrong*, raise it rather than edit it — `meta-orc` can't enforce that
   boundary mechanically, so the instruction is the only thing holding it.
 * **`meta-test-review`** — only when `tests_first` is on **and** the suite it produced mocks an
