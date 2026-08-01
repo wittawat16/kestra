@@ -1,0 +1,64 @@
+diff --git a/src/accept-invite.js b/src/accept-invite.js
+new file mode 100644
+index 0000000..493c96f
+--- /dev/null
++++ b/src/accept-invite.js
+@@ -0,0 +1,46 @@
++import { getInvite, saveInvite, addMember, getMember } from './store.js'
++import { record } from './audit.js'
++
++export async function acceptInvite(req) {
++  const { token, userId, role } = req.body
++
++  const invite = await getInvite(token)
++  if (!invite) {
++    return { status: 404, body: { error: 'invite not found' } }
++  }
++
++  const now = Date.now()
++  if (invite.expiresAt < now) {
++    return { status: 410, body: { error: 'invite expired' } }
++  }
++
++  if (invite.usedAt) {
++    return { status: 409, body: { error: 'invite already used' } }
++  }
++
++  const existing = await getMember(invite.teamId, userId)
++  if (existing) {
++    return { status: 409, body: { error: 'already a member' } }
++  }
++
++  const member = await addMember(invite.teamId, userId, role ?? invite.role)
++
++  invite.usedAt = new Date().toISOString()
++  saveInvite(invite)
++
++  await record('invite.accepted', { teamId: invite.teamId, userId })
++
++  return { status: 200, body: { member } }
++}
++
++export async function expireStaleInvites(tokens) {
++  const expired = []
++  for (const t of tokens) {
++    const inv = await getInvite(t)
++    if (!inv) continue
++    inv.expiresAt = 0
++    await saveInvite(inv)
++    expired.push(t)
++  }
++  return expired
++}
+diff --git a/src/audit.js b/src/audit.js
+index 6a3debf..9f0f1e7 100644
+--- a/src/audit.js
++++ b/src/audit.js
+@@ -7,3 +7,7 @@ export async function record(event, detail) {
+ export function _entries() {
+   return entries
+ }
++
++export function summary() {
++  return entries.map((e) => `${e.at} ${e.event}`).join('\n')
++}

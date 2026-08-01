@@ -156,8 +156,23 @@ The asymmetry is worth stating plainly because it looks arbitrary otherwise. `me
 artifact that two later stages examine directly and mechanically. `meta-spec`, `meta-test-writer`,
 `meta-review`, `meta-security`, `meta-test-review`, and `meta-devops` all produce *judgments* —
 an AC someone will build from, a scenario someone will implement against, a verdict someone will
-trust — and no later stage re-derives that judgment. A cheaper model there fails silently and
-convincingly: it reports zero findings, and zero findings is indistinguishable from a clean pass.
+trust — and no later stage re-derives that judgment. If one of them is wrong, nothing in the chain
+is positioned to notice.
+
+**What a measured comparison actually found, since the paragraph above is reasoning and reasoning
+can be wrong.** Running `meta-review` on the same diff on a cheaper and a stronger model
+(`meta/evals/2026-08-01-review-model-compare/`) did *not* reproduce the failure this rule was
+written to prevent: the cheaper reviewer blocked on all four critical defects, ran real probes
+instead of reading and reasoning, rejected a fabricated QA report, and avoided the planted false
+positive. What separated the two was narrower — the stronger model additionally connected an
+unrequested helper to the root cause of a type bug, and noticed an identifier arriving from the
+request body unbound to any authenticated principal. Both are findings that need a relation drawn
+across the diff rather than a line inspected, and the second is security-relevant. It also cost
+about 5% *fewer* tokens on that run. So keep judgment stages at full model — but for the honest
+reason: at this stage size the saving is negligible or negative, and the findings you give up are
+exactly the non-obvious ones a review exists for. Don't repeat the stronger claim that a cheaper
+reviewer would have waved the bug through; on one measured diff, it didn't. n=1, and a subtler
+defect profile could separate them differently.
 
 **One difference from a mechanically-enforced pipeline, and it changes the trade.** Where a fix
 loop exists, a cheap `meta-dev` mistake costs an automatic retry — nearly free. `meta-orc` has no
