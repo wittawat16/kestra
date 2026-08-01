@@ -126,6 +126,101 @@ of the two triggered it.
 
 ---
 
+## How hard each stage tries — the one place cost is genuinely traded against quality
+
+The flags decide *which* stages run. This section decides *how much each one spends*, and unlike
+everything above it, getting it wrong costs real quality rather than real tokens. Two dials, one
+principle: **a stage may be run cheaply only when something downstream would independently catch
+its mistake.** Where nothing re-checks a stage, its reasoning is the last word, and a cheaper
+version of the last word is just a worse answer nobody is positioned to notice.
+
+### Dial 1 — model and effort, per stage
+
+| Stage | Safe to run cheap? | Because |
+|---|---|---|
+| `meta-dev` | **yes** — `effort: low`, or a faster model if the user asked | `meta-qa` re-runs the tests and exercises runtime; `meta-review` reads the real diff. A wrong implementation surfaces as a failed stage, not as a shipped bug |
+| every other stage | **no** — inherit the orchestrator's model and effort | nothing downstream re-checks how well they reasoned |
+
+**That safety net has one gap you have to close yourself, or the row above is not true.** The
+downstream stages check the diff in one direction only — `meta-review` asks whether every *claimed*
+change is present, never whether every *present* change was planned, and `meta-qa`'s ledger is
+keyed on acceptance criteria rather than on files. So a stage that wandered outside its plan is
+reported by nobody but itself, in prose, which is exactly what a cheap model gets wrong. Close it
+mechanically, since it costs one command you are already running: compare `git diff --name-only`
+against the spec's **Files to Touch**, and put any file in the diff that the plan never named into
+`meta-review`'s pack as a finding to judge. This is a *report*, not enforcement — nothing gets
+reverted, `meta-orc` has no write-scope allowlist and this doesn't give it one — but an unplanned
+file that a human sees is a categorically different thing from one that no stage ever mentions.
+
+The asymmetry is worth stating plainly because it looks arbitrary otherwise. `meta-dev` writes an
+artifact that two later stages examine directly and mechanically. `meta-spec`, `meta-test-writer`,
+`meta-review`, `meta-security`, `meta-test-review`, and `meta-devops` all produce *judgments* —
+an AC someone will build from, a scenario someone will implement against, a verdict someone will
+trust — and no later stage re-derives that judgment. A cheaper model there fails silently and
+convincingly: it reports zero findings, and zero findings is indistinguishable from a clean pass.
+
+**One difference from a mechanically-enforced pipeline, and it changes the trade.** Where a fix
+loop exists, a cheap `meta-dev` mistake costs an automatic retry — nearly free. `meta-orc` has no
+fix loop; it stops and hands back to the user. So running `meta-dev` cheap here trades tokens for
+*interruptions*, not for retries. That's usually still a good trade on a small, well-specified
+change, and a bad one on work where being interrupted is expensive. Say which you're assuming when
+you show the plan, rather than defaulting silently.
+
+`meta-designer` is the near-miss worth naming: `meta-review` does check its output for token and
+component consistency, which looks like the same safety net `meta-dev` enjoys. It isn't — that
+check catches a design *inconsistently applied*, never a design that was wrong to begin with. Keep
+it at full effort.
+
+### Dial 2 — the small-change lane
+
+Review pipelines consistently find that small diffs yield findings far less often than large ones,
+so spending identical effort on both wastes real money. But "small" is not the same as "safe", and
+a lane keyed on size alone would happily fast-path a one-line change to an authorization check. So
+the trigger is a conjunction, and **every** part must hold:
+
+* the spec's **Files to Touch** names 3 or fewer files, in one component
+* **Dependencies** is "none" — no new package, no migration
+* nothing touched under the protected paths `meta-security` already treats as a stop:
+  `.env`, `auth/`, `payments/`, `**/secrets/**`
+* `needs_devops` is false
+
+**When all four hold, the lane does exactly one thing: `meta-dev` runs at `effort: low`.** It
+skips no stage. That is a deliberately small payoff, and the reason is worth keeping in view,
+because the obvious extension is the one that breaks the chain.
+
+**Why the lane skips nothing — including `meta-designer` on a copy-only change.** Skipping a stage
+looks tempting where the change is "just a label", but `meta-designer` doesn't only produce a
+mockup: it adds **design ACs** to the spec, and those ACs are what `meta-qa`'s coverage ledger is
+complete *over* and what `meta-review`'s UI check — blocking for UI features — is anchored to. Skip
+it and both downstream stages still run, still find nothing missing, and still report clean, because
+the standard they would have judged against was never written. That isn't a cheaper run; it's the
+same run with two of its checks quietly disarmed. The same reasoning bars dropping `meta-qa` or the
+combined `meta-review`+`meta-security` pass: passing tests say nothing about an injection vector or
+a missing authorization check, and a short diff is not evidence of a boring one — the smallest
+diffs in this category are exactly the ones that flip a single comparison operator in a
+security-relevant path.
+
+So the lane's ceiling is low on purpose. In a chain with no write-scope enforcement, no test freeze,
+and no fix loop, the judgment stages *are* the safety net, and there is no version of "spend less"
+that removes part of a safety net and stays honest about it.
+
+**Resolve the lane after the spec exists, and fail closed when it can't be read.** The first two
+conditions read sections of `0-spec.md`, so when `meta-spec` is stage one the lane is undecided
+until it returns — say "pending spec" in the plan rather than guessing. When the input is a bare AC
+list with no Files to Touch and no Dependencies section, the conditions are unreadable rather than
+satisfied: **the lane does not apply.** An absent section is not a small change; it's an unknown
+one.
+
+**Report afterwards whether the estimate held — as calibration, not as a remedy.** Once `meta-dev`
+returns, compare the real diff against the four conditions and note the answer in the cost table.
+This changes nothing about the run (the only saving was `meta-dev`'s effort, and that is already
+spent — do not re-run it at full effort on this basis alone). What it buys is the one thing that
+tells you whether the trigger is any good: a record of how often a spec that predicted three files
+produced nine. A lane whose estimate is routinely wrong should be tightened, and without this line
+nobody would ever find out.
+
+---
+
 ## Process
 
 ### 1. Gather input, confirm the plan once
@@ -143,6 +238,11 @@ asking again, same posture as `kestra-run`'s single up-front confirmation. When 
 the list, note that stages after it are provisional: its flags decide the rest of the chain, so
 the plan can legitimately change shape once it returns.
 
+Resolve the two dials above in the same breath and show them in the plan: whether the small-change
+lane applies (and which of its four conditions decided that, or "pending spec" when `meta-spec`
+hasn't run yet), and which stages are running below full effort. A cost decision the user can't see
+before it's spent is one they can only object to afterwards.
+
 ### 2. Spawn each stage in order
 
 For each stage in the resolved list, spawn a subagent (Agent tool) whose prompt:
@@ -151,6 +251,9 @@ For each stage in the resolved list, spawn a subagent (Agent tool) whose prompt:
 - Includes the **context pack** (below).
 - Asks for the skill's own defined output format verbatim — `meta-orc` doesn't invent a report
   shape on top of what each skill already produces.
+- Carries the `model`/`effort` override the dials above resolved for this stage — which for every
+  stage but `meta-dev` means passing nothing and inheriting your own. Don't downgrade a stage on
+  your own initiative; the dials are the only place that decision is allowed to live.
 
 Run stages **sequentially, not in parallel** — each one's output is the next one's input, unlike
 `kestra-run`'s independent-`write_scope` siblings. The one exception is the combined
@@ -187,7 +290,7 @@ The table lists what each stage gets *on top of* the core.
 | `meta-test-review` | the test files in full (cross-file relations are its job), spec's dependency/constraint lines | rest of spec |
 | `meta-dev` | Files to Touch, `design.md`'s component audit + token mapping, `meta-test-writer`'s scenario table + the red suite's file list | rest of spec, the test bodies |
 | `meta-qa` | AC Coverage Map, `design.md`, `meta-dev`'s notes (deviations + assumptions), `git diff --stat` | rest of spec, full diff |
-| `meta-review`+`security` | full diff (`git diff -U0`), Out of Scope, `design.md`'s tokens/components, `meta-qa`'s report | rest of spec |
+| `meta-review`+`security` | full diff (`git diff -U0`), Files to Touch + any unplanned files you found in it, Out of Scope, `design.md`'s tokens/components, `meta-qa`'s report | rest of spec |
 | `meta-devops` | full diff, Dependencies + Flags + any env/migration/flag lines | Files to Touch, Coverage Map, `design.md` |
 
 Three things are never path-only, because a stage that skips them produces a wrong answer rather
@@ -253,15 +356,15 @@ opens a PR, or hands off to whatever human review process the task actually need
 does not commit or push on its own.
 
 ```markdown
-| Stage | Tokens | Wall-clock | Outcome |
-|---|---|---|---|
-| meta-spec | 42k | 1m10s | flags: needs_ui=true, tests_first=false |
-| meta-designer | 88k | 2m03s | design.md written |
-| meta-dev | 131k | 3m47s | 4 files, matches plan |
-| meta-qa | 96k | 2m31s | 🟢 VERIFIED |
-| meta-review+security | 104k | 2m18s | VERDICT: CLEAR |
-| meta-devops | — | — | skipped (needs_devops: false) |
-| **total** | **461k** | **11m49s** | |
+| Stage | Effort | Tokens | Wall-clock | Outcome |
+|---|---|---|---|---|
+| meta-spec | full | 42k | 1m10s | flags: needs_ui=true, tests_first=false |
+| meta-designer | full | 88k | 2m03s | design.md written |
+| meta-dev | low | 131k | 3m47s | 4 files, matches plan |
+| meta-qa | full | 96k | 2m31s | 🟢 VERIFIED |
+| meta-review+security | full | 104k | 2m18s | VERDICT: CLEAR |
+| meta-devops | — | — | — | skipped (needs_devops: false) |
+| **total** | | **461k** | **11m49s** | lane: applied (spec said 3 files, diff was 4 — estimate held) |
 ```
 
 Print it on a stop, too, not only on a clean finish — a run that stopped at `meta-qa` having
