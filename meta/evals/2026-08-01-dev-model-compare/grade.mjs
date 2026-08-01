@@ -23,9 +23,36 @@ const fresh = (over = {}) => ({
   ...over,
 })
 
+// --- signature adapter (added AFTER the runs; see README "A bug in this grader") ---
+// The pinned rubric assumed `acceptInvite(req)` with `req.body`, copying the shape of the
+// deliberately-defective handler from the review eval. The spec pins only the RETURN shape
+// (`{status, body}`) and never states the input shape, so both models were free to choose — and
+// both chose flat arguments. The ten pass/fail criteria below are unchanged; only the calling
+// convention is detected rather than assumed.
+const CONVENTIONS = [
+  { name: 'acceptInvite(req) with req.body', fn: (b) => acceptInvite({ body: b }) },
+  { name: 'acceptInvite({token, userId, role})', fn: (b) => acceptInvite(b) },
+  { name: 'acceptInvite(token, userId, role)', fn: (b) => acceptInvite(b.token, b.userId, b.role) },
+]
+
+let convention = null
+for (const c of CONVENTIONS) {
+  store._reset?.()
+  await store.saveInvite({ token: 'probe', teamId: 'tp', role: 'member', expiresAt: Date.now() + 86_400_000 })
+  try {
+    const res = await c.fn({ token: 'probe', userId: 'up' })
+    if (res?.status === 200) { convention = c; break }
+  } catch {}
+}
+if (!convention) {
+  console.error('could not detect a calling convention that accepts a valid invite')
+  process.exit(2)
+}
+console.log(`calling convention: ${convention.name}\n`)
+
 async function call(body) {
   try {
-    return await acceptInvite({ body })
+    return await convention.fn(body)
   } catch (e) {
     return { status: 'THREW', error: String(e?.message ?? e) }
   }

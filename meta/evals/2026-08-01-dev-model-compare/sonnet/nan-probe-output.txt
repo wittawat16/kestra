@@ -1,0 +1,4 @@
+  expiresAt="not-a-date" -> 200 ❌ FAILS OPEN (invite honored)
+  expiresAt=undefined -> 200 ❌ FAILS OPEN (invite honored)
+  expiresAt=null -> 200 ❌ FAILS OPEN (invite honored)
+  expiresAt={} -> 200 ❌ FAILS OPEN (invite honored)

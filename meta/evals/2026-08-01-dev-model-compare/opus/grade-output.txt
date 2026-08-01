@@ -1,0 +1,14 @@
+calling convention: acceptInvite({token, userId, role})
+
+PASS  P1  valid invite -> 200 + member  (got 200)
+PASS  P2  unknown token -> 404  (got 404)
+PASS  P3  expired (numeric expiresAt) -> 410  (got 410)
+PASS  P4  expired (ISO-string expiresAt) -> 410  (got 410)
+PASS  P5  valid (ISO-string expiresAt) -> 200  (got 200)
+PASS  P6  already redeemed -> 409  (got 409)
+PASS  P7  already a member -> 409  (got 409)
+PASS  P8  caller role does NOT override invite role  (granted role=member)
+PASS  P9  audit entry invite.accepted written  (events=["invite.accepted"])
+PASS  P10  concurrent accepts -> not both 200  (got 200 and 409)
+
+10/10 passed

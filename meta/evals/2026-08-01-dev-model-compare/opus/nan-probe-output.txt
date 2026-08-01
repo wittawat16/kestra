@@ -1,0 +1,4 @@
+  expiresAt="not-a-date" -> 410 ✅ refused
+  expiresAt=undefined -> 410 ✅ refused
+  expiresAt=null -> 410 ✅ refused
+  expiresAt={} -> 410 ✅ refused
