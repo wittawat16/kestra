@@ -21,6 +21,15 @@ The spec role in the `meta/` library. Feeds [`meta-designer`](../meta-designer/S
 [`meta-test-writer`](../meta-test-writer/SKILL.md), and [`meta-dev`](../meta-dev/SKILL.md),
 and is [`meta-orc`](../meta-orc/SKILL.md)'s first stage when no spec exists yet.
 
+**Suggested model, if spawning this as a subagent with a model to choose:** Opus 5. Measured
+same-effort against Sonnet 5 on this skill (`meta/evals/2026-08-01-spec-model-compare/`): both
+produced buildable specs and neither invented a file path, but only Opus caught that an in-process
+cache makes the feature's own "refreshed" confirmation false on any multi-instance deployment —
+and correctly left instance count as a blocking Open Item rather than assuming it. It also cost
+~6% *fewer* tokens at identical wall-clock, so there's little to weigh against it. A suggestion to
+offer the user, not a default to pick silently. Doesn't apply when running inline in an
+already-active session.
+
 ---
 
 ## When this is the wrong tool — check first, it takes one read
@@ -34,6 +43,16 @@ these holds — not to write a thinner version of a section the work actually ne
   named, how it's detected at runtime, and what happens on violation (halt / refuse / alert —
   never "log and continue"). There is no lightweight substitute; a one-line mention of the risk
   reads as coverage without being any.
+  * Ask this about the feature's **data** *and* about the **signals it emits**. "Can this value go
+    stale or wrong unnoticed?" is the obvious half; "does every success this feature reports
+    actually mean what it says?" is the half that gets missed, and a confirmation shown to a human
+    who then stops checking is worse than no confirmation. A measured run of this skill named the
+    staleness risk, mitigated it with a TTL, and cleared the trigger — while missing that the
+    feature's own "done" message was false whenever more than one process was running.
+  * Look outside the file, too. Anything holding state in process memory, or assuming one copy of
+    itself is running — caches, in-flight maps, schedulers, locks, counters — behaves differently
+    at two instances than at one, and the code shows nothing. If the repo has no deploy manifest to
+    settle it, that's an **Open Item**, not an assumption.
 * **Test doubles whose fidelity matters** — a faked external dependency where *what it does not
   guarantee* is the interesting question. That needs a reality-constraints matrix, and without
   one a later test-double review has no standard to judge against — it can only check the double
