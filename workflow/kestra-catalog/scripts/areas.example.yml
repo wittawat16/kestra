@@ -1,0 +1,30 @@
+# Business-area taxonomy for the test case catalog. Hand-edited — this is the one
+# file in the system a human owns outright, and the one thing build_index.py
+# cannot derive from the specs themselves.
+#
+# A run matches the FIRST area whose patterns match it, so when globs overlap,
+# put the specific area above the general one.
+#
+# Prefer globs to exhaustive lists: `isu-1??-nl2-submit-*` keeps future runs
+# assigned automatically, while a list of run ids drifts the moment nobody
+# remembers to update it.
+#
+# A run matching nothing lands in an "unassigned" group and prints a warning.
+# That is the honest outcome — do not invent an area to make it fit.
+
+areas:
+  nl2-order-flow:
+    title: NL2 — Order submission & exit
+    runs:
+      - isu-107-*
+      - isu-106-*
+      - isu-095-097-*
+
+  nl2-ranking:
+    title: NL2 — Ranking & signal
+    runs: [isu-091-*, isu-093-*, isu-094-*]
+
+  reporting:
+    title: Reporting
+    runs:
+      - report-generator

@@ -1,4 +1,4 @@
-# workflow/ — kestra-spec, kestra-build & kestra-run
+# workflow/ — kestra-spec, kestra-build & kestra-run (+ kestra-catalog)
 
 These three skills work together as a **spec-sharpener + generator + orchestrator** for building
 and running a "stage machine" that actually enforces TDD (not just asking the AI nicely to write
@@ -303,6 +303,31 @@ one.
 There's no separate "resume mode" — `state.json` plus the commit from the last passing stage
 already is the checkpoint. Just tell kestra-run to continue; it reads `current_stage` fresh every
 time.
+
+---
+
+## kestra-catalog — the test case catalog (optional, read-only)
+
+**Location:** [`kestra-catalog/`](kestra-catalog/) · detail: [`kestra-catalog/SKILL.md`](kestra-catalog/SKILL.md)
+
+The three skills above produce one folder per feature. After thirty-odd runs that's a good archive
+and a useless index — nobody can answer *"what do we test about order submission?"* without opening
+thirty-odd `0-spec.md` files, and `AC-1` means something different in each one.
+
+`kestra-catalog` reads every run's spec, extracts its acceptance criteria, groups them by
+**business area** rather than by ticket, and writes one self-contained searchable page:
+
+```
+workflows/docs/testcases/
+  areas.yml          # taxonomy — hand-edited, the one thing that can't be derived
+  build_index.py     # copied into the repo, so CI/a fresh clone can regenerate without the skill
+  index.html         # generated: area → run → full AC text, search + filters
+```
+
+It sits outside the spec→build→run chain and changes none of it: read-only over
+`workflows/runs/*/0-spec.md`, never edits a spec, never runs a stage. Status badges come from each
+run's `state.json` and are **per run, not per AC** — the page claims "this AC comes from a run that
+completed the pipeline", never "this AC passed".
 
 ---
 
