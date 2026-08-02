@@ -1,0 +1,41 @@
+| AC-1 | US-1, US-2 | `src/console.js` summary builder → `test/console.test.js` |
+| AC-2 | US-3 | `src/console.js` summary builder (Set over `pending`) → `test/console.test.js` |
+| AC-3 | US-4 | `src/console.js` summary builder → `test/console.test.js` |
+| AC-4 | US-5, US-50 | `src/queue.js` `enqueuedAt`; `src/console.js` summary + injected `now` → `test/console.test.js` |
+| AC-5 | US-7 | `src/console.js` fragment builder (summary takes the queue, rows take the slice) → `test/console.test.js` |
+| AC-6 | US-9 | `src/console.js` row builder (no sort) → `test/console.test.js` |
+| AC-7 | US-10, ID§Semantics | `src/console.js` filter whitelist → `test/console.test.js` |
+| AC-8 | US-11, US-12 | `src/console.js` type-option builder → `test/console.test.js` |
+| AC-9 | US-13 | `src/console.js` `ROW_CAP` + truncation notice → `test/console.test.js` |
+| AC-10 | US-14 | `src/console.js` `FilterBar` clear control → `test/console.test.js` |
+| AC-11 | US-8, US-15 | `src/console.js` detail route → `test/console.test.js` |
+| AC-12 | US-16, US-19 | `src/console.js` `PayloadBlock` → `test/console.test.js` |
+| AC-13 | US-17, US-18, US-49, ID§Semantics | `src/queue.js` `lastError`; `src/console.js` `DetailPanel` → `test/console.test.js` |
+| AC-14 | US-19 | `src/console.js` `PayloadBlock` three-shape guard → `test/console.test.js` |
+| AC-15 | US-19 | `src/console.js` `PAYLOAD_MAX` truncation → `test/console.test.js` |
+| AC-16 | US-20 | `src/console.js` detail back link → `test/console.test.js` |
+| AC-17 | US-21, US-23, US-24 | `src/console.js` requeue move → `test/console.test.js` |
+| AC-18 | US-28 | `src/console.js` `POST` → `303` → `test/console.test.js` (`redirect:'manual'`) |
+| AC-19 | US-26 | `src/console.js` outcome resolution → `test/console.test.js` |
+| AC-20 | US-27 | `src/console.js` outcome resolution → `test/console.test.js` |
+| AC-21 | US-25 | `src/console.js` confirm route guard → `test/console.test.js` |
+| AC-22 | US-22 | `src/console.js` confirm route → `test/console.test.js` |
+| AC-23 | ID§Semantics (id-as-string) | `src/console.js` id resolver → `test/console.test.js` |
+| AC-24 | ID§Semantics (first match from head), FN | `src/console.js` id resolver → `test/console.test.js` |
+| AC-25 | US-42 | `src/console.js` single escaping helper → `test/console.test.js` hostile sweep |
+| AC-26 | US-46 | `src/console.js` `startConsole` loopback bind + address assert → `test/console.test.js` |
+| AC-27 | US-29, US-30, US-43 | `src/console.js` (no `step` import) → `test/console.test.js` recording double |
+| AC-28 | US-44, US-45 | `src/console.js` single-pass summary → `test/console.test.js` 10k smoke |
+| AC-29 | US-6, US-47 | `src/console.js` `SummaryGrid` + `:root` tokens → `test/console.test.js` (markup/CSS text assertions only) |
+| AC-30 | US-47 | `src/console.js` `SummaryGrid` desk breakpoint → `test/console.test.js` |
+| AC-31 | US-41 | `src/console.js` `StatusBanner` glyph+label pairs → `test/console.test.js` |
+| AC-32 | US-37, US-38 | `src/console.js` `EmptyState` two texts → `test/console.test.js` |
+| AC-33 | US-48, US-22, US-39 | `src/console.js` `:root` token block, emitted once → `test/console.test.js` |
+| AC-34 | US-49, ID§Modules (non-`Error` coercion) | `src/queue.js` catch branch → `test/queue.test.js` |
+| AC-35 | US-50, ID§Modules (default-before-merge) | `src/queue.js` `enqueue` spread order → `test/queue.test.js` |
+| AC-36 | ID§Chosen-1 Accepted-consequence, **corrected** — ⚠ inferred (Decision 3) | `src/queue.js` `lastStep` record → `test/queue.test.js` |
+| AC-37 | ID§Modules | `src/console.js` export surface → `test/console.test.js` |
+| AC-38 | US-40, ID§HTTP surface | `src/console.js` route wrapper → `test/console.test.js` |
+| US-31, US-32, US-33, US-34, US-35, US-36, US-39 | US-31..36, US-39 | `src/console.js` inline poll script + `StatusBanner`/`ConfirmPanel` markup. **Not covered by an automated AC** — the client script is the one deliberately untested surface (TD accepted risk); the server half (`/fragment` responding, `POLL_MS`/`STALE_MS` constants present in the emitted document, confirm page carrying no poll loop) *is* asserted, in AC-5 / AC-22 / AC-33 |
+| US-51 | US-51 | `test/console.test.js` existing — every console AC above is driven over real HTTP |
+| US-52 | US-52 | `src/console.js` module doc comment — reviewed at spec-review, no runtime assertion possible |
