@@ -171,8 +171,12 @@ def _scan(text):
         )
 
 
-def _canonical(heading):
-    """Heading text minus emoji/decoration and a trailing *(...)* qualifier."""
+def canonical_heading(heading):
+    """Heading text minus emoji/decoration and a trailing *(...)* qualifier.
+
+    Public because validate_spec.py's heading-shaped checks must match headings
+    the same way the surface does — a second heading rule there would accept
+    '## External Interfaces' as the section this module drops."""
     h = heading.split("*(")[0].strip().lower()
     while h and not h[0].isalpha():
         h = h[1:].lstrip()
@@ -244,7 +248,7 @@ def extract_surface(text):
         if m and len(m.group(1)) <= 2:
             if current:
                 sections[current] = buf
-            current, buf = _BY_NAME.get(_canonical(m.group(2))), []
+            current, buf = _BY_NAME.get(canonical_heading(m.group(2))), []
         elif current:
             buf.append((line, in_fence))
     if current:
