@@ -51,7 +51,11 @@ preamble line, written by kestra-spec's raise commit and nowhere else:
 outside the requirement surface and marking a spec never moves its
 surface_hash. A marker line present but without a URL, more than one, or
 one below the first '## ' is a FAIL in itself (partial marker, same rule as
-validate_workflow.py's partial anchor triple).
+validate_workflow.py's partial anchor triple). The search is fence-aware on
+both sides, by the same fence rules the extractor applies: a 'Spec-ticket:'
+line inside a code fence is an example — never a marker, never a misplacement —
+so a spec documenting the marker's own syntax neither claims the chain nor
+false-FAILs for showing it below a heading.
 
 The conditional exists because a marked spec is one this repo's own skill
 produced from a vetted ticket, so its template is a contract and a missing
@@ -211,17 +215,49 @@ def report(chained, msg):
     (fail if chained else warn)(msg)
 
 
+def marker_lines(text):
+    """(above, below) — the 'Spec-ticket:' lines above and below the first
+    '## ' heading, ignoring every fenced line on both sides.
+
+    One rule, applied to both sides: a 'Spec-ticket:' line inside a code fence
+    is an example, never a marker and never a misplacement. Documentation that
+    shows the marker's own syntax must not be read as claiming it.
+
+    Returns None when the file cannot be scanned honestly (no sibling
+    extractor, or an unclosed fence — which check_delimiter_precondition
+    reports on its own); the caller then falls back to the fence-blind regex,
+    alongside the 'heading matching is approximate' WARN main() already prints."""
+    lines = scanned(text)
+    if lines is None:
+        return None
+    above, below, in_body = [], [], False
+    for line, in_fence in lines:
+        if in_fence:
+            continue
+        if not in_body and FIRST_H2.match(line):
+            in_body = True
+            continue
+        (below if in_body else above).append(line)
+    return ([l for l in above if SPEC_TICKET_LINE.match(l)],
+            [l for l in below if SPEC_TICKET_LINE.match(l)])
+
+
 def resolve_chain_marker(text):
     """True if this spec claims chain provenance (see the docstring).
 
     A malformed, duplicated or misplaced marker line FAILs here and still
     counts as chained — a spec reaching for the chain is held to it."""
-    head = preamble(text)
-    if SPEC_TICKET_LINE.search(text[len(head):]):
+    found = marker_lines(text)
+    if found is None:
+        head = preamble(text)
+        lines = SPEC_TICKET_LINE.findall(head)
+        below = SPEC_TICKET_LINE.findall(text[len(head):])
+    else:
+        lines, below = found
+    if below:
         fail("'Spec-ticket:' line outside the preamble — it must sit above the first "
              "'## ' or it can land inside a requirement-surface section and move surface_hash.")
         return True
-    lines = SPEC_TICKET_LINE.findall(head)
     if not lines:
         return False
     if len(lines) > 1:
@@ -264,15 +300,21 @@ def check_files_to_touch(text, repo_root):
         # not a path claim, so the path-existence check has nothing to check. Say
         # so rather than FAILing it (outside this check's documented intent) or
         # skipping it silently (which would make *(TBD)* a dodge).
+        #
+        # The discriminator is SHAPE, not extension: prose contains whitespace, a
+        # path claim is a single whitespace-free token. An earlier "no '/' and no
+        # '.'" test read `Makefile`, `Dockerfile`, `LICENSE` and `Justfile` as
+        # prose and dropped them to WARN — real path claims escaping the one check
+        # that can prove them wrong.
         bare = path_cell.strip().strip("`").strip("*").strip()
-        if re.fullmatch(r"\*\(.*\)\*", path_cell.strip()) or ("/" not in bare and "." not in bare):
+        if (re.fullmatch(r"\*\(.*\)\*", path_cell.strip())
+                or re.search(r"\s", bare)
+                or bare.lower() in {"", "...", "-", "—", "n/a", "na", "tbd", "none"}):
             warn(f"Files to Touch row {idx} names no file path ('{path_cell}') — "
                  "the path-existence check cannot run on it")
             continue
-        if not path or path in ("...", "-"):
-            continue
-        if not (repo_root / path).exists():
-            fail(f"Files to Touch row '{path}' marked '{change_cell}' but the path does not exist on disk")
+        if not (repo_root / bare).exists():
+            fail(f"Files to Touch row '{bare}' marked '{change_cell}' but the path does not exist on disk")
     if not found_any:
         warn("'Files to Touch' table had rows but none parsed as (path, change) — check table format")
 

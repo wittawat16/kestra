@@ -15,12 +15,59 @@ and prints every problem found otherwise. This never asks an LLM's opinion —
 every check here is a graph/set operation, on purpose: it's the same
 "mechanical, not judged" standard kestra-run's own enforcement holds itself to,
 just applied before the first stage ever runs instead of after.
+
+THE SPEC ANCHOR — absent is a WARN, partial is a FAIL
+A chained workflow.yaml carries a top-level `spec_anchor` mapping
+(raise_commit / surface_hash / extractor_version) recording which commit of
+which spec it was folded from. Absent, this workflow is standalone and still
+valid; present, every field is graded and the surface is recomputed for real.
+That recompute needs requirement_surface.py **beside this file** — kestra-build
+emits a byte copy of it into the run folder and commits it, so run this script
+from the run folder (`python3 <run>/validate_workflow.py <run>`) whenever the
+workflow is anchored. Running the skill's own copy in place stays a valid
+convenience for unanchored workflows; if it then reports a version mismatch,
+that is a true signal, not a bug.
+
+THE SLICED FOLD — the tickets[] map and the embedded ticket blocks
+A sliced fold also carries a top-level `tickets:` sequence and one embedded
+ticket block per owning stage brief. Both are *derived* from
+`<run>/tickets/<id>.md`, so this script recomputes them the way the fold did:
+sha256 of each ticket file against the block delimiter's hex and against
+`tickets[].body_sha256`, a whitespace-normalized text compare of the raw
+embedded block against the file, `verified_against` against
+`spec_anchor.raise_commit`, and each `ac_hash` against the spec's AC Coverage
+Map recomputed now. That is what makes "the fold refuses" an exit code rather
+than an instruction. A monolithic fold carries none of these and nothing in that
+group fires. Every embedded-block check reads the RAW workflow.yaml text, never
+the parsed brief: the parser's pre-pass strips ` #…` comments and `---` lines
+from block-scalar bodies too, so the parsed brief is a lossy view of a ticket
+body (WARNed below, never "fixed" by escaping — that would break the byte
+identity the sha256 protects).
 """
 import sys
 import re
 import json
 import fnmatch
+import hashlib
 from pathlib import Path
+
+try:
+    # One owner of the requirement-surface boundary. kestra-build emits a byte
+    # copy of requirement_surface.py into the run folder beside this script, so
+    # this resolves as a same-directory sibling — never from ~/.claude/skills/,
+    # and never through search-path surgery or a dynamic import (a test asserts
+    # this file contains no such thing). That is the point: the
+    # hashes this script compares must keep their meaning for the life of the
+    # run, which they only do if the extractor is the copy committed with it.
+    # _ws / _BULLET / _CHECKBOX come along for the ticket-AC normalization: the
+    # sliced ACs must be normalized by *the same code* that built the AC Coverage
+    # Map rows they are matched against (ticket-fold.md §2 step 1 names these three
+    # by name). A second copy of those transforms here would be a second
+    # vocabulary that can drift while both sides still look populated.
+    from requirement_surface import (EXTRACTOR_VERSION, extract_surface, SurfaceError,
+                                     _ws, _BULLET, _CHECKBOX)
+except ImportError:  # copied without its sibling — degrade loudly, never silently
+    EXTRACTOR_VERSION = None
 
 
 # ---------------------------------------------------------------------------
@@ -216,13 +263,426 @@ def fnmatch_overlap(pattern_a, pattern_b):
     return pa.startswith(pb) or pb.startswith(pa)
 
 
-def validate(workflow, state):
+# ---------------------------------------------------------------------------
+# The spec anchor triple
+#
+# ABSENT = WARN, PARTIAL = FAIL. That split is the whole design: a workflow
+# generated from a standalone or hand-written spec has nothing to anchor to and
+# must keep passing, but a workflow that *claims* an anchor is claiming a
+# mechanically checkable fact, and half a claim is worse than none — it reads
+# green while proving nothing. Same rule validate_spec.py applies to the chain
+# marker, deliberately mirrored so the two ends of the chain say one thing.
+# ---------------------------------------------------------------------------
+
+ANCHOR_KEYS = ("raise_commit", "surface_hash", "extractor_version")
+_SHA1_HEX = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+_POSITIVE_INT = re.compile(r"^[1-9][0-9]*$")
+
+
+def _short(value):
+    """First 12 hex chars — enough to identify, short enough to read."""
+    return str(value)[:12]
+
+
+def resolve_spec_path(source_spec, target):
+    """Locate source_spec on disk: run-folder basename, then the path as given
+    (cwd-relative), then run-folder-relative. First hit wins.
+
+    The basename comes first on purpose: the spec committed *into the run
+    folder* is the one the anchor was taken over, whatever repo-relative path
+    workflow.yaml records."""
+    candidates = [target / Path(source_spec).name,
+                  Path(source_spec),
+                  target / source_spec]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def check_spec_anchor(workflow, target):
+    """(problems, warnings) for spec_anchor — presence, shape, comparability,
+    and a real recompute of the surface it claims."""
+    problems, warnings = [], []
+
+    if "spec_anchor" not in workflow or workflow.get("spec_anchor") is None:
+        warnings.append(
+            "no spec_anchor — this workflow is not anchored to a raise commit "
+            "(standalone/hand-written spec); staleness cannot be checked mechanically"
+        )
+        return problems, warnings
+
+    anchor = workflow.get("spec_anchor")
+    if not isinstance(anchor, dict):
+        problems.append(
+            "spec_anchor could not be parsed as a mapping — write it as an indented block "
+            "(raise_commit:/surface_hash:/extractor_version: on their own lines), not an "
+            "inline {...} mapping"
+        )
+        return problems, warnings
+
+    # The hand parser has no int coercion: _parse_scalar("1") is the string "1".
+    # Grade every value as text against its grammar, and only then compare ints.
+    values = {}
+    for key in ANCHOR_KEYS:
+        raw = anchor.get(key)
+        values[key] = "" if raw is None else str(raw).strip()
+        if not values[key]:
+            problems.append(
+                f"spec_anchor is partial — '{key}' is missing; a partial anchor is a FAIL "
+                f"(an absent anchor is a WARN)"
+            )
+
+    if values["raise_commit"] and not _SHA1_HEX.match(values["raise_commit"]):
+        problems.append(
+            f"spec_anchor.raise_commit is not a full 40-hex commit SHA: "
+            f"'{values['raise_commit']}' — abbreviated SHAs are not comparable"
+        )
+    if values["surface_hash"] and not _SHA256_HEX.match(values["surface_hash"]):
+        problems.append(f"spec_anchor.surface_hash is not a 64-hex sha256: "
+                        f"'{values['surface_hash']}'")
+    if values["extractor_version"] and not _POSITIVE_INT.match(values["extractor_version"]):
+        problems.append(f"spec_anchor.extractor_version is not a positive integer: "
+                        f"'{values['extractor_version']}'")
+
+    if problems:
+        return problems, warnings  # nothing below can mean anything on a broken anchor
+
+    # Not-run is not passed. Without the sibling extractor the recorded
+    # surface_hash is unverifiable, and what goes unverified — a spec that moved
+    # after the raise — is invisible everywhere downstream.
+    if EXTRACTOR_VERSION is None:
+        problems.append(
+            "spec_anchor present but requirement_surface.py is not beside this script — the "
+            "recorded surface_hash cannot be verified (not-run is not passed; kestra-build "
+            "emits both files into the run folder)"
+        )
+        return problems, warnings
+
+    if int(values["extractor_version"]) != EXTRACTOR_VERSION:
+        problems.append(
+            f"spec_anchor.extractor_version {values['extractor_version']} ≠ this run's "
+            f"requirement_surface.py EXTRACTOR_VERSION {EXTRACTOR_VERSION} — the hashes are "
+            f"not comparable; re-fold (never diff hashes across versions)"
+        )
+        return problems, warnings
+
+    source_spec = workflow.get("source_spec")
+    if not source_spec:
+        problems.append(
+            "spec_anchor is present but 'source_spec' is missing — there is no spec to recompute "
+            "the surface of, so the anchor can never be checked"
+        )
+        return problems, warnings
+
+    spec_path = resolve_spec_path(str(source_spec), target)
+    if spec_path is None:
+        # A property of where this was invoked from, not of the artifact — a FAIL
+        # here would make the validator unrunnable from outside the repo root.
+        warnings.append(
+            f"source_spec '{source_spec}' not found beside workflow.yaml, relative to the "
+            f"current directory, or under '{target}' — the spec_anchor.surface_hash could not "
+            f"be recomputed (re-run from the directory source_spec is relative to)"
+        )
+        return problems, warnings
+
+    try:
+        recomputed = extract_surface(spec_path.read_text()).surface_hash
+    except SurfaceError as e:
+        problems.append(
+            f"the surface of {spec_path} cannot be extracted honestly ({e}) — a truncated "
+            f"surface still hashes cleanly, so this is a false-fresh anchor, not a warning"
+        )
+        return problems, warnings
+    except OSError as e:
+        warnings.append(f"source_spec '{spec_path}' could not be read ({e}) — "
+                        f"spec_anchor.surface_hash not recomputed")
+        return problems, warnings
+
+    if recomputed != values["surface_hash"]:
+        problems.append(
+            f"spec_anchor.surface_hash {_short(values['surface_hash'])} ≠ the surface of "
+            f"{source_spec} recomputed now {_short(recomputed)} — the spec moved since the "
+            f"fold; re-fold (kestra-build), do not edit the anchor"
+        )
+
+    return problems, warnings
+
+
+# ---------------------------------------------------------------------------
+# The sliced fold — the tickets[] map and the embedded ticket blocks
+#
+# Same posture as the anchor triple, one level down: absent is silence (a
+# monolithic fold has no ticket set and is a legitimate shape), present is a
+# mechanically checkable claim, and a partial claim is a FAIL. The three recorded
+# copies of one fact — the file on disk, the delimiter hex in the brief, and
+# tickets[].body_sha256 — are what close all four hand-edit routes
+# (ticket-fold.md §4): edit the brief and the block stops matching the file; edit
+# the file and the delimiter hex stops matching; edit both and body_sha256 stops
+# matching; edit all three and ac_hash / verified_against stop matching the
+# surface recomputed here. The apparent redundancy is the enforcement.
+# ---------------------------------------------------------------------------
+
+# The five hash/marker fields graded per entry. `ref` is deliberately not one:
+# it is provenance for a human, carries no recomputable claim, and grading a URL
+# would invent a shape the tracker does not promise (workflow-schema.md says so
+# in the field table, once).
+TICKET_KEYS = ("id", "body_sha256", "ac_hash", "verified_against", "verified_at")
+
+_BLOCK = re.compile(
+    r"<!-- ticket:begin (\S+) sha256:([0-9a-f]{64}) -->(.*?)<!-- ticket:end \1 -->", re.S)
+_BEGIN = re.compile(r"<!-- ticket:begin (\S+) sha256:([0-9a-f]{64}) -->")
+_STAGE_ID = re.compile(r"^\s*-\s+id:\s*(\S+)\s*$", re.M)
+_ISO_Z = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+# Narrow on purpose: a wider strip eats legitimate parentheses out of a requirement.
+_SOURCE_LABEL = re.compile(r"\s*\(Source:\s*[^()]*\)\s*$")
+
+
+def _sha256_file(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _normalize_ac(line):
+    """A ticket AC line, normalized exactly as requirement_surface._units does
+    (list marker, checkbox, whitespace), then the trailing explicit Source label
+    stripped. Returns (normalized, explicit_source or None)."""
+    s = _ws(_CHECKBOX.sub("", _BULLET.sub("", line.strip())))
+    m = _SOURCE_LABEL.search(s)
+    explicit = None
+    if m:
+        explicit = m.group(0).strip()[len("(Source:"):].rstrip(")").strip()
+        s = _SOURCE_LABEL.sub("", s)
+    return s, explicit
+
+
+def _ticket_ac_lines(text):
+    """Non-blank body lines of a ticket's '## Acceptance criteria' section."""
+    out, on = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            on = line[3:].strip().lower() == "acceptance criteria"
+            continue
+        if on and line.strip():
+            out.append(line)
+    return out
+
+
+def _load_surface(workflow, target, problems, warnings):
+    """The spec's surface, or None with the reason already recorded. FAIL when the
+    extractor or the spec is unusable (an unverifiable ac_hash is the thing this
+    check exists to catch); WARN when the spec merely could not be located from
+    here, which is a property of the invocation, not of the artifact."""
+    if EXTRACTOR_VERSION is None:
+        problems.append(
+            "this workflow carries a sliced ticket set but requirement_surface.py is not beside "
+            "this script — the recorded ac_hash values cannot be recomputed (not-run is not "
+            "passed; kestra-build emits both files into the run folder)"
+        )
+        return None
+    source_spec = str(workflow.get("source_spec") or "0-spec.md")
+    spec_path = resolve_spec_path(source_spec, target)
+    if spec_path is None:
+        warnings.append(
+            f"source_spec '{source_spec}' not found beside workflow.yaml, relative to the current "
+            f"directory, or under '{target}' — the recorded ac_hash values could not be recomputed "
+            f"(re-run from the directory source_spec is relative to)"
+        )
+        return None
+    try:
+        return extract_surface(spec_path.read_text())
+    except SurfaceError as e:
+        problems.append(
+            f"the surface of {spec_path} cannot be extracted honestly ({e}) — a truncated surface "
+            f"still hashes cleanly, so every ac_hash compared against it would be false-fresh"
+        )
+    except OSError as e:
+        warnings.append(f"source_spec '{spec_path}' could not be read ({e}) — the recorded "
+                        f"ac_hash values were not recomputed")
+    return None
+
+
+def check_ticket_fold(workflow, raw, target):
+    """(problems, warnings) for a sliced fold. Returns ([], []) untouched for a
+    monolithic one — no tickets: map, no ticket blocks, no tickets/ directory."""
+    problems, warnings = [], []
+
+    entries = workflow.get("tickets")
+    recorded = {}
+    if isinstance(entries, list):
+        for entry in entries:
+            if isinstance(entry, dict) and entry.get("id"):
+                recorded[str(entry["id"]).strip()] = entry
+    blocks = list(_BLOCK.finditer(raw))
+    ticket_dir = target / "tickets"
+    files = sorted(ticket_dir.glob("*.md")) if ticket_dir.is_dir() else []
+
+    if not entries and not files and not _BEGIN.search(raw):
+        return problems, warnings
+
+    if entries is not None and not isinstance(entries, list):
+        problems.append(
+            "tickets: could not be parsed as a sequence of mappings — write it as a block sequence "
+            "('- id:' on its own line, the rest indented under it), not an inline [...] list"
+        )
+
+    if len(_BEGIN.findall(raw)) != len(blocks):
+        problems.append("a ticket:begin delimiter has no matching ticket:end for the same id — a "
+                        "partial delimiter, same family as a partial anchor")
+
+    # --- per-ticket recompute: body hash always, ac_hash when the spec is readable
+    surface = _load_surface(workflow, target, problems, warnings) if files else None
+    rows = dict(surface.ac_rows) if surface else {}
+    sources = {ac_id: (row.split(" | ")[1] if " | " in row else "")
+               for ac_id, row in (surface.ac_rows if surface else [])}
+
+    derived, claims = {}, {}
+    for path in files:
+        tid = path.stem
+        derived[tid] = {"body_sha256": _sha256_file(path), "ac_hash": None}
+        if surface is None:
+            continue
+        matched = []
+        for n, line in enumerate(_ticket_ac_lines(path.read_text()), 1):
+            text, explicit = _normalize_ac(line)
+            if text not in rows:
+                problems.append(
+                    f'ticket {tid} AC {n} "{text}" matches no row in the spec\'s AC Coverage Map — '
+                    f"the slice set and the raised spec disagree. Either the spec moved after "
+                    f"slicing (re-run to-tickets over the current spec — a suggestion, if "
+                    f"installed), or the AC was edited on the tracker. kestra-build does not "
+                    f"reconcile this; it stops."
+                )
+                continue
+            if not sources[text]:
+                problems.append(
+                    f'sliced AC "{text}" resolves to an AC Coverage Map row with an empty Source '
+                    f"cell — a green column that lies (validate_spec.py flags the same fact on the "
+                    f"spec side)."
+                )
+            elif explicit is not None and explicit != sources[text]:
+                problems.append(
+                    f'ticket {tid} AC {n} claims (Source: {explicit}) but the AC Coverage Map row '
+                    f'says "{sources[text]}" — the map is the single owner; a ticket may echo it, '
+                    f"never contradict it."
+                )
+            matched.append(text)
+            claims.setdefault(text, []).append(tid)
+        # Serialized in the spec's Coverage Map order, never the ticket's own bullet
+        # order — reordering ACs inside a ticket is presentation and must move nothing.
+        ordered = [row for ac_id, row in surface.ac_rows if ac_id in set(matched)]
+        derived[tid]["ac_hash"] = hashlib.sha256(
+            ("\n".join(ordered) + "\n").encode("utf-8")).hexdigest()
+
+    if surface:
+        for ac_id, _ in surface.ac_rows:
+            owners = claims.get(ac_id, [])
+            if not owners:
+                warnings.append(f'AC Coverage Map row "{ac_id}" is covered by no ticket in this set')
+            elif len(owners) > 1:
+                warnings.append(f'AC Coverage Map row "{ac_id}" is claimed by {sorted(owners)}')
+
+    # --- the tickets[] map against the files, in both directions
+    anchor = workflow.get("spec_anchor")
+    raise_commit = str(anchor.get("raise_commit") or "").strip() if isinstance(anchor, dict) else ""
+    if not _SHA1_HEX.match(raise_commit):
+        # No anchor, or an anchor whose own shape is already a FAIL: check_spec_anchor
+        # owns that verdict, and cross-checking every ticket against a value known to
+        # be malformed would report one defect N+1 times.
+        raise_commit = ""
+    for tid in sorted(derived):
+        entry = recorded.get(tid)
+        if entry is None:
+            problems.append(f"tickets/{tid}.md exists but no tickets[] entry names it — the map "
+                            f"and the files are one fact")
+            continue
+        for key in TICKET_KEYS:
+            if not str(entry.get(key) or "").strip():
+                problems.append(f"tickets['{tid}'] is partial — '{key}' is missing")
+        if str(entry.get("body_sha256") or "").strip() != derived[tid]["body_sha256"]:
+            problems.append(f"tickets['{tid}'].body_sha256 {_short(entry.get('body_sha256'))} ≠ "
+                            f"sha256(tickets/{tid}.md) {_short(derived[tid]['body_sha256'])} "
+                            f"— re-fold")
+        if derived[tid]["ac_hash"] is not None \
+                and str(entry.get("ac_hash") or "").strip() != derived[tid]["ac_hash"]:
+            problems.append(f"tickets['{tid}'].ac_hash {_short(entry.get('ac_hash'))} ≠ recomputed "
+                            f"{_short(derived[tid]['ac_hash'])} — re-fold")
+        if raise_commit and str(entry.get("verified_against") or "").strip() != raise_commit:
+            problems.append(f"tickets['{tid}'].verified_against "
+                            f"{_short(entry.get('verified_against'))} ≠ spec_anchor.raise_commit "
+                            f"{_short(raise_commit)} — the ticket map was refreshed against a "
+                            f"different raise; re-fold")
+        if not _ISO_Z.match(str(entry.get("verified_at") or "")):
+            problems.append(f"tickets['{tid}'].verified_at is not ISO-8601 UTC "
+                            f"(YYYY-MM-DDTHH:MM:SSZ): '{entry.get('verified_at')}'")
+    for tid in sorted(recorded):
+        if tid not in derived:
+            problems.append(f"tickets[] entry '{tid}' has no tickets/{tid}.md")
+
+    # --- the embedded blocks, read from the RAW text (the parsed brief is lossy)
+    stage_at = [(m.start(), m.group(1)) for m in _STAGE_ID.finditer(raw)]
+
+    def owning_stage(offset):
+        owner = "<before the first stage>"
+        for pos, sid in stage_at:
+            if pos < offset:
+                owner = sid
+        return owner
+
+    per_stage = {}
+    for m in blocks:
+        tid, hex_, body = m.group(1), m.group(2), m.group(3)
+        stage = owning_stage(m.start())
+        per_stage.setdefault(stage, []).append(tid)
+        path = ticket_dir / f"{tid}.md"
+        if not path.exists():
+            problems.append(f"stage '{stage}' embeds ticket '{tid}' but tickets/{tid}.md does not "
+                            f"exist")
+            continue
+        on_disk = _sha256_file(path)
+        if hex_ != on_disk:
+            problems.append(f"ticket '{tid}' body changed since the fold (file {_short(on_disk)} ≠ "
+                            f"brief {_short(hex_)}) — re-fold, never hand-edit the brief")
+        if " ".join(body.split()) != " ".join(path.read_text().split()):
+            problems.append(f"stage '{stage}' embedded ticket block does not match "
+                            f"tickets/{tid}.md — the brief was hand-edited; re-fold")
+        for seq in (" #", "---"):
+            if any((seq in ln if seq == " #" else ln.strip() == seq) for ln in body.splitlines()):
+                warnings.append(f"stage '{stage}' embedded ticket body contains '{seq}', which "
+                                f"this repo's YAML-subset parser strips from the *parsed* brief — "
+                                f"consumers must read the brief from the raw file")
+        if tid not in recorded:
+            problems.append(f"stage '{stage}' embeds ticket '{tid}' which is absent from tickets:")
+    for stage, ids in sorted(per_stage.items()):
+        if len(ids) > 1:
+            problems.append(f"stage '{stage}' embeds {len(ids)} ticket blocks {ids} — a brief with "
+                            f"two blocks has no unambiguous owner for on_fail.target routing")
+    for tid in sorted(derived):
+        if not any(m.group(1) == tid for m in blocks):
+            problems.append(f"ticket '{tid}' is embedded in no stage brief")
+
+    return problems, warnings
+
+
+def validate(workflow, state, target=None, raw=""):
     problems = []
     warnings = []
+    target = target or Path(".")
+
+    anchor_problems, anchor_warnings = check_spec_anchor(workflow, target)
+    problems.extend(anchor_problems)
+    warnings.extend(anchor_warnings)
+
+    # The fold group reads `raw` — the un-parsed workflow.yaml text, which main()
+    # always passes. An empty `raw` with a ticket set on disk is still checked:
+    # every block-side check then reports the missing block rather than skipping.
+    fold_problems, fold_warnings = check_ticket_fold(workflow, raw, target)
+    problems.extend(fold_problems)
+    warnings.extend(fold_warnings)
 
     stages = workflow.get("stages") or []
     if not stages:
-        return ["workflow.yaml has no stages"], warnings
+        return problems + ["workflow.yaml has no stages"], warnings
 
     ids = [s.get("id") for s in stages]
     seen = set()
@@ -386,6 +846,11 @@ def validate(workflow, state):
                 problems.append(f"stage '{sid}' exit_criteria.type is 'command' but 'run' is empty")
             if t == "artifact_exists" and not ec.get("artifact"):
                 problems.append(f"stage '{sid}' exit_criteria.type is 'artifact_exists' but 'artifact' is empty")
+            if "progress" in ec and not str(ec.get("progress") or "").strip():
+                problems.append(
+                    f"stage '{sid}' exit_criteria.progress is empty — omit the field or give it "
+                    f"the spec's own progress fragment"
+                )
 
         ec_type = ec.get("type") if isinstance(ec, dict) else None
         of = s.get("on_fail")
@@ -472,7 +937,8 @@ def main():
         print(f"FAIL: {wf_path} not found")
         sys.exit(1)
 
-    workflow = parse_yaml(wf_path.read_text())
+    raw = wf_path.read_text()
+    workflow = parse_yaml(raw)
     state = None
     if state_path.exists():
         try:
@@ -483,7 +949,7 @@ def main():
     else:
         print(f"WARN: {state_path} not found — skipping state.json alignment checks")
 
-    problems, warnings = validate(workflow, state)
+    problems, warnings = validate(workflow, state, target, raw)
 
     for w in warnings:
         print(f"WARN: {w}")
