@@ -243,7 +243,8 @@ Every rule here is mechanically checkable, which is the reason each one is shape
 An embedded block, its delimiter hash, and the matching `tickets[]` entry are **derived** — the
 `tickets/<id>.md` file is the truth. A ticket that changes is re-folded (a plain re-run of
 kestra-build over the same run folder); there is no hand-edit path, and `validate_workflow.py` FAILs
-on every combination of hand edits rather than trusting the instruction. The reason is the same one
+on every **inconsistent** hand edit rather than trusting the instruction — an edit made consistently
+across all three copies is caught at the next fold's F0 re-materialization, not by the validator. The reason is the same one
 `mode` gives above, one step stronger: a re-fold is what re-runs the freeze / `write_scope`
 non-overlap validation, the anchor recompute, and the `ac_hash` refresh, so a hand-patched brief
 holds current words behind a stale anchor and an un-revalidated freeze. Full detection matrix, the

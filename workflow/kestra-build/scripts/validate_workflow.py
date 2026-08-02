@@ -420,8 +420,10 @@ def check_spec_anchor(workflow, target):
 # tickets[].body_sha256 — are what close all four hand-edit routes
 # (ticket-fold.md §4): edit the brief and the block stops matching the file; edit
 # the file and the delimiter hex stops matching; edit both and body_sha256 stops
-# matching; edit all three and ac_hash / verified_against stop matching the
-# surface recomputed here. The apparent redundancy is the enforcement.
+# matching; edit all three and touch an AC line and ac_hash stops matching the
+# surface recomputed here (a four-way-consistent non-AC edit passes here; the
+# next fold's F0 re-materialization catches it). The apparent redundancy is the
+# enforcement.
 # ---------------------------------------------------------------------------
 
 # The five hash/marker fields graded per entry. `ref` is deliberately not one:

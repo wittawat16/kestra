@@ -225,7 +225,10 @@ apparent redundancy is load-bearing:
 1. edit the brief only ⇒ embedded block ≠ file;
 2. edit the file only ⇒ `sha256(file)` ≠ the delimiter hex;
 3. edit both consistently ⇒ both ≠ `tickets[].body_sha256`;
-4. edit all three ⇒ `ac_hash` / `verified_against` no longer match the recomputed surface.
+4. edit all three **and touch an AC line** ⇒ `ac_hash` no longer matches the recomputed surface.
+   **Named residual:** a four-way-consistent edit to *non-AC* prose is a manual re-fold with correct
+   arithmetic — the validator passes it; F0's re-materialization against the tracker is what
+   catches it.
 
 ### Invocation
 
