@@ -1,6 +1,6 @@
 # workflow/ — kestra-spec, kestra-build, kestra-run & kestra-exam
 
-These three skills work together as a **spec-sharpener + generator + orchestrator** for building
+These four skills work together as a **spec-sharpener + generator + orchestrator** for building
 and running a "stage machine" that actually enforces TDD (not just asking the AI nicely to write
 tests first). It freezes tests once written, restricts which files each stage may touch, and
 commits per stage so you can always roll back or resume.
@@ -67,7 +67,7 @@ the standalone signal, and guessing one is how unvetted intent gets in.
 | Commits | two: the ticket verbatim, then the raise | one: the raise |
 | `> Spec-ticket:` / `> Vetted:` preamble lines | written | never written |
 | `needs_ba` silence on intent | bounces upstream | asked here and now, answer cited `Q<n>` |
-| End-of-pass validator | the four template checks are `FAIL` | the same four print `WARN` |
+| End-of-pass validator | the five template checks are `FAIL` | the same five print `WARN` |
 
 **Standalone is a first-class path, not a degraded one.** The vetted gate exists because in-chain
 nobody is watching the moment intent gets invented; standalone has the human in the loop by
@@ -141,10 +141,11 @@ its own `0-spec.md`, from the copies it emitted into the run folder. `spec-revie
 the raise would be built on an unchecked surface. This is an additional, earlier check point, not a
 replacement for the `spec-review` stage.
 
-Four template obligations are checked **conditionally**, off the chain marker (the single
+Five template obligations are checked **conditionally**, off the chain marker (the single
 `> Spec-ticket:` preamble line, written by the raise and nowhere else): a `Source` column in the AC
 Coverage Map, a `## External Interface` section with real content, exactly one recorded
-mode-prediction fact, and the delimiter precondition. Marker present ⇒ `FAIL`; absent ⇒ `WARN`.
+mode-prediction fact, a `## Exit Criteria` section with its stop head and `progress:` fragments,
+and the delimiter precondition. Marker present ⇒ `FAIL`; absent ⇒ `WARN`.
 A marked spec is one this repo's own skill produced from a vetted ticket, so its template is a
 contract; an unmarked spec is hand-written, standalone or foreign, and the same missing section
 proves nothing — every pre-existing check behaves identically in both modes. If no copy of the
@@ -180,11 +181,11 @@ don't yet know how many specs this becomes, chart it first, then bring each sett
 Passing tests only prove the cases someone anticipated, because the tests were derived from the
 spec and the spec is where "anticipated" gets fixed. Two sections exist to cover the rest:
 
-* **🛡️ Runtime Invariants** — conditions that must hold *every time the system runs*, enforced in
+* **Runtime Invariants** — conditions that must hold *every time the system runs*, enforced in
   production rather than verified once in a test. Each names the condition, how it's detected at
   runtime, and what happens when it's violated — halt, refuse, or alert. A check that logs and
   carries on doesn't count; that's the failure mode the section exists to prevent.
-* **🌐 Reality Constraints** — what the world outside the feature actually does, which is the
+* **Reality Constraints** — what the world outside the feature actually does, which is the
   standard its test doubles get judged against: each external dependency's enforced call ordering,
   the types it really returns, and (the column people skip) what completeness or consistency it
   does **not** guarantee; any pair of code paths that must produce equivalent results, since a
@@ -209,7 +210,7 @@ blocks structured as Given/When/Then) that map 1:1 onto them — a format choice
 and the test-hash invariant work exactly the same either way. See
 [`workflow/runs/order-cancellation-refund/`](runs/order-cancellation-refund/) for a worked example
 spec + generated workflow using this format. That spec deliberately keeps the *pre-*two-mode
-template shape — it's the unmarked standalone/foreign-shape exemplar, and the validator's four
+template shape — it's the unmarked standalone/foreign-shape exemplar, and the validator's five
 conditional checks print `WARN` against it, which is the standalone contract demonstrated on a real
 file. The current template lives in [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md).
 
