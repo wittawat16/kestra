@@ -1,0 +1,17 @@
+# Leg 2 — parser trap #1, measured rather than assumed: the parsed brief is lossy.
+--- the PARSED brief for implement-export-endpoint ---
+<!-- ticket:begin 02-export-endpoint sha256:9463b2cb24b7bb1e1ea7c8f8bbca180fed19a5ccf9ffd1c400458a248e9eb6ec --> The `GET /orders/export` endpoint and the one-job-per-(filter, day) enqueue guard. Returns whatever the writer produces. - [ ] AC-1 a completed export returns 200 with a text/csv body - [ ] AC-3 two concurrent exports for one filter produce one job - 01-csv-writer (the endpoint returns what the writer produces — see - issues/37 <!-- ticket:end 02-export-endpoint --> Folded in at build time from tickets/02-export-endpoint.md. Do not edit this block — see workflow-schema.md "re-fold, never hand-edit". Source for each AC above: the spec's AC Coverage Map (AC-1 → US-1, AC-3 → US-2). Implement only src/csv_export/api.py. This gate proves the endpoint's own tests only; the suite is proven at integrate-and-verify.
+--- presence checks ---
+'## What to build'         in raw file: True   in parsed brief: False
+'## Acceptance criteria'   in raw file: True   in parsed brief: False
+'#47'                      in raw file: True   in parsed brief: False
+'ticket:begin'             in raw file: True   in parsed brief: True
+exit=0
+
+# Finding: the trap is WIDER than the design record states. _strip_comment fires on ' #',
+# and every to-tickets heading ('  ## What to build') contains ' #' — so the slice's own
+# section headings, not just an incidental ' #47', vanish from the parsed value. The raw
+# workflow.yaml text is the only truth for an embedded block, and the ' #' WARN therefore
+# fires on EVERY sliced brief rather than on the rare one. Both consequences are load-
+# bearing, and both are now carried by the ported §A4 in validate_workflow.py: it compares
+# raw text only, and emits the ' #' WARN once per embedded block as a standing note.

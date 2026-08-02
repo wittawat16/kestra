@@ -1,0 +1,40 @@
+# Leg 8 — exit_criteria.progress: the verbatim copy, the owner ladder, the two refusals.
+## the clean case (leg 1 repeated for the two resolution rules, byte-equality asserted)
+$ python3 logs/fold_check.py check runs/wave4a-fixture > /tmp/wave4a/o.txt 2>&1; echo fold_check_exit=$?; grep '^progress' /tmp/wave4a/o.txt
+fold_check_exit=0
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+exit=0
+
+## a third spec bullet naming a command no stage runs => the ask, then the stop
+$ python3 logs/fold_check.py check /tmp/wave4a/progress-orphan > /tmp/wave4a/o.txt 2>&1; echo fold_check_exit=$?; grep -E '^(ASK|FAIL|progress)' /tmp/wave4a/o.txt
+fold_check_exit=1
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+ASK: the spec bullet "progress: seconds of wall time reported by `npm run export:bench` — must reach 30, from a baseline of 210." resolves to 0 candidate stage(s) [] — name the owner.
+FAIL: the spec declares a loop-shaped check ("progress: …") that no stage owns — kestra-run would have nothing to compare across attempts, so clause 2 of the stop condition could never fire.
+exit=0
+
+## a stage whose progress is present but empty => the SHIPPED validator's own FAIL (§A5)
+$ python3 /tmp/wave4a/progress-empty/validate_workflow.py /tmp/wave4a/progress-empty
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: stage 'integrate-and-verify' exit_criteria.progress is empty — omit the field or give it the spec's own progress fragment
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1
+
+## a progress value that is NOT the spec bullet verbatim (one word reworded)
+$ python3 logs/fold_check.py check /tmp/wave4a/progress-reworded > /tmp/wave4a/o.txt 2>&1; echo fold_check_exit=$?; grep -A2 -E '^(progress|FAIL)' /tmp/wave4a/o.txt
+fold_check_exit=1
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: NOT VERBATIM
+
+F4 refresh table:
+--
+FAIL: stage 'integrate-and-verify' exit_criteria.progress is not the spec bullet verbatim:
+  spec:  'number of failing assertions reported by `python3 -m pytest tests/csv_export` — must reach 0, from a baseline of 9 failing / 0 passing.'
+  stage: 'number of failing assertions reported by `python3 -m pytest tests/csv_export` — must hit 0, from a baseline of 9 failing / 0 passing.'
+exit=0
+

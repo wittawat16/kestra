@@ -1,0 +1,51 @@
+{
+  "feature": "csv-export",
+  "current_stage": [
+    "spec-review"
+  ],
+  "test_hash": null,
+  "stages": {
+    "spec-review": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "generate-tests": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "freeze-tests": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "implement-csv-writer": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "implement-export-endpoint": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "implement-streaming": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    },
+    "integrate-and-verify": {
+      "status": "pending",
+      "attempt": 0,
+      "seen_diffs": [],
+      "history": []
+    }
+  }
+}

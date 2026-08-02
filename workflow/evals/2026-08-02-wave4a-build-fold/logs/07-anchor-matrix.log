@@ -1,0 +1,110 @@
+# Leg 7 — the anchor triple through the SHIPPED validate_workflow.py (§A1-A3), 12 variants.
+# The fixture is a sliced fold, so every variant also carries the ported §A4 output.
+$ python3 <absent-anchor>/validate_workflow.py <absent-anchor>   [cwd=/]
+WARN: no spec_anchor — this workflow is not anchored to a raise commit (standalone/hand-written spec); staleness cannot be checked mechanically
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+PASS — 7 stages, structurally sound.
+exit=0  FAIL=0  WARN=4
+
+$ python3 <complete-valid>/validate_workflow.py <complete-valid>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+PASS — 7 stages, structurally sound.
+exit=0  FAIL=0  WARN=3
+
+$ python3 <missing-raise_commit>/validate_workflow.py <missing-raise_commit>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor is partial — 'raise_commit' is missing; a partial anchor is a FAIL (an absent anchor is a WARN)
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <missing-surface_hash>/validate_workflow.py <missing-surface_hash>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor is partial — 'surface_hash' is missing; a partial anchor is a FAIL (an absent anchor is a WARN)
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <missing-extractor_version>/validate_workflow.py <missing-extractor_version>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor is partial — 'extractor_version' is missing; a partial anchor is a FAIL (an absent anchor is a WARN)
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <abbreviated-raise_commit>/validate_workflow.py <abbreviated-raise_commit>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor.raise_commit is not a full 40-hex commit SHA: 'cc834eb9149' — abbreviated SHAs are not comparable
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <bad-surface_hash-shape>/validate_workflow.py <bad-surface_hash-shape>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor.surface_hash is not a 64-hex sha256: '2f2e17ed'
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <non-integer-extractor_version>/validate_workflow.py <non-integer-extractor_version>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor.extractor_version is not a positive integer: 'v1'
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <extractor_version-mismatch>/validate_workflow.py <extractor_version-mismatch>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor.extractor_version 2 ≠ this run's requirement_surface.py EXTRACTOR_VERSION 1 — the hashes are not comparable; re-fold (never diff hashes across versions)
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <surface-moved>/validate_workflow.py <surface-moved>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor.surface_hash 2f2e17eda1f0 ≠ the surface of workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/0-spec.md recomputed now 0ded4ecbe766 — the spec moved since the fold; re-fold (kestra-build), do not edit the anchor
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=3
+
+$ python3 <extractor-deleted-anchored>/validate_workflow.py <extractor-deleted-anchored>   [cwd=/]
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor present but requirement_surface.py is not beside this script — the recorded surface_hash cannot be verified (not-run is not passed; kestra-build emits both files into the run folder)
+FAIL: this workflow carries a sliced ticket set but requirement_surface.py is not beside this script — the recorded ac_hash values cannot be recomputed (not-run is not passed; kestra-build emits both files into the run folder)
+
+2 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=2  WARN=3
+
+$ python3 <extractor-deleted-unanchored>/validate_workflow.py <extractor-deleted-unanchored>   [cwd=/]
+WARN: no spec_anchor — this workflow is not anchored to a raise commit (standalone/hand-written spec); staleness cannot be checked mechanically
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: this workflow carries a sliced ticket set but requirement_surface.py is not beside this script — the recorded ac_hash values cannot be recomputed (not-run is not passed; kestra-build emits both files into the run folder)
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1  FAIL=1  WARN=4
+
+exit=0

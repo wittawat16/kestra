@@ -1,0 +1,69 @@
+# Leg 5 — a ticket body changes upstream. The only path is a re-fold.
+## the tracker-side edit (prose in '## What to build', no AC touched)
+## fold start re-materializes with §1's pipeline and finds the drift
+$ tr -d '\r' < /tmp/wave4a/refold-tracker/03-streaming.md > /tmp/wave4a/refold/tickets/03-streaming.md
+exit=0
+
+$ python3 logs/fold_check.py check /tmp/wave4a/refold
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+
+F4 refresh table:
+ticket              body_sha256   ac_hash                verified_against  status
+01-csv-writer       c9a89fea09ac…  3ce0ab14e046…          cc834eb91491…      unchanged
+02-export-endpoint  9463b2cb24b7…  7b2cbf9f76ee…          cc834eb91491…      unchanged
+03-streaming        942ddcdd761c…  d19586d35515…          cc834eb91491…      refreshed
+
+Verified-against: cc834eb91491… · ac_hash: 3ce0ab14e046… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: 7b2cbf9f76ee… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: d19586d35515… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: tickets['03-streaming'].body_sha256 5c348c00f7ab ≠ sha256(tickets/03-streaming.md) 942ddcdd761c — re-fold
+FAIL: ticket '03-streaming' body changed since the fold (file 942ddcdd761c ≠ brief 5c348c00f7ab) — re-fold, never hand-edit the brief
+FAIL: stage 'implement-streaming' embedded ticket block does not match tickets/03-streaming.md — the brief was hand-edited; re-fold
+
+3 problem(s) found — the fold refuses.
+exit=1
+
+## the re-fold: overwrite tickets/, recompute, rewrite BOTH recorded copies + verified_at
+# 03-streaming body_sha256 5c348c00f7abd346f6780302e9c97381732da42f61b8479ab688d0b8f0e93df3 -> 942ddcdd761c553769067eadb6910e8590a1d753c809e5db58decff5d03f5d3a
+$ sed -i '' "s/verified_at: \"20[0-9][0-9]-.*Z\"/verified_at: \"2026-08-02T15:56:01Z\"/" /tmp/wave4a/refold/workflow.yaml
+exit=0
+
+$ python3 logs/fold_check.py check /tmp/wave4a/refold
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+
+F4 refresh table:
+ticket              body_sha256   ac_hash                verified_against  status
+01-csv-writer       c9a89fea09ac…  3ce0ab14e046…          cc834eb91491…      unchanged
+02-export-endpoint  9463b2cb24b7…  7b2cbf9f76ee…          cc834eb91491…      unchanged
+03-streaming        942ddcdd761c…  d19586d35515…          cc834eb91491…      unchanged
+
+Verified-against: cc834eb91491… · ac_hash: 3ce0ab14e046… · extractor: v1 · fold: 2026-08-02T15:56:01Z
+Verified-against: cc834eb91491… · ac_hash: 7b2cbf9f76ee… · extractor: v1 · fold: 2026-08-02T15:56:01Z
+Verified-against: cc834eb91491… · ac_hash: d19586d35515… · extractor: v1 · fold: 2026-08-02T15:56:01Z
+
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FOLD OK — 3 slices, 3 embedded blocks, anchor triple present, 3 warning(s).
+exit=0
+
+$ python3 /tmp/wave4a/refold/validate_workflow.py /tmp/wave4a/refold
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+PASS — 7 stages, structurally sound.
+exit=0
+
+## what the re-fold touched (the run folder is untracked, so diff -rq stands in for git diff --stat)
+$ diff -rq /tmp/wave4a/refold-before /tmp/wave4a/refold
+Files /tmp/wave4a/refold-before/tickets/03-streaming.md and /tmp/wave4a/refold/tickets/03-streaming.md differ
+Files /tmp/wave4a/refold-before/workflow.yaml and /tmp/wave4a/refold/workflow.yaml differ
+exit=1
+
+# ac_hash did not move: the edit was prose, not an AC row. That is the hash doing its job.

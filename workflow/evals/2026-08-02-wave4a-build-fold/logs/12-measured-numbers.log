@@ -1,0 +1,45 @@
+# Leg 12 — the sizes the fold actually costs. Story 14's context-rent claim, as bytes.
+0-spec.md                        4214 bytes
+workflow.yaml (folded)           7856 bytes
+  block 01-csv-writer            581 bytes  (ticket file   386 bytes +  195 of delimiters/indent)
+  block 02-export-endpoint       647 bytes  (ticket file   430 bytes +  217 of delimiters/indent)
+  block 03-streaming             395 bytes  (ticket file   214 bytes +  181 of delimiters/indent)
+  embedded blocks, total         1623 bytes  = 21% of workflow.yaml
+
+per-spawn context rent for one implement stage's brief:
+  implement-csv-writer       brief   1087 bytes   vs the full spec   4214 bytes   = 26%
+  implement-export-endpoint  brief   1128 bytes   vs the full spec   4214 bytes   = 27%
+  implement-streaming        brief    848 bytes   vs the full spec   4214 bytes   = 20%
+
+what a run folder carries after F5 (bytes):
+  0-spec.md                       4214
+  requirement_surface.py         13122
+  state.json                       990
+  tickets/01-csv-writer.md         386
+  tickets/02-export-endpoint.md     430
+  tickets/03-streaming.md          214
+  validate_spec.py               21406
+  validate_workflow.py           43200
+  workflow.yaml                   7856
+exit=0
+
+wall time (/usr/bin/time -p, warm cache, macOS 25.5.0):
+$ /usr/bin/time -p python3 runs/wave4a-fixture/validate_workflow.py runs/wave4a-fixture
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+PASS — 7 stages, structurally sound.
+real 0.11
+user 0.06
+sys 0.01
+exit=0
+
+$ /usr/bin/time -p python3 logs/fold_check.py check runs/wave4a-fixture > /dev/null
+real 0.10
+user 0.07
+sys 0.01
+exit=0
+
+# No LLM pass was measured: this fold was enacted by hand from the skill text, in the same
+# session that wrote the eval, so there is no isolated token/wall-time figure for a
+# kestra-build fold spawn. Stated as not established rather than estimated.

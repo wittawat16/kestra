@@ -1,0 +1,186 @@
+feature: csv-export
+source_spec: workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/0-spec.md
+spec_anchor:
+  raise_commit: cc834eb914911fd1f4d92d7f5914271821e8a455
+  surface_hash: 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+  extractor_version: 1
+# full: three slices, two independent components over one shared writer.
+mode: full
+
+tickets:
+  - id: 01-csv-writer
+    ref: fixtures/ticket-set/01-csv-writer.md
+    body_sha256: c9a89fea09ac36e028eb0924fc6ceea3b80cd991ae72d8f07f39c7acaf80a956
+    ac_hash: 3ce0ab14e0463624c64acb1a7c0399b4cdec4b179f38029359c7343c22f5822b
+    verified_against: cc834eb914911fd1f4d92d7f5914271821e8a455
+    verified_at: "2026-08-02T14:55:47Z"
+  - id: 02-export-endpoint
+    ref: fixtures/ticket-set/02-export-endpoint.md
+    body_sha256: 9463b2cb24b7bb1e1ea7c8f8bbca180fed19a5ccf9ffd1c400458a248e9eb6ec
+    ac_hash: 7b2cbf9f76ee85b8bcda653d5582ad061cbb5f07813be7a5e418259c0a34ac77
+    verified_against: cc834eb914911fd1f4d92d7f5914271821e8a455
+    verified_at: "2026-08-02T14:55:47Z"
+  - id: 03-streaming
+    ref: fixtures/ticket-set/03-streaming.md
+    body_sha256: 5c348c00f7abd346f6780302e9c97381732da42f61b8479ab688d0b8f0e93df3
+    ac_hash: d19586d355151ce4a1a8fae37a976c513312dccbd9f0ac3496f976576727371e
+    verified_against: cc834eb914911fd1f4d92d7f5914271821e8a455
+    verified_at: "2026-08-02T14:55:47Z"
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review 0-spec.md for the defects that are cheap to fix now and expensive to fix after tests
+      are frozen: every AC testable without a follow-up question, every Runtime Invariant naming
+      what actually happens on violation, and the Reality Constraints filled in. Write the verdict
+      to spec-verdict.md, first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED".
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+    on_fail:
+      action: reworking
+      reason: "spec has gaps or contradictions — resolve before any test or code exists"
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      Write the failing tests for all five ACs in the spec's AC Coverage Map, across
+      tests/csv_export/test_writer.py, test_api.py and test_stream.py. Tests only — no
+      implementation. This is the pre-freeze window: a defective test is cheap to fix here and
+      expensive afterwards.
+    write_scope: ["tests/csv_export/**"]
+    exit_criteria:
+      type: command
+      run: "python3 -m pytest tests/csv_export --collect-only -q"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+
+  - id: freeze-tests
+    depends_on: [generate-tests]
+    freeze_after: true
+    brief: >
+      Freeze the test files: record every test file's sha256 in state.json. After this stage passes,
+      only a reworking pass may touch a test path.
+    write_scope: ["tests/csv_export/**"]
+    exit_criteria:
+      type: command
+      run: "python3 -m pytest tests/csv_export --collect-only -q"
+    on_fail:
+      action: reworking
+      reason: "the frozen test set does not even collect — freezing it would freeze a lie"
+
+  - id: implement-csv-writer
+    depends_on: [freeze-tests]
+    brief: |
+      <!-- ticket:begin 01-csv-writer sha256:c9a89fea09ac36e028eb0924fc6ceea3b80cd991ae72d8f07f39c7acaf80a956 -->
+      ## What to build
+      The CSV writer: the header row, RFC 4180 quoting, and the header-only shape for an empty result
+      set. Nothing HTTP-facing — the writer takes rows and yields text.
+
+      ## Acceptance criteria
+      - [ ] AC-2 an export of an empty result set returns a header-only CSV (Source: US-1)
+      - [ ] AC-4 a cell containing a comma or a quote is quoted per RFC 4180
+
+      ## Blocked by
+      - nothing
+      <!-- ticket:end 01-csv-writer -->
+
+      Folded in at build time from tickets/01-csv-writer.md. Do not edit this block — see
+      workflow-schema.md "re-fold, never hand-edit". Source for each AC above: the spec's AC
+      Coverage Map (AC-2 → US-1, AC-4 → ID§csv-quoting).
+
+      Implement only src/csv_export/writer.py. The frozen tests are the specification; do not touch
+      a test file — if a test looks wrong, escalate rather than edit it.
+    write_scope: ["src/csv_export/writer.py"]
+    exit_criteria:
+      type: command
+      run: "python3 -m pytest tests/csv_export/test_writer.py -q"
+      progress: "number of failing assertions reported by `python3 -m pytest tests/csv_export/test_writer.py` — must reach 0, from a baseline of 3 failing / 0 passing."
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 3
+
+  - id: implement-export-endpoint
+    depends_on: [implement-csv-writer]
+    brief: |
+      <!-- ticket:begin 02-export-endpoint sha256:9463b2cb24b7bb1e1ea7c8f8bbca180fed19a5ccf9ffd1c400458a248e9eb6ec -->
+      ## What to build
+      The `GET /orders/export` endpoint and the one-job-per-(filter, day) enqueue guard. Returns whatever
+      the writer produces.
+
+      ## Acceptance criteria
+      - [ ] AC-1 a completed export returns 200 with a text/csv body
+      - [ ] AC-3 two concurrent exports for one filter produce one job
+
+      ## Blocked by
+      - 01-csv-writer (the endpoint returns what the writer produces — see #47 for why the split is here)
+
+      ## Parent
+      - issues/37
+      <!-- ticket:end 02-export-endpoint -->
+
+      Folded in at build time from tickets/02-export-endpoint.md. Do not edit this block — see
+      workflow-schema.md "re-fold, never hand-edit". Source for each AC above: the spec's AC
+      Coverage Map (AC-1 → US-1, AC-3 → US-2).
+
+      Implement only src/csv_export/api.py. This gate proves the endpoint's own tests only; the
+      suite is proven at integrate-and-verify.
+    write_scope: ["src/csv_export/api.py"]
+    exit_criteria:
+      type: command
+      run: "python3 -m pytest tests/csv_export/test_api.py -q"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 3
+
+  - id: implement-streaming
+    depends_on: [implement-csv-writer]
+    brief: |
+      <!-- ticket:begin 03-streaming sha256:5c348c00f7abd346f6780302e9c97381732da42f61b8479ab688d0b8f0e93df3 -->
+      ## What to build
+      Stream exports above 10000 rows instead of buffering the whole result set.
+
+      ## Acceptance criteria
+      - [ ] AC-5 an export above 10000 rows streams instead of buffering
+
+      ## Blocked by
+      - 01-csv-writer
+      <!-- ticket:end 03-streaming -->
+
+      Folded in at build time from tickets/03-streaming.md. Do not edit this block — see
+      workflow-schema.md "re-fold, never hand-edit". Source for each AC above: the spec's AC
+      Coverage Map (AC-5 → NFR-1).
+
+      Implement only src/csv_export/stream.py. This gate proves the streaming tests only; the suite
+      is proven at integrate-and-verify.
+    write_scope: ["src/csv_export/stream.py"]
+    exit_criteria:
+      type: command
+      run: "python3 -m pytest tests/csv_export/test_stream.py -q"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 3
+
+  - id: integrate-and-verify
+    depends_on: [implement-export-endpoint, implement-streaming]
+    brief: >
+      Run the unmodified full suite for this feature — no skip list, no -k filter, no
+      --passWithNoTests, no "|| true". This is the only stage that owns the suite-level command, and
+      the only place the spec's suite-level progress metric is compared across attempt rounds.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "python3 -m pytest tests/csv_export"
+      progress: "number of failing assertions reported by `python3 -m pytest tests/csv_export` — must reach 0, from a baseline of 9 failing / 0 passing."
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+      target: implement-export-endpoint

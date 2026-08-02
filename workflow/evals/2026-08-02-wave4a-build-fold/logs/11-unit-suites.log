@@ -1,0 +1,25 @@
+# Leg 11 — the repo's own checks, unchanged by this eval.
+$ cd /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts && python3 -m py_compile requirement_surface.py validate_spec.py validate_workflow.py test_requirement_surface.py test_validate_workflow_anchor.py && echo 'py_compile clean'
+py_compile clean
+exit=0
+
+$ cd /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts && python3 test_requirement_surface.py
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.003s
+
+OK
+exit=0
+
+$ cd /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts && python3 test_validate_workflow_anchor.py
+..........................................
+----------------------------------------------------------------------
+Ran 42 tests in 5.800s
+
+OK
+exit=0
+
+$ python3 -m py_compile logs/fold_check.py && echo 'fold_check.py compiles'
+fold_check.py compiles
+exit=0
+
