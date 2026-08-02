@@ -34,8 +34,8 @@ Degenerate cases, following `validate_workflow.py`'s partial-anchor precedent:
 
 | What the file has | Verdict |
 |---|---|
-| no `Spec-ticket:` line in the preamble | standalone — the four template checks WARN |
-| one line, value is a URL | in-chain — the four template checks FAIL on a defect |
+| no `Spec-ticket:` line in the preamble | standalone — the five template checks WARN |
+| one line, value is a URL | in-chain — the five template checks FAIL on a defect |
 | one line, value missing or a `<placeholder>` | **FAIL** — a partial marker is never treated as absent |
 | two or more lines | **FAIL** — ambiguous by construction |
 | a `Spec-ticket:` line below the first `## ` | **FAIL** — it could land inside a requirement-surface section and move `surface_hash` |
@@ -99,7 +99,7 @@ Same two facts, same order, no `gh`:
   than one exists; the hash must equal the live file's hash.
 * **No `> Spec-ticket:` preamble line.** The marker's value must be a URL, and a present-but-not-a-URL
   value is a malformed marker (FAIL), not an absent one — so a file-tracked spec carries no marker,
-  `validate_spec.py` reads it as standalone, and the four template checks WARN. The vet still gates
+  `validate_spec.py` reads it as standalone, and the five template checks WARN. The vet still gates
   the pass, and the commit trailers still record the provenance: put the repo-relative ticket path
   in `Spec-ticket:` in **both commit messages**, which is what the discovery predicate in §2 matches
   on. Say plainly at handoff that the marker is absent because the tracker is a file.

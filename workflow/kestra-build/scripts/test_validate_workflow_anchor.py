@@ -330,7 +330,7 @@ class SpecMarkerFences(unittest.TestCase):
                               + BARE_SPEC.split("\n", 1)[1])
         self.assertEqual(code, 0, out)
         self.assertNotIn("FAIL", out)
-        # Standalone ⇒ the four conditional checks report as WARN, not FAIL.
+        # Standalone ⇒ the five conditional checks report as WARN, not FAIL.
         self.assertIn("WARN: no 'AC Coverage Map' section found", out)
 
     def test_unfenced_marker_below_the_first_h2_still_fails(self):

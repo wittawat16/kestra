@@ -49,7 +49,7 @@ signal, and guessing one is how unvetted intent gets in.
 | Commits | two: verbatim, then the raise | one: the raise |
 | `> Spec-ticket:` / `> Vetted:` preamble lines | written | never written |
 | `needs_ba` silence on intent | bounce upstream | ask the human, here and now, cite the answer `Q<n>` |
-| End-of-pass validator (step 8) | the four template checks are FAILs | the same four print WARN — the documented standalone contract |
+| End-of-pass validator (step 8) | the five template checks are FAILs | the same five print WARN — the documented standalone contract |
 
 **Standalone is a first-class path, not a degraded one.** The vetted gate exists because in-chain
 nobody is watching the moment intent is invented; standalone has the human in the loop by
@@ -284,8 +284,8 @@ marker.
 
 Completion criterion: both lines print `exit=0`, with no `FAIL:` in the output. A FAIL → fix the
 spec and re-run. Never commit the raise over a FAIL, and never edit the validator to make a spec
-pass. In-chain the four template checks (Source column, External Interface, mode-prediction fact,
-delimiter precondition) are FAILs; standalone they print as WARNs — that is the standalone contract,
+pass. In-chain the five template checks (Source column, External Interface, mode-prediction fact,
+Exit Criteria, delimiter precondition) are FAILs; standalone they print as WARNs — that is the standalone contract,
 not a defect to chase. `kestra-build` overwrites both copies with its own at generation time; a
 genuine skill-version difference shows up there as a git diff instead of hiding.
 

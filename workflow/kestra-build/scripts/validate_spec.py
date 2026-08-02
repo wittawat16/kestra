@@ -39,9 +39,10 @@ That judgment stays with spec-review's own subagent pass — see the note at
 the bottom of this file about what this script does NOT replace.
 
 THE CHAIN MARKER — the one exception to "presence is always WARN"
-Four template obligations (a Source column in the AC Coverage Map, a
-"## External Interface" section, a recorded mode-prediction fact, and the
-delimiter precondition) are checked CONDITIONALLY: FAIL when the spec
+Five template obligations (a Source column in the AC Coverage Map, a
+"## External Interface" section, a recorded mode-prediction fact, an
+"## Exit Criteria" section with its stop head and progress fragments, and
+the delimiter precondition) are checked CONDITIONALLY: FAIL when the spec
 carries the chain marker, WARN when it does not. The marker is a single
 preamble line, written by kestra-spec's raise commit and nowhere else:
 
@@ -61,7 +62,7 @@ The conditional exists because a marked spec is one this repo's own skill
 produced from a vetted ticket, so its template is a contract and a missing
 section is a defect. An unmarked spec is hand-written, standalone, or
 foreign — the same missing section proves nothing, and this script must
-keep passing it exactly as promised above. Only these four checks read the
+keep passing it exactly as promised above. Only these five checks read the
 marker; every pre-existing check behaves identically in both modes.
 
 The delimiter check needs requirement_surface.py beside this file. If it is
@@ -392,6 +393,26 @@ def check_mode_prediction(text, chained):
         warn("the mode-prediction line records no reason for the mode")
 
 
+def check_exit_criteria(text, chained):
+    """The stop head and per-loop progress fragments kestra-build copies onto
+    owning stages — a dropped section leaves clause 2 of the stop condition
+    unable to ever fire, silently, two skills downstream."""
+    section = template_section(text, "Exit Criteria")
+    if section is None:
+        report(chained, "no '## Exit Criteria' section — kestra-build copies its 'progress:' "
+                        "fragments onto the owning stages; without them clause 2 of the "
+                        "stop condition can never fire")
+        return
+    if not re.search(r"\*\*Stop condition:\*\*", section):
+        report(chained, "'## Exit Criteria' has no '**Stop condition:**' head line")
+    if not (re.search(r"^\s*[-*]\s*progress:", section, re.MULTILINE)
+            or re.search(r"single-shot", section, re.IGNORECASE)):
+        report(chained, "'## Exit Criteria' carries no 'progress:' fragment and no "
+                        "closing single-shot bullet — every check is one or the other")
+    # Whether a fragment names a number rather than a state is prose judgment —
+    # not this script's job, same rule as the mode-prediction reason.
+
+
 def check_delimiter_precondition(text, chained):
     """The two facts the extractor actually enforces: fences close, and every
     '## ' outside a fence is a template section heading (a bare one inside a
@@ -459,6 +480,7 @@ def main():
         check_source_column(text, chained)
         check_external_interface(text, chained)
         check_mode_prediction(text, chained)
+        check_exit_criteria(text, chained)
         check_delimiter_precondition(text, chained)
     finally:
         globals()["print"] = real_print
