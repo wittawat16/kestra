@@ -6,12 +6,14 @@ tests first). It freezes tests once written, restricts which files each stage ma
 commits per stage so you can always roll back or resume.
 
 ```
-sharpened idea (from /grilling — or /wayfinder first, when the effort is too big for one session)
+a human-vetted tracker ticket (in-chain)  ·  or a sharpened idea from /grilling (standalone)
+                                             (/wayfinder first, if it's too big for one session)
    │
    ▼
-┌─────────────┐   writes 0-spec.md — testable ACs (optionally Given-When-Then/BDD), needs_*
-│ kestra-spec  │   flags, business rules, design notes, and a verified codebase survey — one pass
-└──────┬──────┘
+┌─────────────┐   in-chain: checks the vet → commits the ticket verbatim → raises it into
+│ kestra-spec  │   0-spec.md as a 2nd commit · standalone: one clarifying pass, one commit
+└──────┬──────┘   either way: testable ACs, needs_* flags, External Interface, Exit Criteria,
+       │          business rules, design notes, a verified codebase survey — one pass
        │
        ▼
 ┌─────────────┐   writes workflow.yaml + state.json, then stops
@@ -37,21 +39,122 @@ if that skill isn't installed.
 
 ### What it does
 
-Takes a sharpened idea (normally the output of a `/grilling` session, or an equivalent
-back-and-forth where ambiguity's already been interviewed out) and, in one pass, produces a single
-`0-spec.md`: testable acceptance criteria, explicit error states, the `needs_ba`/`needs_ui`/
-`needs_sa`/`needs_devops` flags `kestra-build` reads, business rules (when `needs_ba: true`),
-design notes (when `needs_ui: true`), solution-architecture decisions (when `needs_sa: true`), and
-a codebase survey with every file path verified to exist.
+In one pass, produces a single `0-spec.md`: testable acceptance criteria, explicit error states,
+the `needs_ba`/`needs_ui`/`needs_sa`/`needs_devops` flags `kestra-build` reads, the test seam
+(**External Interface**), the stop condition (**Exit Criteria**), business rules (when `needs_ba:
+true`), design notes (when `needs_ui: true`), solution-architecture decisions (when `needs_sa:
+true`), and a codebase survey with every file path verified to exist.
 
 Where the `meta/` group splits this same work across five skills and five files, `kestra-spec`
 does it as one continuous pass, one file — so nobody has to remember to chain five skills by hand,
 and `kestra-build`'s stage agents don't have to guess at gaps left by a handoff.
 
+### Two input modes, decided mechanically
+
+**In-chain** iff the invocation names a tracker ticket (a URL, or `#N` plus the repo).
+**Standalone** otherwise. It never goes looking for a ticket nobody named — no named ticket *is*
+the standalone signal, and guessing one is how unvetted intent gets in.
+
+| | In-chain | Standalone |
+|---|---|---|
+| Intent comes from | the named ticket, human-vetted | a hand-written idea or `/grilling` output, plus this session's clarifying pass |
+| Vetted gate | required — no vet, no work | none |
+| Commits | two: the ticket verbatim, then the raise | one: the raise |
+| `> Spec-ticket:` / `> Vetted:` preamble lines | written | never written |
+| `needs_ba` silence on intent | bounces upstream | asked here and now, answer cited `Q<n>` |
+| End-of-pass validator | the four template checks are `FAIL` | the same four print `WARN` |
+
+**Standalone is a first-class path, not a degraded one.** The vetted gate exists because in-chain
+nobody is watching the moment intent gets invented; standalone has the human in the loop by
+construction — they invoked it, in this session, and they answer the questions. Same behavior,
+different guarantee. Standalone keeps the whole clarifying pass: a rough ask ("add CSV export")
+still gets a short scope/error-state/ambiguity interview before anything is written.
+
+### The vetted gate, and the two-commit raise (in-chain)
+
+`kestra-spec` is **read-only on the tracker** — it never comments, labels, edits or closes, so it
+cannot approve its own input. The vetted signal is a comment on the ticket whose first line is
+`VETTED-FOR-KESTRA: <sha256 of the ticket body at vet time>`, produced once by a human and pasted
+in; the newest such comment wins, and its hash must equal the live body hash. Binding the approval
+to a content hash is what makes it mean *vetted **this** text*: a body edited after the vet is
+caught, and a thin ticket can't launder itself through a citable URL. Named residual: a token can
+post that comment, so it doesn't prove a human typed it — what it buys is that `kestra-spec` never
+writes it, the approval names exact text, and the artifact is visible, attributed and dated.
+
+No vet, or a stale one → it stops before doing any work, commits nothing, and prints the line for
+the human to paste. If the ticket itself is thin or missing, `to-spec` is the *suggested* tool for
+writing it — a suggestion only, never a requirement, same rule as every other cross-skill mention
+here.
+
+With the vet in hand it makes exactly two commits, with nothing committed between them:
+
+| Commit | Subject | What it carries |
+|---|---|---|
+| 1 | `spec(<feature-id>): materialize vetted ticket verbatim` | the ticket body written to `0-spec.md` unmodified, plus this run's own copies of `requirement_surface.py` and `validate_spec.py`. Message records `Spec-ticket: <url>` and `Ticket-body-sha256: <hex>` |
+| 2 | `spec(<feature-id>): raise vetted ticket into 0-spec.md` | exactly one path — the raised `0-spec.md` overwriting the verbatim body, so the raise is literally one `git diff`. Message records `Spec-ticket:` and `Vetted-by:` |
+
+`tr -d '\r'` is the one declared normalization (GitHub returns web-authored bodies with CRLF);
+nothing else is normalized, because more would make "verbatim" negotiable. After commit 2 it
+re-fetches the ticket and `diff`s it against commit 1's file — a non-empty diff is a hard stop, no
+handoff, with two honest fixes only: re-materialize from scratch, or bounce because the ticket
+genuinely changed mid-pass. Editing the committed verbatim file, or amending commit 1, is banned —
+that's "patch the test to match broken code" wearing spec clothing. Which commit is *the* raise is
+resolved by an exactly-one-match convention (a re-raise replaces its predecessor rather than
+stacking), documented in [`kestra-spec/references/chain-provenance.md`](kestra-spec/references/chain-provenance.md).
+
+### Bounce — intent-silence goes back upstream
+
+In-chain, when the ticket doesn't say *which outcome is correct* for a branch the feature must
+take, `kestra-spec` **bounces** rather than authoring the business rule inline: it finishes both
+commits (the work is preserved and inspectable), sets the status line to `BLOCKED_ON_INTENT`,
+writes one fixed-shape `BOUNCE-<n>` entry under **Open Items** naming the undecided branch, the ACs
+it blocks and who decides — and does not hand off to `kestra-build`.
+
+The discriminator is deliberately narrow. A missing number, threshold, name, copy string or
+filename is **not** a bounce: pick a sane default, mark the line `⚠ inferred`, record a
+non-blocking `OI-n`, keep going. Only a genuinely undecided *branch* stops the pass. Flagging and
+continuing isn't an option, because the default workflow has zero `human_approval` stages, so a
+"pending" flag would have no consumer and the build would proceed on invented intent.
+
+### The provenance rule
+
+Every intent line the sharpening pass adds cites its source or carries `⚠ inferred` — an intent
+line being any line that asserts what the system must do (an FR bullet, an edge case, an invariant
+row, an AC, an **AC Coverage Map** row, an External Interface operation). Sources are `US-n` (user
+story), `ID§x` (the ticket's Implementation Decisions), `TD`/`FN`/`OOS`/`PS`, `IDEA§x` / `Q<n>`
+(standalone: an idea heading, or an answer from this session's clarifying pass), or
+`verified:<probe>` for something confirmed by running code. A line with neither a source nor
+`⚠ inferred` is a defect, not a style miss: the AC Coverage Map's new `Source` column without the
+rule behind it is a mechanically-green column that lies.
+
+### The end-of-pass mechanical check
+
+Before committing the raise, `kestra-spec` runs `validate_spec.py` and `requirement_surface.py` on
+its own `0-spec.md`, from the copies it emitted into the run folder. `spec-review` fires only after
+`kestra-build` has folded the spec into stages, and `lite` mode folds `spec-review` into
+`generate-tests` — so a `lite` run would invoke the validator zero times, and anything derived from
+the raise would be built on an unchecked surface. This is an additional, earlier check point, not a
+replacement for the `spec-review` stage.
+
+Four template obligations are checked **conditionally**, off the chain marker (the single
+`> Spec-ticket:` preamble line, written by the raise and nowhere else): a `Source` column in the AC
+Coverage Map, a `## External Interface` section with real content, exactly one recorded
+mode-prediction fact, and the delimiter precondition. Marker present ⇒ `FAIL`; absent ⇒ `WARN`.
+A marked spec is one this repo's own skill produced from a vetted ticket, so its template is a
+contract; an unmarked spec is hand-written, standalone or foreign, and the same missing section
+proves nothing — every pre-existing check behaves identically in both modes. If no copy of the
+scripts can be found at all, it prints one `WARN`, self-applies the checklist and continues:
+`kestra-spec` must not hard-depend on `kestra-build` being installed. Copy **both scripts or
+neither**, though: with `validate_spec.py` present but `requirement_surface.py` missing, the
+delimiter check cannot run at all, and *cannot run* reports through the same conditional — `FAIL`
+under the marker, `WARN` without it. Not-run is not passed.
+
 ### What comes before this: `/grilling`, and `/wayfinder` when the effort is bigger
 
-`kestra-spec` expects the ambiguity to be gone already — it reads what was settled and doesn't
-re-open it. Two upstream skills get you there, and they compose rather than compete:
+In-chain the upstream is the vetted tracker ticket itself, written with `to-spec` if you have it
+(a suggestion, never a requirement). Standalone, `kestra-spec` expects the ambiguity to be mostly
+gone already — it reads what was settled and doesn't re-open it. Two upstream skills get you there,
+and they compose rather than compete:
 
 * **`/grilling`** — one continuous interview, one question at a time, walking down the design tree
   and resolving dependencies between decisions as it goes. This is the normal entry point: a
@@ -100,13 +203,21 @@ ACs are Given-When-Then, the frozen tests are written as BDD scenarios (Gherkin 
 blocks structured as Given/When/Then) that map 1:1 onto them — a format choice only, `freeze_after`
 and the test-hash invariant work exactly the same either way. See
 [`workflow/runs/order-cancellation-refund/`](runs/order-cancellation-refund/) for a worked example
-spec + generated workflow using this format.
+spec + generated workflow using this format. That spec deliberately keeps the *pre-*two-mode
+template shape — it's the unmarked standalone/foreign-shape exemplar, and the validator's four
+conditional checks print `WARN` against it, which is the standalone contract demonstrated on a real
+file. The current template lives in [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md).
 
-**It runs nothing** — it writes `0-spec.md` and stops. Hand it off to `kestra-build` next.
+**It writes no code and runs no stage** — it writes `0-spec.md`, commits it (two commits in-chain,
+one standalone), and stops. It is read-only on the tracker throughout. Hand it off to
+`kestra-build` next — unless the status line says `BLOCKED_ON_INTENT`, in which case the handoff is
+back upstream, to whoever owns the rule the ticket didn't decide.
 
 ### Example usage
 
 ```
+"raise this vetted ticket into 0-spec.md: https://github.com/acme/app/issues/123"
+"materialize issue #123 into a spec"
 "write the spec for kestra-build for CSV export"
 "turn this idea into 0-spec.md"
 ```
@@ -310,6 +421,7 @@ time.
 
 | File | Contents |
 |---|---|
+| [`kestra-spec/references/chain-provenance.md`](kestra-spec/references/chain-provenance.md) | The chain marker's exact form and its degenerate cases, the exactly-one-match rule for finding the raise commit, re-raising after a bounce or a re-vet, and tracking on a local file instead of GitHub |
 | [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | Where every state/transition comes from, the "Default HITL posture," why there's no mid-workflow replanning |
 | [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | Full field reference for `workflow.yaml`, with a complete worked example (csv-export) |
 | [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | Field reference for `state.json` |
@@ -319,14 +431,20 @@ time.
 
 ## What's intentionally "not done"
 
-- **kestra-spec never touches code or runs anything** — it writes `0-spec.md` and stops. It does
-  cover the whole spec→plan front end inline, which is why the old PM/BA/SA/architect role skills
-  were retired; `meta-designer` is the one that stayed, since it produces an openable artifact this
-  skill doesn't.
+- **kestra-spec never touches code and never runs a stage** — it writes `0-spec.md`, commits it,
+  runs the two validator scripts on its own output, and stops. It does cover the whole spec→plan
+  front end inline, which is why the old PM/BA/SA/architect role skills were retired;
+  `meta-designer` is the one that stayed, since it produces an openable artifact this skill doesn't.
+- **kestra-spec never writes to the tracker** — no comment, label, edit or close, so it cannot vet
+  its own input. A missing or stale vet stops the pass instead.
+- **kestra-spec never invents an undecided business rule in-chain** — a branch the ticket didn't
+  decide bounces upstream as `BLOCKED_ON_INTENT`. `needs_ui` and `needs_sa` work stays inline as
+  before; only genuine intent-silence bounces.
 - **kestra-build never runs anything** — it doesn't write real code, commit, or call any skill.
 - **kestra-run never generates a workflow itself** — if the file doesn't exist yet, it says so
   instead of improvising one.
-- **Neither skill hard-depends on any specific specialized skill/agent** — any skill name that
-  might be suggested in a stage's `brief` is only ever a suggestion ("try it if it's there"), never
-  a requirement, so a generated `workflow.yaml` can move to a different machine/session with a
-  different skill set and keep working.
+- **None of the three hard-depends on any specific specialized skill/agent** — any skill name that
+  might be suggested in a stage's `brief`, or named as the way to write the ticket upstream
+  (`to-spec`), is only ever a suggestion ("try it if it's there"), never a requirement. So a
+  generated `workflow.yaml` can move to a different machine/session with a different skill set and
+  keep working, and `kestra-spec` still runs where `to-spec` and `kestra-build` aren't installed.

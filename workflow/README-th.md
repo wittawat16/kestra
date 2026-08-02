@@ -7,12 +7,14 @@
 จำกัดว่าแต่ละ stage แก้ไฟล์ไหนได้บ้าง และ commit ทีละ stage เพื่อให้ rollback หรือ resume ได้เสมอ
 
 ```
-ไอเดียที่ลับคมแล้ว (จาก /grilling — หรือ /wayfinder ก่อน ถ้างานใหญ่เกินหนึ่ง session)
+ticket บน tracker ที่คน vet แล้ว (in-chain)  ·  หรือไอเดียที่ลับคมจาก /grilling (standalone)
+                                              (/wayfinder ก่อน ถ้างานใหญ่เกินหนึ่ง session)
    │
    ▼
-┌─────────────┐   เขียน 0-spec.md — AC ที่ทดสอบได้ (เขียนแบบ Given-When-Then/BDD ได้), flag
-│ kestra-spec  │   needs_*, business rules, design notes, และการสำรวจโค้ดจริงที่ verify แล้ว
-└──────┬──────┘   ทำทั้งหมดในรอบเดียว
+┌─────────────┐   in-chain: เช็ค vet → commit ตัว ticket แบบ verbatim → raise เป็น 0-spec.md
+│ kestra-spec  │   ในคอมมิตที่สอง · standalone: ซักถามหนึ่งรอบ คอมมิตเดียว
+└──────┬──────┘   ทั้งสองโหมด: AC ที่ทดสอบได้, flag needs_*, External Interface, Exit Criteria,
+       │          business rules, design notes, การสำรวจโค้ดจริงที่ verify แล้ว — ในรอบเดียว
        │
        ▼
 ┌─────────────┐   เขียน workflow.yaml + state.json แล้วหยุด
@@ -37,20 +39,121 @@ skill เฉพาะทาง (เช่น skill สำหรับ implement,
 
 ### มันทำอะไร
 
-รับไอเดียที่ลับคมแล้ว (ปกติเป็นผลลัพธ์จาก `/grilling` หรือการซักถามแบบเดียวกันที่ทำให้ความคลุมเครือ
-หมดไปแล้ว) แล้วสร้าง `0-spec.md` ไฟล์เดียวในรอบเดียว: acceptance criteria ที่ทดสอบได้, error state
-ที่ชัดเจน, flag `needs_ba`/`needs_ui`/`needs_sa`/`needs_devops` ที่ `kestra-build` จะอ่านต่อ,
-business rules (ถ้า `needs_ba: true`), design notes (ถ้า `needs_ui: true`), การตัดสินใจด้าน
-solution architecture (ถ้า `needs_sa: true`), และการสำรวจโค้ดจริงที่ path ทุกอันถูก verify ว่ามีจริง
+สร้าง `0-spec.md` ไฟล์เดียวในรอบเดียว: acceptance criteria ที่ทดสอบได้, error state ที่ชัดเจน,
+flag `needs_ba`/`needs_ui`/`needs_sa`/`needs_devops` ที่ `kestra-build` จะอ่านต่อ, test seam
+(**External Interface**), เงื่อนไขหยุด (**Exit Criteria**), business rules (ถ้า `needs_ba: true`),
+design notes (ถ้า `needs_ui: true`), การตัดสินใจด้าน solution architecture (ถ้า `needs_sa: true`),
+และการสำรวจโค้ดจริงที่ path ทุกอันถูก verify ว่ามีจริง
 
 ในขณะที่กลุ่ม `meta/` แบ่งงานชุดเดียวกันนี้ออกเป็นห้า skill ห้าไฟล์ `kestra-spec` ทำเป็นรอบเดียว
 ต่อเนื่อง ไฟล์เดียว — เพื่อไม่ต้องจำว่าต้อง chain ห้า skill เอง และ stage agent ของ `kestra-build`
 ก็ไม่ต้องเดาช่องว่างที่หลุดตอน handoff
 
+### สองโหมด input ตัดสินแบบ mechanical
+
+เป็นโหมด **in-chain** ก็ต่อเมื่อคำสั่งที่เรียกใช้ระบุ ticket บน tracker มาด้วย (เป็น URL หรือ `#N`
+บวกชื่อ repo) นอกนั้นคือ **standalone** มันจะไม่ไปไล่หา ticket ที่ไม่มีใครระบุมาเด็ดขาด — การที่ไม่มี
+ticket ถูกระบุ*คือ*สัญญาณของ standalone และการเดาเอาเองคือช่องทางที่ intent ซึ่งยังไม่ถูก vet จะหลุดเข้ามา
+
+| | In-chain | Standalone |
+|---|---|---|
+| intent มาจาก | ticket ที่ระบุ ซึ่งคน vet แล้ว | ไอเดียที่เขียนเองหรือผลจาก `/grilling` บวกการซักถามใน session นี้ |
+| vetted gate | บังคับ — ไม่มี vet ไม่ทำงาน | ไม่มี |
+| จำนวนคอมมิต | สอง: ตัว ticket แบบ verbatim แล้วค่อย raise | หนึ่ง: การ raise |
+| บรรทัด `> Spec-ticket:` / `> Vetted:` ใน preamble | เขียน | ไม่เขียนเด็ดขาด |
+| `needs_ba` ที่ ticket เงียบเรื่อง intent | เด้งกลับต้นทาง (bounce) | ถามคนตรงนั้นเลย แล้วอ้างอิงคำตอบเป็น `Q<n>` |
+| validator ตอนจบรอบ | การเช็ค template สี่ข้อเป็น `FAIL` | สี่ข้อเดียวกันขึ้น `WARN` |
+
+**standalone เป็นเส้นทางชั้นหนึ่ง ไม่ใช่เส้นทางที่ด้อยกว่า** vetted gate มีอยู่เพราะในโหมด in-chain
+ไม่มีใครเฝ้าดูจังหวะที่ intent ถูกคิดขึ้นมาเอง ส่วน standalone มีมนุษย์อยู่ในลูปโดยธรรมชาติ — เขาเป็น
+คนเรียกใช้เอง ใน session นี้ และเป็นคนตอบคำถามเอง พฤติกรรมเดียวกัน แต่หลักประกันคนละแบบ standalone
+ยังเก็บการซักถามไว้ครบ: คำขอหยาบๆ ("เพิ่ม CSV export") ยังต้องผ่านการซักถามสั้นๆ เรื่องขอบเขต
+error state และจุดคลุมเครือก่อนจะเขียนอะไรลงไป
+
+### vetted gate และการ raise แบบสองคอมมิต (in-chain)
+
+`kestra-spec` เป็น **read-only บน tracker** — ไม่คอมเมนต์ ไม่ติด label ไม่แก้ ไม่ปิด ticket ดังนั้น
+มันอนุมัติ input ของตัวเองไม่ได้ สัญญาณ vet คือคอมเมนต์บน ticket ที่บรรทัดแรกเป็น
+`VETTED-FOR-KESTRA: <sha256 ของ body ของ ticket ณ ตอน vet>` ซึ่งคนสร้างขึ้นครั้งเดียวแล้ววางไว้
+คอมเมนต์ล่าสุดที่ match ชนะ และ hash ต้องตรงกับ hash ของ body ปัจจุบัน การผูกการอนุมัติเข้ากับ
+content hash คือสิ่งที่ทำให้มันแปลว่า *vet **ข้อความชุดนี้*** — body ที่ถูกแก้หลัง vet จะถูกจับได้
+และ ticket บางๆ จะฟอกตัวเองผ่าน URL ที่อ้างอิงได้ไม่ได้ ข้อจำกัดที่ระบุไว้ตรงๆ: token ก็โพสต์
+คอมเมนต์นั้นได้ มันจึงไม่ได้พิสูจน์ว่ามนุษย์เป็นคนพิมพ์ สิ่งที่ได้จริงคือ `kestra-spec` ไม่เคยเขียนมันเอง
+การอนุมัติระบุข้อความที่แน่นอน และตัว artifact มองเห็นได้ มีชื่อคน มีวันที่
+
+ไม่มี vet หรือ vet เก่าไม่ตรง → หยุดก่อนเริ่มทำงาน ไม่ commit อะไรเลย และพิมพ์บรรทัดให้คนเอาไปวาง
+เป็นคอมเมนต์ ถ้าตัว ticket เองบางหรือยังไม่มี `to-spec` คือเครื่องมือที่ *แนะนำ* ให้ใช้เขียน — เป็นแค่
+คำแนะนำ ไม่ใช่ข้อบังคับ กติกาเดียวกับการอ้างถึง skill อื่นทุกที่ในเอกสารนี้
+
+เมื่อมี vet แล้ว มันจะทำ commit สองอันพอดี โดยห้ามมีอะไรถูก commit คั่นกลาง:
+
+| คอมมิต | subject | บรรจุอะไร |
+|---|---|---|
+| 1 | `spec(<feature-id>): materialize vetted ticket verbatim` | body ของ ticket เขียนลง `0-spec.md` แบบไม่แก้อะไรเลย บวกสำเนา `requirement_surface.py` และ `validate_spec.py` ของ run นี้เอง ข้อความคอมมิตบันทึก `Spec-ticket: <url>` และ `Ticket-body-sha256: <hex>` |
+| 2 | `spec(<feature-id>): raise vetted ticket into 0-spec.md` | แตะ path เดียวเป๊ะๆ — `0-spec.md` ที่ raise แล้วเขียนทับ body แบบ verbatim ทำให้การ raise เป็น `git diff` อันเดียวจริงๆ ข้อความคอมมิตบันทึก `Spec-ticket:` และ `Vetted-by:` |
+
+`tr -d '\r'` คือการ normalize อย่างเดียวที่ประกาศไว้ (GitHub คืน body ที่เขียนผ่านเว็บมาเป็น CRLF)
+นอกนั้นไม่ normalize อะไรอีก เพราะยิ่งทำเพิ่มยิ่งทำให้คำว่า "verbatim" ต่อรองได้ หลังคอมมิตที่ 2
+มันจะดึง ticket มาใหม่แล้ว `diff` เทียบกับไฟล์ในคอมมิตที่ 1 — ถ้า diff ไม่ว่างคือ **หยุดทันที ไม่
+handoff** และมีทางแก้ที่ซื่อสัตย์แค่สองทาง: materialize ใหม่ตั้งแต่ต้น หรือ bounce เพราะ ticket
+เปลี่ยนจริงระหว่างรอบ ส่วนการแก้ไฟล์ verbatim ที่ commit ไปแล้ว หรือ amend คอมมิตที่ 1 นั้น **ห้าม**
+— นั่นคือ "แก้เทสต์ให้เข้าข้างโค้ดที่พัง" ในคราบของ spec ส่วนคำถามว่าคอมมิตไหนคือ *ตัว* raise ใช้
+กติกา match ได้อันเดียวเป๊ะ (การ raise ใหม่ไปแทนที่อันเดิม ไม่ใช่ซ้อนทับกัน) ดูรายละเอียดที่
+[`kestra-spec/references/chain-provenance.md`](kestra-spec/references/chain-provenance.md)
+
+### Bounce — ความเงียบเรื่อง intent เด้งกลับต้นทาง
+
+ในโหมด in-chain ถ้า ticket ไม่ได้บอกว่า *ผลลัพธ์ไหนถูก* สำหรับแขนงที่ฟีเจอร์นี้ต้องเลือก
+`kestra-spec` จะ **bounce** แทนที่จะเขียน business rule ขึ้นมาเอง: มันทำทั้งสองคอมมิตให้จบ (งานไม่หาย
+และตรวจสอบย้อนได้) ตั้งบรรทัด status เป็น `BLOCKED_ON_INTENT` เขียนรายการ `BOUNCE-<n>` รูปแบบตายตัว
+ไว้ใต้ **Open Items** ระบุแขนงที่ยังไม่ตัดสิน AC ที่ถูกบล็อก และใครเป็นคนตัดสิน — แล้วไม่ handoff ให้
+`kestra-build`
+
+ตัวแยกแยะนี้แคบโดยตั้งใจ การขาดตัวเลข threshold ชื่อ ข้อความ copy หรือชื่อไฟล์ **ไม่ใช่** bounce:
+เลือกค่า default ที่สมเหตุสมผล ทำเครื่องหมายบรรทัดนั้นว่า `⚠ inferred` บันทึกเป็น `OI-n` แบบไม่บล็อก
+แล้วทำต่อ มีเฉพาะ *แขนง* ที่ยังไม่ถูกตัดสินจริงๆ เท่านั้นที่หยุดรอบการทำงาน ส่วนการ "ติดธงไว้แล้วทำต่อ"
+ไม่ใช่ทางเลือก เพราะ workflow ค่าเริ่มต้นมี `human_approval` stage เป็นศูนย์ ธงนั้นจึงไม่มีใครอ่าน และ
+build จะเดินหน้าต่อบน intent ที่ถูกคิดขึ้นเอง
+
+### กติกา provenance
+
+ทุกบรรทัดที่เป็น intent ซึ่งรอบการลับ spec เพิ่มเข้ามา ต้องอ้างอิงแหล่งที่มา หรือไม่ก็ติด
+`⚠ inferred` — "บรรทัด intent" คือบรรทัดใดก็ตามที่ยืนยันว่าระบบต้องทำอะไร (bullet ของ FR, edge case,
+แถวใน invariant, AC, แถวใน **AC Coverage Map**, operation ใน External Interface) แหล่งที่มาที่ใช้ได้
+คือ `US-n` (user story), `ID§x` (Implementation Decisions ของ ticket), `TD`/`FN`/`OOS`/`PS`,
+`IDEA§x` / `Q<n>` (โหมด standalone: หัวข้อในไอเดีย หรือคำตอบจากการซักถามใน session นี้) หรือ
+`verified:<probe>` สำหรับสิ่งที่ยืนยันด้วยการรันโค้ดจริง บรรทัดที่ไม่มีทั้งแหล่งที่มาและ `⚠ inferred`
+คือ defect ไม่ใช่แค่เรื่องสไตล์ — คอลัมน์ `Source` ที่เพิ่มเข้ามาใน AC Coverage Map ถ้าไม่มีกติกานี้
+หนุนหลัง ก็เป็นแค่คอลัมน์ที่เขียวแบบโกหก
+
+### การเช็คเชิงกลไกตอนจบรอบ
+
+ก่อนจะ commit การ raise `kestra-spec` จะรัน `validate_spec.py` และ `requirement_surface.py` กับ
+`0-spec.md` ของตัวเอง โดยใช้สำเนาที่มันเขียนไว้ในโฟลเดอร์ของ run นั้น เหตุผล: `spec-review` ทำงาน
+หลังจาก `kestra-build` ยุบ spec เป็น stage แล้วเท่านั้น และโหมด `lite` ก็ยุบ `spec-review` เข้าไปใน
+`generate-tests` อีกที ดังนั้น run แบบ `lite` จะเรียก validator ศูนย์ครั้ง และทุกอย่างที่ต่อยอดจากการ
+raise ก็จะถูกสร้างบน surface ที่ยังไม่ถูกตรวจ นี่คือจุดตรวจ**เพิ่ม**ที่มาก่อน ไม่ได้มาแทน stage
+`spec-review`
+
+ข้อบังคับด้าน template สี่ข้อถูกเช็คแบบ **มีเงื่อนไข** โดยดูจาก chain marker (บรรทัด
+`> Spec-ticket:` บรรทัดเดียวใน preamble ซึ่งเขียนโดยคอมมิต raise เท่านั้น ไม่มีที่อื่นเขียน): ต้องมี
+คอลัมน์ `Source` ใน AC Coverage Map, ต้องมีหัวข้อ `## External Interface` ที่มีเนื้อหาจริง, ต้องมี
+mode-prediction fact บรรทัดเดียวเป๊ะ และต้องผ่าน delimiter precondition มี marker ⇒ `FAIL`,
+ไม่มี ⇒ `WARN` เพราะ spec ที่มี marker คือ spec ที่ skill ของ repo นี้เองสร้างจาก ticket ที่ vet แล้ว
+template ของมันจึงเป็นสัญญา ส่วน spec ที่ไม่มี marker คือ spec ที่เขียนมือ เป็น standalone หรือมาจาก
+ที่อื่น การขาดหัวข้อเดียวกันจึงไม่ได้พิสูจน์อะไร — และการเช็คเดิมทุกข้อที่มีอยู่ก่อนแล้วทำงานเหมือนกัน
+ทั้งสองโหมด ถ้าหาสำเนาสคริปต์ไม่เจอเลยสักที่ มันจะพิมพ์ `WARN` หนึ่งอัน ตรวจ checklist ด้วยตัวเอง
+แล้วทำต่อ เพราะ `kestra-spec` ต้องไม่ hard-depend กับการที่ `kestra-build` ถูกติดตั้งไว้ แต่ต้องคัดลอก
+**ทั้งสองสคริปต์ หรือไม่ก็ไม่ต้องคัดลอกเลย**: ถ้ามี `validate_spec.py` แต่ไม่มี `requirement_surface.py`
+วางข้างกัน การเช็ค delimiter จะรันไม่ได้เลย และ *รันไม่ได้* ก็รายงานผ่านเงื่อนไขเดียวกัน — มี marker ⇒
+`FAIL`, ไม่มี ⇒ `WARN` การที่เช็คไม่ได้รัน ไม่เท่ากับผ่าน
+
 ### ก่อนหน้านี้ใช้อะไร: `/grilling` และ `/wayfinder` เมื่องานใหญ่กว่านั้น
 
-`kestra-spec` คาดหวังว่าความคลุมเครือถูกกำจัดไปแล้ว — มันอ่านสิ่งที่ตกลงกันไว้ ไม่รื้อใหม่ มีสอง
-skill ต้นทางที่พาไปถึงจุดนั้น และทั้งสองใช้ **ซ้อนกัน** ไม่ใช่แทนกัน
+ในโหมด in-chain ต้นทางคือตัว ticket ที่ vet แล้วนั่นเอง ซึ่งเขียนด้วย `to-spec` ได้ถ้ามี (เป็นคำแนะนำ
+ไม่ใช่ข้อบังคับ) ส่วนโหมด standalone `kestra-spec` คาดหวังว่าความคลุมเครือถูกกำจัดไปเกือบหมดแล้ว —
+มันอ่านสิ่งที่ตกลงกันไว้ ไม่รื้อใหม่ มีสอง skill ต้นทางที่พาไปถึงจุดนั้น และทั้งสองใช้ **ซ้อนกัน**
+ไม่ใช่แทนกัน
 
 * **`/grilling`** — สัมภาษณ์ต่อเนื่องครั้งเดียว ทีละคำถาม ไล่ลงไปตาม design tree แก้ dependency
   ระหว่างการตัดสินใจไปทีละอัน อันนี้คือทางเข้าปกติ เพราะ `0-spec.md` หนึ่งไฟล์อธิบายหนึ่งฟีเจอร์
@@ -96,13 +199,21 @@ business rule กลายเป็นบรรทัดที่ชัดเจ
 เทสต์ที่ freeze จะเขียนเป็น BDD scenario (Gherkin หรือ `describe`/`it` ที่จัดโครงเป็น
 Given/When/Then) ที่ map 1:1 กับมัน — เป็นแค่ทางเลือกด้าน format เท่านั้น `freeze_after` และ
 test-hash invariant ทำงานเหมือนเดิมทุกประการ ดูตัวอย่างจริงได้ที่
-[`workflow/runs/order-cancellation-refund/`](runs/order-cancellation-refund/)
+[`workflow/runs/order-cancellation-refund/`](runs/order-cancellation-refund/) — spec ตัวนั้นตั้งใจ
+คงรูปแบบ template *ก่อน*มีสองโหมดไว้ เพราะมันคือตัวอย่างของ spec แบบ standalone/มาจากที่อื่นที่ไม่มี
+marker และการเช็คแบบมีเงื่อนไขทั้งสี่ข้อจะขึ้น `WARN` กับมัน ซึ่งคือสัญญาของโหมด standalone ที่สาธิต
+บนไฟล์จริง ส่วน template ปัจจุบันอยู่ใน [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md)
 
-**มันไม่รันอะไรเลย** — แค่เขียน `0-spec.md` แล้วหยุด ส่งต่อให้ `kestra-build` ต่อไป
+**มันไม่เขียนโค้ดและไม่รัน stage ใดๆ** — แค่เขียน `0-spec.md`, commit (สองคอมมิตในโหมด in-chain,
+คอมมิตเดียวในโหมด standalone) แล้วหยุด และเป็น read-only บน tracker ตลอดทั้งรอบ จากนั้นส่งต่อให้
+`kestra-build` — ยกเว้นบรรทัด status เป็น `BLOCKED_ON_INTENT` กรณีนั้นให้ส่งกลับต้นทาง ไปหาคนที่เป็น
+เจ้าของกติกาที่ ticket ยังไม่ได้ตัดสิน
 
 ### ตัวอย่างการใช้งาน
 
 ```
+"raise this vetted ticket into 0-spec.md: https://github.com/acme/app/issues/123"
+"materialize issue #123 into a spec"
 "write the spec for kestra-build for CSV export"
 "turn this idea into 0-spec.md"
 ```
@@ -291,6 +402,7 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
 
 | ไฟล์ | เนื้อหา |
 |---|---|
+| [`kestra-spec/references/chain-provenance.md`](kestra-spec/references/chain-provenance.md) | รูปแบบที่แน่นอนของ chain marker และเคสพิการต่างๆ, กติกา match ได้อันเดียวเป๊ะสำหรับหาคอมมิต raise, การ raise ใหม่หลัง bounce หรือหลัง re-vet, และการใช้ tracker ที่เป็นไฟล์ในเครื่องแทน GitHub |
 | [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | ที่มาของทุก state/transition, "Default HITL posture", ทำไมไม่มีการ replan กลางเวิร์กโฟลว์ |
 | [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | รายการฟิลด์เต็มของ `workflow.yaml` พร้อมตัวอย่างจริง (csv-export) |
 | [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | รายการฟิลด์ของ `state.json` |
@@ -300,11 +412,19 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
 
 ## สิ่งที่ตั้งใจ "ไม่ทำ"
 
-- **kestra-spec ไม่แตะโค้ดหรือรันอะไรเลย** — เขียน `0-spec.md` แล้วหยุด แต่มันครอบงานฝั่ง spec→plan
-  ทั้งหมดไว้ในตัวแล้ว จึงเป็นเหตุผลที่ role skill เดิม (PM/BA/SA/architect) ถูกปลดระวางไป เหลือ
-  `meta-designer` ตัวเดียวที่ยังอยู่ เพราะมันสร้าง artifact ที่เปิดดูได้จริงซึ่ง skill นี้ไม่ได้ทำ
+- **kestra-spec ไม่แตะโค้ดและไม่รัน stage ใดๆ** — เขียน `0-spec.md`, commit, รันสคริปต์ validator
+  สองตัวกับผลงานของตัวเอง แล้วหยุด แต่มันครอบงานฝั่ง spec→plan ทั้งหมดไว้ในตัวแล้ว จึงเป็นเหตุผลที่
+  role skill เดิม (PM/BA/SA/architect) ถูกปลดระวางไป เหลือ `meta-designer` ตัวเดียวที่ยังอยู่ เพราะ
+  มันสร้าง artifact ที่เปิดดูได้จริงซึ่ง skill นี้ไม่ได้ทำ
+- **kestra-spec ไม่เขียนอะไรลง tracker เลย** — ไม่คอมเมนต์ ไม่ติด label ไม่แก้ ไม่ปิด ticket มันจึง
+  vet input ของตัวเองไม่ได้ ถ้าไม่มี vet หรือ vet ไม่ตรง มันจะหยุดรอบการทำงานแทน
+- **kestra-spec ไม่คิด business rule ที่ยังไม่ถูกตัดสินขึ้นมาเองในโหมด in-chain** — แขนงที่ ticket
+  ไม่ได้ตัดสินจะเด้งกลับต้นทางเป็น `BLOCKED_ON_INTENT` ส่วนงาน `needs_ui` และ `needs_sa` ยังทำในตัว
+  เหมือนเดิม มีเฉพาะความเงียบเรื่อง intent จริงๆ เท่านั้นที่ bounce
 - **kestra-build ไม่รันอะไรเลย** — ไม่เขียนโค้ดจริง ไม่ commit ไม่เรียก skill ใดๆ
 - **kestra-run ไม่สร้างเวิร์กโฟลว์เอง** — ถ้าไฟล์ยังไม่มี มันจะบอกตรงๆ แทนที่จะด้นสดสร้างเอง
-- **ทั้งสอง skill ไม่ hard-depend กับ skill/agent เฉพาะทางใดๆ** — ชื่อ skill ที่อาจถูกแนะนำใน
-  `brief` ของ stage เป็นแค่คำแนะนำเสมอ ("ลองใช้ถ้ามี") ไม่ใช่ข้อบังคับ ทำให้ `workflow.yaml` ที่
-  สร้างไว้ย้ายไปเครื่อง/session อื่นที่มี skill set ต่างกันได้และยังทำงานได้ปกติ
+- **ทั้งสาม skill ไม่ hard-depend กับ skill/agent เฉพาะทางใดๆ** — ชื่อ skill ที่อาจถูกแนะนำใน
+  `brief` ของ stage หรือที่ถูกระบุว่าเป็นวิธีเขียน ticket ต้นทาง (`to-spec`) เป็นแค่คำแนะนำเสมอ
+  ("ลองใช้ถ้ามี") ไม่ใช่ข้อบังคับ ทำให้ `workflow.yaml` ที่สร้างไว้ย้ายไปเครื่อง/session อื่นที่มี
+  skill set ต่างกันได้และยังทำงานได้ปกติ และ `kestra-spec` ก็ยังรันได้ในเครื่องที่ไม่ได้ติดตั้ง
+  `to-spec` และ `kestra-build`
