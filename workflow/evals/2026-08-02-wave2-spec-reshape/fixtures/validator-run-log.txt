@@ -1,0 +1,408 @@
+# validate_spec.py run log — ticket #35 (Wave 2), 2026-08-02 20:35:06 +07
+
+Repo: kestra-upstream @ fb23cb7 (branch arkaphat/prep-chain-impl)
+Every command below was run, in this order; nothing is reasoned or reconstructed.
+Repo root argument is always '.' (the kestra-upstream checkout root).
+
+Round-1 fix re-run, 2026-08-02 (review findings R1-1..R1-5): sections 1-5, 7 and 8 were re-run
+unchanged (§3's 43-file matrix is byte-identical to logs/validator-matrix.log). Sections 6 and 9
+below carry the re-run output, because two round-1 fixes changed them: the delimiter check now
+reports through the chain conditional instead of always WARNing when requirement_surface.py is
+absent (R1-2), and the stray .playwright-mcp/ is gone from the working tree (R1-3). Section 11 is
+new: a missing spec file now exits 1 (R1-4).
+
+## 1. Syntax
+
+$ python3 -m py_compile workflow/kestra-build/scripts/validate_spec.py workflow/kestra-build/scripts/requirement_surface.py workflow/kestra-build/scripts/validate_workflow.py workflow/kestra-run/scripts/stage_transition.py && echo 'py_compile: all four scripts OK'
+py_compile: all four scripts OK
+exit=0
+
+## 2. The extractor's own fixture tests (proves the _canonical -> canonical_heading
+##    rename is behavior-identical; no EXTRACTOR_VERSION bump)
+
+$ python3 workflow/kestra-build/scripts/test_requirement_surface.py
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.005s
+
+OK
+exit=0
+
+## 3. New fixtures — workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/
+
+Each check is exercised both ways: the '-chained.md' variant carries the D1 marker
+line and must FAIL (exit 1); its '-standalone.md' twin is the same spec without that
+one line and must WARN (exit 0).
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/bare-heading-in-surface-chained.md .
+FAIL: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/bare-heading-in-surface-standalone.md .
+WARN: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/conforming-chained.md .
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-external-interface-chained.md .
+FAIL: '## External Interface' is empty — name the seam tests may drive, the seams deliberately absent, and what is not an interface
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-external-interface-standalone.md .
+WARN: '## External Interface' is empty — name the seam tests may drive, the seams deliberately absent, and what is not an interface
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-source-cells-chained.md .
+FAIL: 2 AC Coverage Map row(s) have an empty 'Source' cell — a green column that lies
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-source-cells-standalone.md .
+WARN: 2 AC Coverage Map row(s) have an empty 'Source' cell — a green column that lies
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-chained.md .
+FAIL: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+FAIL: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+FAIL: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-standalone.md .
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-below-preamble.md .
+FAIL: 'Spec-ticket:' line outside the preamble — it must sit above the first '## ' or it can land inside a requirement-surface section and move surface_hash.
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-duplicate-chained.md .
+FAIL: 2 'Spec-ticket:' marker lines in the preamble — exactly one is allowed
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-malformed-chained.md .
+FAIL: chain marker 'Spec-ticket:' present but malformed ('<ticket-url>') — a partial marker is a FAIL (same rule as validate_workflow.py's partial anchor triple); give the full ticket URL or remove the line.
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-valueless-chained.md .
+FAIL: chain marker 'Spec-ticket:' present but malformed ('') — a partial marker is a FAIL (same rule as validate_workflow.py's partial anchor triple); give the full ticket URL or remove the line.
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/mode-without-reason-chained.md .
+WARN: the mode-prediction line records no reason for the mode
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-ac-coverage-map-chained.md .
+FAIL: no 'AC Coverage Map' section found — the Source column check cannot run
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-ac-coverage-map-standalone.md .
+WARN: no 'AC Coverage Map' section found — the Source column check cannot run
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-external-interface-chained.md .
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-external-interface-standalone.md .
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-mode-prediction-chained.md .
+FAIL: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-mode-prediction-standalone.md .
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-precondition-line-chained.md .
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-source-column-chained.md .
+FAIL: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-source-column-standalone.md .
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/plural-external-interfaces-chained.md .
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+FAIL: '## External Interfaces' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/two-mode-lines-chained.md .
+FAIL: 2 mode-prediction lines — exactly one is allowed
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/two-mode-lines-standalone.md .
+WARN: 2 mode-prediction lines — exactly one is allowed
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/unclosed-fence-chained.md .
+FAIL: unclosed code fence — the requirement surface would be silently truncated (false-fresh hash)
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/unclosed-fence-standalone.md .
+WARN: unclosed code fence — the requirement surface would be silently truncated (false-fresh hash)
+exit=0
+
+## 4. The repo's worked example (D9: exit 0, WARNs only, after the row repair in
+##    commit-scope-2 plus the check_files_to_touch no-path WARN skip landed here)
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/runs/order-cancellation-refund/0-spec.md .
+WARN: Files to Touch row 1 names no file path ('*(none — illustrative spec, no repo attached)*') — the path-existence check cannot run on it
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+## 5. Every 0-spec under workflow/evals/ (the fixtures ticket #31 says both validators
+##    are exercised against). All are unmarked => standalone => WARN-only by design.
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-28-batch-chunk-lite/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-28-dlq-retry-cap/new/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'CLAUDE.md' marked 'none' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-28-dlq-retry-cap/old/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-build-model-compare/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny-2/full/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny-2/minimal/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny/full/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny/minimal/0-spec.md .
+FAIL: Files to Touch row 'src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-model-compare/opus/0-spec.md .
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-model-compare/sonnet/0-spec.md .
+FAIL: Files to Touch row 'fixture/src/queue.js' marked 'edit' but the path does not exist on disk
+FAIL: Files to Touch row 'fixture/test/queue.test.js' marked 'edit' but the path does not exist on disk
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md .
+WARN: no 'Files to Touch' section found — skipping path-existence check
+WARN: no 'Runtime Invariants' section found
+WARN: no 'Reality Constraints' section found
+WARN: no 'Acceptance Criteria' section found
+WARN: no 'AC Coverage Map' section found — the Source column check cannot run
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: '## Solution' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## User Stories' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Implementation Decisions' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Testing Decisions' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Further Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec.md .
+exit=0
+
+## 6. Degradation path: validate_spec.py copied WITHOUT requirement_surface.py beside
+##    it (heading matching falls back to get_section; the delimiter check cannot run,
+##    and since R1-2 "cannot run" reports through the chain conditional — FAIL marked,
+##    WARN unmarked. Not-run is not passed.)
+
+$ python3 /tmp/t35-noext/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/conforming-chained.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+FAIL: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=1
+
+$ python3 /tmp/t35-noext/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-chained.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+FAIL: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+FAIL: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+FAIL: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=1
+
+$ python3 /tmp/t35-noext/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-standalone.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=0
+
+## 7. D1's marker neutrality, re-verified against this branch: adding the marker line
+##    to a spec must not move surface_hash (the marker lives above the first '## ')
+
+$ python3 workflow/kestra-build/scripts/requirement_surface.py workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec.md --hash
+e1c70ae8e3f6810cd8d85503f91b31e851aa9eb79af1f7da1c3c93dc159acc27
+exit=0
+
+$ python3 workflow/kestra-build/scripts/requirement_surface.py /tmp/t35-grown-marked.md --hash
+e1c70ae8e3f6810cd8d85503f91b31e851aa9eb79af1f7da1c3c93dc159acc27
+exit=0
+
+$ python3 workflow/kestra-build/scripts/requirement_surface.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/conforming-chained.md --hash
+56eafde128a83a59d0412e9ef56a4b202e2fb65b796f95ad5381ffd45608281c
+exit=0
+
+$ python3 workflow/kestra-build/scripts/requirement_surface.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-chained.md --hash
+d17688bebc147598475ad2689ec196c14e55bbfa63f41948e0c68b5089cc008e
+exit=0
+
+## 8. The falsifiability pair is a byte-identical twin plus exactly one marker line
+
+$ diff -u workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-standalone.md workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-chained.md
+--- workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-standalone.md	2026-08-02 20:34:56
++++ workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-chained.md	2026-08-02 20:34:56
+@@ -1,6 +1,7 @@
+ # [fx] Spec — all four obligations missing
+ 
+ > Status: READY_FOR_BUILD | Created: 2026-08-02 | Next: kestra-build
++> Spec-ticket: https://github.com/arkaphat/arkaphat-builder/issues/35
+ > Delimiter precondition: every '## ' at column 0 outside a code fence is a template section heading; no line inside a requirement-surface section body begins with '## '; subsections use '### '; every code fence is closed.
+ 
+ ---
+exit=1
+
+## 9. Working tree touched by this ticket
+
+$ git status --porcelain          # re-run after the round-1 fixes
+ M README-th.md
+ M README.md
+ M workflow/README-th.md
+ M workflow/README.md
+ M workflow/kestra-build/scripts/requirement_surface.py
+ M workflow/kestra-build/scripts/validate_spec.py
+ M workflow/kestra-spec/SKILL.md
+ M workflow/runs/order-cancellation-refund/0-spec.md
+?? workflow/evals/2026-08-02-wave2-spec-reshape/
+?? workflow/kestra-spec/references/
+exit=0
+(The four README lines were already part of the change set — the first run of this log predated
+them. `.playwright-mcp/` was an untracked Playwright-MCP console log, unrelated to this ticket;
+R1-3 moved it out of the checkout so a `git add -A` cannot sweep it into the Wave-2 commit.)
+
+## 10. Regression guard: the committed (pre-ticket-#35) validator vs this one, over
+##     every pre-existing spec in the repo. FAIL counts must be identical except
+##     where the D9 no-path WARN skip removes one (the worked example).
+
+$ git show HEAD:workflow/kestra-build/scripts/validate_spec.py > /tmp/t35-baseline-validate_spec.py
+
+spec                                                           HEAD (before)          this branch (after)
+runs/order-cancellation-refund/0-spec.md                       exit=1 FAIL=1          exit=0 FAIL=0
+evals/2026-07-28-batch-chunk-lite/0-spec.md                    exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-28-dlq-retry-cap/new/0-spec.md                   exit=1 FAIL=3          exit=1 FAIL=3
+evals/2026-07-28-dlq-retry-cap/old/0-spec.md                   exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md    exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-build-model-compare/0-spec.md                 exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-spec-ablation-cherny-2/full/0-spec.md         exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-spec-ablation-cherny-2/minimal/0-spec.md      exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-spec-ablation-cherny/full/0-spec.md           exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-spec-ablation-cherny/minimal/0-spec.md        exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-07-31-spec-model-compare/opus/0-spec.md             exit=0 FAIL=0          exit=0 FAIL=0
+evals/2026-07-31-spec-model-compare/sonnet/0-spec.md           exit=1 FAIL=2          exit=1 FAIL=2
+evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md exit=0 FAIL=0          exit=0 FAIL=0
+evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec.md   exit=0 FAIL=0          exit=0 FAIL=0
+
+
+## 11. Round-1 fix R1-4: a missing spec file is a FAIL and now exits 1 (it printed
+##     FAIL and exited 0 before, contradicting this script's own FAIL -> exit 1 contract)
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/runs/order-cancellation-refund/no-such-0-spec.md .
+FAIL: spec file not found: workflow/runs/order-cancellation-refund/no-such-0-spec.md
+exit=1
+
+## 12. Round-1 re-run of sections 1-3 after every fix landed (unchanged)
+
+$ python3 -m py_compile workflow/kestra-build/scripts/validate_spec.py workflow/kestra-build/scripts/requirement_surface.py workflow/kestra-build/scripts/validate_workflow.py workflow/kestra-run/scripts/stage_transition.py && echo 'py_compile: all four scripts OK'
+py_compile: all four scripts OK
+exit=0
+
+$ python3 workflow/kestra-build/scripts/test_requirement_surface.py
+Ran 12 tests in 0.004s
+OK
+exit=0
+
+$ python3 workflow/evals/2026-08-02-wave2-spec-reshape/logs/run-matrix.py   # 43 files, extractor present
+TOTALS files=43 fails=19 warns=90 nonzero_exit=15
+$ diff /tmp/t35/validator-matrix.log workflow/evals/2026-08-02-wave2-spec-reshape/logs/validator-matrix.log
+exit=0          (byte-identical: no round-1 fix moves any extractor-present result)

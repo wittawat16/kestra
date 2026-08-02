@@ -1,0 +1,28 @@
+--- leg A: exactly one match ---
+7c706a29b990014eed0f0986f5c0de59a7b36f99
+count=1
+PASS exactly-one
+
+--- composition: <raise>^ is commit 1 and holds the verbatim body ---
+spec(operator-console): materialize vetted ticket verbatim
+
+ workflows/runs/operator-console/0-spec.md | 1 +
+ 1 file changed, 1 insertion(+)
+verbatim body at <raise>^: [body]
+
+--- leg B: zero matches (wrong ticket URL) ---
+count=0
+
+--- leg C: negative control — subject matches, body URL absent ---
+count=0
+--- leg D: two matches (a stacked re-raise instead of a reset) ---
+913131ea2d0757cfa6f365ffeda1f0672077a999
+7c706a29b990014eed0f0986f5c0de59a7b36f99
+count=2
+HARD FAIL: ambiguous by construction
+
+--- leg E: --all would find a sibling-branch raise (why the predicate stays current-branch) ---
+2
+--- leg E (proper): identical raise on a sibling branch ---
+current-branch matches: 1
+with --all: 2

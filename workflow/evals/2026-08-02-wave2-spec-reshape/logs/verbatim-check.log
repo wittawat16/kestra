@@ -1,0 +1,25 @@
+--- D3 PASS leg (Wave-1 pair; no live ticket, the committed ticket file stands in for the gh body stream) ---
+$ cat workflow/evals/2026-08-02-spec-instrumented-rerun/to-spec-pass/spec-ticket.md | tr -d "\r" > /tmp/t35/ticket-body.md
+$ diff -u workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md /tmp/t35/ticket-body.md
+diff exit=0   <- PASS: byte-identical after the one declared normalization
+$ sha256sum <both>
+6fdcee78ec16b752854f52eb01629e1c2d4fc3878c747dee6ece55be6ed090f4  workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md
+6fdcee78ec16b752854f52eb01629e1c2d4fc3878c747dee6ece55be6ed090f4  /tmp/t35/ticket-body.md
+CR bytes in the materialized file: 0  (so tr -d "\r" is a verified no-op on this pair)
+
+--- D3 FAIL leg: one-character tamper on a /tmp copy (r -> p inside "triage-labels.md") ---
+$ diff -u workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md /tmp/t35/ticket-body-tampered.md
+--- workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md	2026-08-02 19:27:40
++++ /tmp/t35/ticket-body-tampered.md	2026-08-02 20:43:39
+@@ -1,7 +1,7 @@
+ # Live operator console for the retry queue
+ 
+ <!-- triage labels as they would be applied: `enhancement` (category) + `ready-for-agent` (state).
+-     No `docs/agents/issue-tracker.md` or `docs/agents/triage-labels.md` exists in this repo, so the
++     No `docs/agents/issue-tracker.md` or `docs/agents/tpiage-labels.md` exists in this repo, so the
+      canonical label vocabulary is assumed. -->
+ 
+ ## Problem Statement
+diff exit=1   <- FAIL: hard stop, no handoff
+$ sha256sum /tmp/t35/ticket-body-tampered.md   # the offline fallback disagrees too
+78828029c6b7e3ab37e9c857a65e375b6e381756166923bcc659e2ab96399caf  /tmp/t35/ticket-body-tampered.md

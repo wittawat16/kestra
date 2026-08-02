@@ -1,0 +1,39 @@
+--- D2 read leg against the real ticket (read-only) ---
+$ gh issue view 35 --repo arkaphat/arkaphat-builder --json comments --jq '[.comments[]|select(.body|test("^VETTED-FOR-KESTRA: [0-9a-f]{64}"))]|sort_by(.createdAt)|last|[.createdAt,.author.login,(.body|split("
+")[0])]|@tsv'
+split cannot be applied to: null
+exit=1
+
+--- live body hash (what a vet line would have to equal) ---
+$ gh issue view 35 --repo arkaphat/arkaphat-builder --json body --jq .body | tr -d '' | shasum -a 256
+raw bytes=1486  CR count=0
+a3f514e04e5cf3ae86eb08464eecf9a1d7afd4277c157a7b507c26210b312862  -
+--- as specified in D2 (no vet comment present) ---
+split cannot be applied to: null
+exit=1
+
+--- null-safe variant that returns empty + exit 0 on absent ---
+exit=0 (empty output = no vet comment)
+
+--- and it still selects the newest when one exists (synthetic, local jq) ---
+2026-08-02T00:00:00Z	arkaphat	VETTED-FOR-KESTRA: a3f514e04e5cf3ae86eb08464eecf9a1d7afd4277c157a7b507c26210b312862
+exit=0
+
+=== ROUND-1 VERIFICATION (R1-1): the null-safe expression as it now ships in
+=== kestra-spec/SKILL.md step 0a, run against synthetic input with local jq 1.7.1.
+=== Expression: [.comments[]|select(.body|test("^VETTED-FOR-KESTRA: [0-9a-f]{64}"))]
+===             |sort_by(.createdAt)|last|select(.!=null)
+===             |[.createdAt,.author.login,(.body|split("\n")[0])]|@tsv
+
+--- one non-vet comment ---
+(no output)
+exit=0
+--- zero comments ---
+(no output)
+exit=0
+--- two vet comments, newest wins ---
+2026-08-02T00:00:00Z	new	VETTED-FOR-KESTRA: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+exit=0
+
+So: empty output + exit=0 IS "no vet comment" (gate bounce); a non-zero exit means the read
+itself failed (retry/escalate). The live #35 leg above stays as the pre-fix measurement.
