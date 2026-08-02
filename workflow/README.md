@@ -1,4 +1,4 @@
-# workflow/ — kestra-spec, kestra-build & kestra-run
+# workflow/ — kestra-spec, kestra-build, kestra-run & kestra-exam
 
 These three skills work together as a **spec-sharpener + generator + orchestrator** for building
 and running a "stage machine" that actually enforces TDD (not just asking the AI nicely to write
@@ -15,6 +15,9 @@ a human-vetted tracker ticket (in-chain)  ·  or a sharpened idea from /grilling
 └──────┬──────┘   either way: testable ACs, needs_* flags, External Interface, Exit Criteria,
        │          business rules, design notes, a verified codebase survey — one pass
        │
+       ├───────────▶ kestra-exam (opt-in, only where the mode below is `full`): derives
+       │             one check per AC from 0-spec.md, red-proofed before any code exists
+       │
        ▼
 ┌─────────────┐   writes workflow.yaml + state.json, then stops
 │ kestra-build │   never runs a stage, writes code, or commits
@@ -26,10 +29,12 @@ a human-vetted tracker ticket (in-chain)  ·  or a sharpened idea from /grilling
 └─────────────┘ → commits each passing stage → stops at a real stop condition
 ```
 
-None of the three skills has a hard dependency on any other skill — if a stage's brief wants to
+None of these skills has a hard dependency on any other skill — if a stage's brief wants to
 suggest a specialized skill (e.g. an implement skill, a review skill), that only ever appears as a
 "suggestion" inside the brief text. Whatever gets spawned to do that stage's work still runs fine
-if that skill isn't installed.
+if that skill isn't installed. `kestra-exam` is the opt-in fourth skill in this folder: it is keyed
+off the mode `kestra-build` already recorded (`full` ⇒ exam, `lite` ⇒ deliberately none) and names
+the other three only as suggestions.
 
 ---
 
@@ -269,7 +274,18 @@ regenerating tests, re-freezing, and resetting the attempt counter.
 
 ### How kestra-build works (condensed from SKILL.md)
 
-1. Read/sharpen the spec until it has clear acceptance criteria.
+1. Read/sharpen the spec until it has clear acceptance criteria. Three input forms, decided
+   mechanically before anything else: a run folder holding `0-spec.md` **plus** a named sliced
+   ticket set (a *sliced fold* — GitHub refs, or a directory of local-file tickets); `0-spec.md`
+   alone (a *monolithic fold*, unchanged); or a chain-marked spec with no set named, which asks
+   **once** and **never searches the tracker for tickets nobody named** (guessing a set is how
+   unvetted scope enters). On a sliced fold each ticket is copied verbatim into
+   `<run>/tickets/<id>.md` (`tr -d '\r'` and nothing else — the same normalization `kestra-spec`
+   uses, so "verbatim" means one thing at both ends of the chain), embedded in its stage brief
+   between sha256 delimiters, and listed in a `tickets:` map anchored to the raise commit. Each
+   sliced AC's Source label is resolved from the spec's own `## AC Coverage Map` rather than graded
+   against a second vocabulary, and an AC matching no map row refuses the fold. This is the only
+   point in an entire run where the tracker is read at all.
 2. Fill in a mechanical flag table (`needs_ui`, `needs_ba`, `needs_sa`, `needs_devops`, ...) to
    decide which stages are needed (e.g. `needs_ui: true` → must add a `design` stage before
    `generate-tests`).
@@ -321,8 +337,10 @@ regenerating tests, re-freezing, and resetting the attempt counter.
    guards exist for unanticipated ones, so an implementation with no guards at all still goes green.
    No mechanical check anywhere in the file would notice, which is why the brief has to say it.
 6. Write `workflow.yaml` + `state.json`.
-7. **Always dry-run first**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` — a
-   zero-LLM structural check (no PyYAML, no AI judgment) that catches 7 main things:
+7. **Always dry-run first**: `python3 <run-folder>/validate_workflow.py <run-folder>` — the
+   validator and `requirement_surface.py` are emitted into the run folder beside the spec, and the
+   validator imports that sibling with no path setup, so a run folder stays self-checking wherever
+   it is copied. A zero-LLM structural check (no PyYAML, no AI judgment) that catches:
    - Missing `on_fail.target` on a `write_scope: []` + `action: fixing` stage
    - `write_scope` overlapping a path that was already frozen as a test path
    - Independent stages whose `write_scope`s collide (a real risk if they run in parallel)
@@ -330,6 +348,14 @@ regenerating tests, re-freezing, and resetting the attempt counter.
    - Dependency cycles / unreachable stages
    - `exit_criteria` or `on_fail` missing required fields
    - `state.json` not matching the stage ids in `workflow.yaml`
+   - The `spec_anchor` triple (`raise_commit` / `surface_hash` / `extractor_version`) — an absent
+     anchor is a `WARN` (a standalone or hand-written spec simply isn't anchored), a **partial**
+     one is a `FAIL`, and a recorded `surface_hash` that no longer matches the spec recomputed now
+     is a `FAIL` telling you to re-fold, never to edit the anchor
+   - On a sliced fold: every embedded ticket block against `tickets/<id>.md` by sha256, the
+     `tickets:` map against the stage briefs in both directions, and each ticket's `ac_hash`
+     against the recomputed surface — which is what makes "the fold refuses" a real exit code
+     instead of an agent's promise
 
    `FAIL` = must be fixed before showing the user, `WARN` = surfaced but not blocking.
 
@@ -417,6 +443,66 @@ time.
 
 ---
 
+## kestra-exam — the spec-derived exam
+
+**Location:** [`kestra-exam/`](kestra-exam/) · detail: [`kestra-exam/SKILL.md`](kestra-exam/SKILL.md)
+
+### What it does
+
+Turns the acceptance criteria already sitting in `0-spec.md` into a runnable exam: one check per AC
+in a single `exam.py`, plus a `manifest.md` mapping every check back to its AC and the `Source` cell
+it came from. The exam is **red-proofed** before any implementation exists — it runs in a disposable
+clone at the raise commit, where each check has to fail for the right reason (a behavioral failure,
+not a missing import), so a later green can't be an accident of the harness.
+
+It reads only the five in-surface sections of the spec (the ones `requirement_surface.py` extracts)
+and deliberately never reads the implementation plan, the file list, or the code: an exam derived
+from the implementation's shape stops being an independent derivation of the requirement.
+
+What it does **not** claim: it covers what the spec asked for, never runtime invariants or the guards
+that enforce them (`kestra-build/references/design-principles.md` owns those), and it is not a fix
+for hallucination. The claim is narrower and checkable — it turns trust in the AI into trust in
+evidence.
+
+### When it runs, and when it does not
+
+Opt-in, keyed off the mode `kestra-build` already recorded: `full` ⇒ build the exam, `lite` ⇒
+deliberately no exam. A standalone (unmarked) spec is allowed too. Nothing else in the pipeline
+depends on it — `kestra-spec`, `kestra-build` and `kestra-run` all run unchanged where it isn't
+installed, and it names them only as suggestions.
+
+### Where the exam lives
+
+Outside the repo, in the user-level exams directory under `~/.kestra/`, keyed by origin and feature slug
+(`<origin-key>/<feature-slug>/`) and `git init`'ed per feature — so
+the exam is evidence *about* the work rather than one more file the work can quietly edit. The
+`<origin-key>` is derived from `git remote get-url origin`; a repo with no `origin` is a hard stop
+rather than a fallback name, because two clones or forks sharing a directory basename would otherwise
+cross-wire onto one exam dir. One durable pointer record per exam — a `kestra-exam: <feature-slug>`
+tracker ticket, or a local `.pointer` file on tracker-free repos — carries the hashes; it is edited
+in place, and more than one match is a hard fail that is never resolved by taking the newer.
+
+### Staleness refusal
+
+Every run compares a triple — the spec's surface hash, the raise commit, the extractor version —
+across the manifest, the pointer and `exam.py`. Any disagreement means **no verdict is emitted at
+all**: it prints `REFUSED: exam is stale` and exits non-zero instead of reporting a pass or a fail
+against a spec that has moved. A spec change is answered by regeneration (a delta plan naming exactly
+which checks move, and which carry over untouched), never by editing the anchor.
+
+Building the gate *runner* — the pre-delivery job that executes exams — is explicitly **not** part of
+this skill, so nobody implements a phantom gate.
+
+### Example usage
+
+```
+"build the exam for workflows/runs/csv-export"
+"is the csv-export exam still fresh?"
+"the spec changed — regenerate the exam"
+```
+
+---
+
 ## Further reference docs
 
 | File | Contents |
@@ -425,9 +511,14 @@ time.
 | [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | Where every state/transition comes from, the "Default HITL posture," why there's no mid-workflow replanning |
 | [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | Full field reference for `workflow.yaml`, with a complete worked example (csv-export) |
 | [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | Field reference for `state.json` |
+| [`kestra-build/references/ticket-fold.md`](kestra-build/references/ticket-fold.md) | The sliced fold in full — the three input forms, verbatim materialization, Source-label resolution off the AC Coverage Map, the fold-start steps F0–F5 with their exact refusal texts, and re-fold change detection |
 | [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md) | Why tests can pass while production breaks — six recurring test-fidelity failure modes mapped to established literature, with sources |
 | [`kestra-run/references/enforcement.md`](kestra-run/references/enforcement.md) | The exact real commands used for every check (write_scope diff, test-hash, commit-per-stage, rollback) |
 | [`kestra-run/references/efficiency-notes.md`](kestra-run/references/efficiency-notes.md) | Why each efficiency shortcut is safe (not spawning a fresh agent every stage, resuming instead of respawning, etc.) |
+| [`kestra-exam/references/exam-script-contract.md`](kestra-exam/references/exam-script-contract.md) | `exam.py`'s shape — `@check`, the `expect*` family (and why a bare `assert` is banned), the three seam kinds, the behavioral-vs-infrastructure red discriminator, the exit ladder and the `--json` schema |
+| [`kestra-exam/references/manifest-schema.md`](kestra-exam/references/manifest-schema.md) | `manifest.md`'s seven sections in fixed order, every column, the closed Red-proof vocabulary, the fingerprint formulas and the verdict contract, verbatim |
+| [`kestra-exam/references/gate-procedure.md`](kestra-exam/references/gate-procedure.md) | The pre-delivery gate — its sweeps and exemption boundary, pointer discipline, and hash-vs-pointer comparison; building the runner itself is out of scope |
+| [`kestra-exam/references/regeneration.md`](kestra-exam/references/regeneration.md) | What moves when the spec moves — the delta map, the fingerprints, the four scopes, carry-over, and the exam-dir commit subjects |
 
 ## What's intentionally "not done"
 
@@ -443,7 +534,16 @@ time.
 - **kestra-build never runs anything** — it doesn't write real code, commit, or call any skill.
 - **kestra-run never generates a workflow itself** — if the file doesn't exist yet, it says so
   instead of improvising one.
-- **None of the three hard-depends on any specific specialized skill/agent** — any skill name that
+- **kestra-build reads the tracker exactly once, read-only** — at fold time, to copy each *named*
+  ticket verbatim into the run folder. It never edits, comments on, closes or slices a ticket, never
+  searches for tickets nobody named, and never re-folds mid-run: a spec or ticket that moved is
+  answered by re-folding from a clean state, not by patching a running workflow.
+- **kestra-exam never builds the gate runner, and never emits a verdict against a moved spec** — it
+  writes and red-proofs the exam, records the anchor triple, and the moment those copies disagree it
+  refuses outright (no pass, no fail) and points at regeneration. It is also not pitched as a fix
+  for hallucination; the narrower, checkable claim is that a verdict rests on evidence instead of on
+  the AI's own report.
+- **None of these skills hard-depends on any specific specialized skill/agent** — any skill name that
   might be suggested in a stage's `brief`, or named as the way to write the ticket upstream
   (`to-spec`), is only ever a suggestion ("try it if it's there"), never a requirement. So a
   generated `workflow.yaml` can move to a different machine/session with a different skill set and

@@ -1,4 +1,4 @@
-# workflow/ — kestra-spec, kestra-build & kestra-run
+# workflow/ — kestra-spec, kestra-build, kestra-run & kestra-exam
 
 *[Read in English](README.md)*
 
@@ -16,6 +16,9 @@ ticket บน tracker ที่คน vet แล้ว (in-chain)  ·  หรื
 └──────┬──────┘   ทั้งสองโหมด: AC ที่ทดสอบได้, flag needs_*, External Interface, Exit Criteria,
        │          business rules, design notes, การสำรวจโค้ดจริงที่ verify แล้ว — ในรอบเดียว
        │
+       ├───────────▶ kestra-exam (opt-in, เฉพาะเมื่อ mode ด้านล่างเป็น `full`): สร้าง check
+       │             หนึ่งตัวต่อหนึ่ง AC จาก 0-spec.md แล้ว red-proof ก่อนจะมีโค้ดใดๆ
+       │
        ▼
 ┌─────────────┐   เขียน workflow.yaml + state.json แล้วหยุด
 │ kestra-build │   ไม่รัน stage, ไม่เขียนโค้ด, ไม่ commit
@@ -27,9 +30,11 @@ ticket บน tracker ที่คน vet แล้ว (in-chain)  ·  หรื
 └─────────────┘ → commit ทุก stage ที่ผ่าน → หยุดเมื่อเจอเงื่อนไขหยุดจริง
 ```
 
-ทั้งสาม skill ไม่ได้ผูกติดกับ skill อื่นแบบ hard dependency — ถ้า brief ของ stage ไหนอยากแนะนำ
+skill เหล่านี้ไม่ได้ผูกติดกับ skill อื่นแบบ hard dependency — ถ้า brief ของ stage ไหนอยากแนะนำ
 skill เฉพาะทาง (เช่น skill สำหรับ implement, skill สำหรับ review) มันจะปรากฏแค่เป็น "คำแนะนำ"
-ในเนื้อหา brief เท่านั้น ตัวที่ถูก spawn มาทำงาน stage นั้นยังทำงานได้ปกติแม้ skill นั้นจะไม่ได้ติดตั้งไว้
+ในเนื้อหา brief เท่านั้น ตัวที่ถูก spawn มาทำงาน stage นั้นยังทำงานได้ปกติแม้ skill นั้นจะไม่ได้ติดตั้งไว้ ส่วน `kestra-exam` คือ
+skill ตัวที่สี่ในโฟลเดอร์นี้ซึ่งเป็นแบบ opt-in: มันอ่านจาก mode ที่ `kestra-build` บันทึกไว้แล้ว
+(`full` ⇒ ทำ exam, `lite` ⇒ ตั้งใจไม่ทำ) และอ้างถึงอีกสามตัวในฐานะคำแนะนำเท่านั้น
 
 ---
 
@@ -261,7 +266,18 @@ review ไม่ใช่ของ stage machine)
 
 ### kestra-build ทำงานยังไง (สรุปย่อจาก SKILL.md)
 
-1. อ่าน spec หรือทำให้ชัดเจนขึ้นจนกว่าจะมี acceptance criteria ที่ชัด
+1. อ่าน spec หรือทำให้ชัดเจนขึ้นจนกว่าจะมี acceptance criteria ที่ชัด มี input สามรูปแบบ ตัดสินแบบ
+   mechanical ก่อนทำอะไรทั้งสิ้น: run folder ที่มี `0-spec.md` **บวกกับ** ชุด ticket ที่ถูกซอยและถูก
+   ระบุชื่อมาให้ (*sliced fold* — เป็น ref ของ GitHub หรือไดเรกทอรีของ ticket ที่เป็นไฟล์ในเครื่อง);
+   มี `0-spec.md` อย่างเดียว (*monolithic fold* เหมือนเดิม ไม่เปลี่ยน); หรือ spec ที่มี chain marker
+   แต่ไม่ได้ระบุชุด ticket มา ซึ่งจะถาม **ครั้งเดียว** และ **ไม่ค้นหา ticket ที่ไม่มีใครระบุชื่อมาใน
+   tracker เด็ดขาด** (การเดาชุด ticket คือช่องทางที่ scope ที่ยังไม่ถูก vet เล็ดลอดเข้ามา) ในแบบ
+   sliced fold ทุก ticket จะถูก copy แบบ verbatim ไปที่ `<run>/tickets/<id>.md` (`tr -d '\r'` เท่านั้น
+   ไม่มีอย่างอื่น — normalization ตัวเดียวกับที่ `kestra-spec` ใช้ เพื่อให้คำว่า "verbatim" หมายถึงสิ่ง
+   เดียวกันทั้งสองปลายของ chain), ฝังไว้ใน brief ของ stage ระหว่าง delimiter ที่มี sha256 และถูกลง
+   รายการใน map `tickets:` ที่ผูกกับคอมมิต raise ส่วน Source label ของแต่ละ AC ที่ถูกซอยจะถูก resolve
+   จาก `## AC Coverage Map` ของ spec เอง ไม่ใช่ไปตรวจกับคำศัพท์อีกชุด และ AC ที่ไม่ match แถวไหนใน map
+   เลยจะทำให้การ fold ถูกปฏิเสธ นี่คือจุดเดียวในทั้งรอบการทำงานที่มีการอ่าน tracker
 2. กรอกตาราง flag แบบ mechanical (`needs_ui`, `needs_ba`, `needs_sa`, `needs_devops`, ...) เพื่อ
    ตัดสินว่าต้องมี stage ไหนบ้าง (เช่น `needs_ui: true` → ต้องเพิ่ม stage `design` ก่อน
    `generate-tests`)
@@ -310,8 +326,10 @@ review ไม่ใช่ของ stage machine)
    brief เท่านั้น จากนั้นกรอกทุกฟิลด์ของแต่ละ stage: `id`, `depends_on`, `brief`, `write_scope`, `exit_criteria`,
    `on_fail`, `freeze_after`
 6. เขียน `workflow.yaml` + `state.json`
-7. **dry-run เสมอก่อน**: `python3 kestra-build/scripts/validate_workflow.py <output-dir>` —
-   การเช็คโครงสร้างแบบ zero-LLM (ไม่มี PyYAML ไม่มีการตัดสินใจของ AI) ที่จับ 7 เรื่องหลัก:
+7. **dry-run เสมอก่อน**: `python3 <run-folder>/validate_workflow.py <run-folder>` — ตัว validator กับ
+   `requirement_surface.py` จะถูก emit ลงใน run folder ข้างๆ spec และ validator จะ import ไฟล์พี่น้อง
+   ตัวนั้นโดยไม่มีการ setup path ใดๆ ทำให้ run folder ตรวจตัวเองได้ไม่ว่าจะถูก copy ไปไว้ที่ไหน
+   เป็นการเช็คโครงสร้างแบบ zero-LLM (ไม่มี PyYAML ไม่มีการตัดสินใจของ AI) ที่จับเรื่องเหล่านี้:
    - `on_fail.target` หายไปใน stage ที่ `write_scope: []` + `action: fixing`
    - `write_scope` ทับซ้อนกับ path ที่ freeze เป็นเทสต์ไปแล้ว
    - stage อิสระที่ `write_scope` ชนกัน (เสี่ยงจริงถ้ารันขนานกัน)
@@ -319,6 +337,13 @@ review ไม่ใช่ของ stage machine)
    - dependency วนลูป / stage ที่ไปไม่ถึง
    - `exit_criteria` หรือ `on_fail` ขาดฟิลด์ที่จำเป็น
    - `state.json` ไม่ตรงกับ stage id ใน `workflow.yaml`
+   - `spec_anchor` ทั้งสามค่า (`raise_commit` / `surface_hash` / `extractor_version`) — ถ้าไม่มี
+     anchor เลยเป็น `WARN` (spec แบบ standalone หรือที่เขียนด้วยมือย่อมไม่มี anchor) ถ้ามี**ไม่ครบ**
+     เป็น `FAIL` และถ้า `surface_hash` ที่บันทึกไว้ไม่ตรงกับ surface ของ spec ที่คำนวณใหม่ตอนนี้ ก็เป็น
+     `FAIL` ที่บอกให้ re-fold ไม่ใช่ให้ไปแก้ anchor
+   - ในแบบ sliced fold: เทียบ ticket block ที่ฝังไว้ทุกอันกับ `tickets/<id>.md` ด้วย sha256, เทียบ map
+     `tickets:` กับ brief ของ stage ทั้งสองทาง และเทียบ `ac_hash` ของแต่ละ ticket กับ surface ที่คำนวณ
+     ใหม่ — นี่คือสิ่งที่ทำให้ "การ fold ถูกปฏิเสธ" เป็น exit code จริง ไม่ใช่คำสัญญาของ agent
 
    `FAIL` = ต้องแก้ก่อนโชว์ให้ผู้ใช้ดู, `WARN` = แจ้งไว้แต่ไม่บล็อก
 
@@ -398,6 +423,65 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
 
 ---
 
+## kestra-exam — exam ที่สร้างจาก spec
+
+**ที่อยู่:** [`kestra-exam/`](kestra-exam/) · รายละเอียดเพิ่มเติม: [`kestra-exam/SKILL.md`](kestra-exam/SKILL.md)
+
+### มันทำอะไร
+
+แปลง acceptance criteria ที่มีอยู่แล้วใน `0-spec.md` ให้เป็น exam ที่รันได้: หนึ่ง check ต่อหนึ่ง AC
+ในไฟล์ `exam.py` ไฟล์เดียว บวก `manifest.md` ที่ map ทุก check กลับไปยัง AC ของมันและช่อง `Source`
+ที่มันมาจาก ตัว exam จะถูก **red-proof** ก่อนที่จะมี implementation อยู่เลย — มันถูกรันใน clone ที่
+ทิ้งได้ ณ คอมมิต raise ซึ่งทุก check ต้องล้มเหลวด้วยเหตุผลที่ถูกต้อง (ล้มเหลวเชิงพฤติกรรม ไม่ใช่เพราะ
+import ไม่เจอ) เพื่อให้การเป็นสีเขียวในภายหลังไม่ใช่อุบัติเหตุของ harness
+
+มันอ่านเฉพาะห้าหัวข้อที่อยู่ใน surface ของ spec (ชุดเดียวกับที่ `requirement_surface.py` สกัดออกมา)
+และตั้งใจไม่อ่านแผน implementation, รายการไฟล์ หรือโค้ดเลย เพราะ exam ที่สร้างจากรูปร่างของ
+implementation จะไม่ใช่การอนุมานจาก requirement อย่างเป็นอิสระอีกต่อไป
+
+สิ่งที่มัน **ไม่ได้อ้าง**: มันครอบเฉพาะสิ่งที่ spec สั่งไว้ ไม่ใช่ runtime invariants หรือ guard ที่
+บังคับ invariants เหล่านั้น (เจ้าของเรื่องนั้นคือ `kestra-build/references/design-principles.md`) และมัน
+ไม่ใช่ทางแก้ hallucination คำอ้างของมันแคบกว่าและตรวจได้ — มันเปลี่ยนการเชื่อ AI ให้เป็นการเชื่อหลักฐาน
+
+### เมื่อไหร่ที่มันทำงาน และเมื่อไหร่ที่ไม่ทำ
+
+เป็นแบบ opt-in โดยอ่านจาก mode ที่ `kestra-build` บันทึกไว้แล้ว: `full` ⇒ สร้าง exam, `lite` ⇒ ตั้งใจ
+ไม่มี exam ส่วน spec แบบ standalone (ไม่มี marker) ก็ใช้ได้ ไม่มีอะไรอื่นใน pipeline ที่ขึ้นอยู่กับมัน —
+`kestra-spec`, `kestra-build` และ `kestra-run` ยังทำงานได้เหมือนเดิมในเครื่องที่ไม่ได้ติดตั้งมัน และมัน
+อ้างถึงทั้งสามตัวในฐานะคำแนะนำเท่านั้น
+
+### exam เก็บอยู่ที่ไหน
+
+อยู่นอก repo ในไดเรกทอรี exams ระดับผู้ใช้ใต้ `~/.kestra/` โดยตั้งชื่อตาม origin และ slug ของฟีเจอร์
+(`<origin-key>/<feature-slug>/`) และ `git init` แยกต่อหนึ่งฟีเจอร์ —
+เพื่อให้ exam เป็นหลักฐาน *เกี่ยวกับ* งาน ไม่ใช่ไฟล์อีกไฟล์ที่ตัวงานแก้ได้เงียบๆ ค่า `<origin-key>` มา
+จาก `git remote get-url origin`; repo ที่ไม่มี `origin` คือจุดหยุดตายตัว ไม่ใช่การใช้ชื่อสำรอง เพราะ
+ไม่อย่างนั้น clone หรือ fork สองอันที่ชื่อโฟลเดอร์เหมือนกันจะถูกต่อสายเข้า exam dir เดียวกัน แต่ละ exam
+มี pointer record ที่คงทนอันเดียว — ticket บน tracker ชื่อ `kestra-exam: <feature-slug>` หรือไฟล์
+`.pointer` ในเครื่องสำหรับ repo ที่ไม่มี tracker — ซึ่งเก็บ hash ทั้งหมดไว้ มันถูกแก้ในที่เดิม และถ้า
+match ได้มากกว่าหนึ่งอันคือ hard fail ที่ไม่ตัดสินด้วยการเลือกอันที่ใหม่กว่าเด็ดขาด
+
+### การปฏิเสธเมื่อ exam เก่า
+
+ทุกครั้งที่รัน มันจะเทียบสามค่า — surface hash ของ spec, คอมมิต raise, เวอร์ชันของ extractor — ข้าม
+ระหว่าง manifest, pointer และ `exam.py` ถ้าไม่ตรงกันตรงไหน หมายความว่า **ไม่มีการให้ verdict ใดๆ เลย**:
+มันจะพิมพ์ `REFUSED: exam is stale` และออกด้วย exit code ที่ไม่ใช่ศูนย์ แทนที่จะรายงานว่าผ่านหรือไม่ผ่าน
+เทียบกับ spec ที่ขยับไปแล้ว การที่ spec เปลี่ยนต้องแก้ด้วยการ regenerate (แผน delta ที่ระบุชัดว่า check
+ไหนต้องขยับ และ check ไหน carry over ไปได้โดยไม่ต้องแตะ) ไม่ใช่ด้วยการไปแก้ anchor
+
+การสร้างตัว *runner* ของ gate — งานก่อนส่งมอบที่รัน exam — **ไม่ใช่** ส่วนหนึ่งของ skill นี้อย่างชัดเจน
+เพื่อไม่ให้ใครไป implement gate ที่ไม่มีอยู่จริง
+
+### ตัวอย่างการใช้งาน
+
+```
+"build the exam for workflows/runs/csv-export"
+"is the csv-export exam still fresh?"
+"the spec changed — regenerate the exam"
+```
+
+---
+
 ## เอกสารอ้างอิงเพิ่มเติม
 
 | ไฟล์ | เนื้อหา |
@@ -406,9 +490,14 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
 | [`kestra-build/references/design-principles.md`](kestra-build/references/design-principles.md) | ที่มาของทุก state/transition, "Default HITL posture", ทำไมไม่มีการ replan กลางเวิร์กโฟลว์ |
 | [`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md) | รายการฟิลด์เต็มของ `workflow.yaml` พร้อมตัวอย่างจริง (csv-export) |
 | [`kestra-build/references/state-schema.md`](kestra-build/references/state-schema.md) | รายการฟิลด์ของ `state.json` |
+| [`kestra-build/references/ticket-fold.md`](kestra-build/references/ticket-fold.md) | รายละเอียดเต็มของ sliced fold — input สามรูปแบบ, การ copy แบบ verbatim, การ resolve Source label จาก AC Coverage Map, ขั้นตอน F0–F5 ตอนเริ่ม fold พร้อมข้อความปฏิเสธที่แน่นอน และการตรวจจับการเปลี่ยนแปลงตอน re-fold |
 | [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md) | ทำไมเทสต์ผ่านแต่ production พัง — 6 รูปแบบความล้มเหลวด้าน test fidelity ที่เกิดซ้ำ เชื่อมโยงกับวรรณกรรมที่มีอยู่จริง พร้อมแหล่งอ้างอิง |
 | [`kestra-run/references/enforcement.md`](kestra-run/references/enforcement.md) | คำสั่งจริงที่ใช้เช็คทุกอย่าง (write_scope diff, test-hash, commit-per-stage, rollback) |
 | [`kestra-run/references/efficiency-notes.md`](kestra-run/references/efficiency-notes.md) | ทำไมแต่ละทางลัดด้าน efficiency ถึงปลอดภัย (ไม่ spawn agent ใหม่ทุก stage, resume แทน respawn ฯลฯ) |
+| [`kestra-exam/references/exam-script-contract.md`](kestra-exam/references/exam-script-contract.md) | รูปร่างของ `exam.py` — `@check`, ตระกูล `expect*` (และทำไมห้ามใช้ `assert` เปล่าๆ), seam สามชนิด, ตัวแยกแยะ red แบบ behavioral กับ infrastructure, บันไดของ exit code และ schema ของ `--json` |
+| [`kestra-exam/references/manifest-schema.md`](kestra-exam/references/manifest-schema.md) | เจ็ดหัวข้อของ `manifest.md` ตามลำดับตายตัว, ทุกคอลัมน์, ชุดคำ Red-proof แบบปิด, สูตร fingerprint และ verdict contract แบบ verbatim |
+| [`kestra-exam/references/gate-procedure.md`](kestra-exam/references/gate-procedure.md) | gate ก่อนส่งมอบ — sweep ต่างๆ กับขอบเขตการยกเว้น, วินัยเรื่อง pointer และการเทียบ hash กับ pointer; การสร้างตัว runner เองอยู่นอกขอบเขต |
+| [`kestra-exam/references/regeneration.md`](kestra-exam/references/regeneration.md) | อะไรขยับเมื่อ spec ขยับ — delta map, fingerprint, scope สี่แบบ, การ carry over และ commit subject ของ exam dir |
 
 ## สิ่งที่ตั้งใจ "ไม่ทำ"
 
@@ -423,7 +512,15 @@ checkpoint อยู่แล้ว แค่บอกให้ kestra-run ท�
   เหมือนเดิม มีเฉพาะความเงียบเรื่อง intent จริงๆ เท่านั้นที่ bounce
 - **kestra-build ไม่รันอะไรเลย** — ไม่เขียนโค้ดจริง ไม่ commit ไม่เรียก skill ใดๆ
 - **kestra-run ไม่สร้างเวิร์กโฟลว์เอง** — ถ้าไฟล์ยังไม่มี มันจะบอกตรงๆ แทนที่จะด้นสดสร้างเอง
-- **ทั้งสาม skill ไม่ hard-depend กับ skill/agent เฉพาะทางใดๆ** — ชื่อ skill ที่อาจถูกแนะนำใน
+- **kestra-build อ่าน tracker ครั้งเดียวเท่านั้น และอ่านอย่างเดียว** — ตอน fold เพื่อ copy ticket ที่
+  *ถูกระบุชื่อมา* แบบ verbatim ลง run folder มันไม่แก้ ไม่คอมเมนต์ ไม่ปิด ไม่ซอย ticket ไม่ค้นหา ticket
+  ที่ไม่มีใครระบุชื่อมา และไม่ re-fold กลางรอบการทำงาน — spec หรือ ticket ที่ขยับต้องแก้ด้วยการ fold ใหม่
+  จากสถานะที่สะอาด ไม่ใช่การไป patch เวิร์กโฟลว์ที่กำลังรันอยู่
+- **kestra-exam ไม่สร้างตัว gate runner และไม่ให้ verdict กับ spec ที่ขยับไปแล้ว** — มันเขียน exam,
+  red-proof, บันทึก anchor สามค่า และวินาทีที่สำเนาทั้งสามชุดไม่ตรงกัน มันจะปฏิเสธทันที (ไม่บอกว่าผ่าน
+  ไม่บอกว่าไม่ผ่าน) แล้วชี้ไปที่การ regenerate ทั้งยังไม่ได้ถูกเสนอว่าเป็นทางแก้ hallucination — คำอ้าง
+  ที่แคบกว่าและตรวจได้คือ verdict อ้างจากหลักฐาน ไม่ใช่จากรายงานของ AI เอง
+- **skill เหล่านี้ไม่ hard-depend กับ skill/agent เฉพาะทางใดๆ** — ชื่อ skill ที่อาจถูกแนะนำใน
   `brief` ของ stage หรือที่ถูกระบุว่าเป็นวิธีเขียน ticket ต้นทาง (`to-spec`) เป็นแค่คำแนะนำเสมอ
   ("ลองใช้ถ้ามี") ไม่ใช่ข้อบังคับ ทำให้ `workflow.yaml` ที่สร้างไว้ย้ายไปเครื่อง/session อื่นที่มี
   skill set ต่างกันได้และยังทำงานได้ปกติ และ `kestra-spec` ก็ยังรันได้ในเครื่องที่ไม่ได้ติดตั้ง

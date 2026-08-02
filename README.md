@@ -10,7 +10,7 @@ installs the whole set in one go).
 
 | Group | Skills | What it's for |
 |---|---|---|
-| [`workflow/`](workflow/README.md) | `kestra-spec`, `kestra-build`, `kestra-run` | Spec-sharpener + generator + orchestrator for a TDD-locked "stage machine" — `kestra-spec` turns a human-vetted tracker ticket (in-chain: two commits, the ticket verbatim then the raise) or a hand-written idea (standalone: one commit) into a build-ready `0-spec.md` (ACs optionally as Given-When-Then/BDD, plus the test seam, the stop condition, runtime invariants and external-dependency reality constraints), `kestra-build` turns that into `workflow.yaml`/`state.json`, then `kestra-run` runs it with mechanical (not AI-judgment) checks at every step. |
+| [`workflow/`](workflow/README.md) | `kestra-spec`, `kestra-build`, `kestra-run`, `kestra-exam` | Spec-sharpener + generator + orchestrator for a TDD-locked "stage machine" — `kestra-spec` turns a human-vetted tracker ticket (in-chain: two commits, the ticket verbatim then the raise) or a hand-written idea (standalone: one commit) into a build-ready `0-spec.md` (ACs optionally as Given-When-Then/BDD, plus the test seam, the stop condition, runtime invariants and external-dependency reality constraints), `kestra-build` turns that into `workflow.yaml`/`state.json`, then `kestra-run` runs it with mechanical (not AI-judgment) checks at every step. `kestra-build` can also *fold* a human-vetted sliced ticket set into the workflow (each ticket copied in verbatim and hash-anchored to the raise commit), and the opt-in `kestra-exam` derives a red-proofed exam from that same spec — one check per acceptance criterion — so delivery is judged against what was asked rather than against the AI's own report. |
 | [`meta/`](meta/README.md) | `meta-designer`, `meta-dev`, `meta-qa`, `meta-test-review`, `meta-review`, `meta-security`, `meta-devops`, `meta-debug` | Eight role-based delivery skills (designer, dev, QA, test-double review, code review, security, devops, plus a four-mantra debugging discipline) — call one directly, chain them yourself, or name one from a `kestra-build` stage brief. The spec/plan roles that used to live here are now done inline by `kestra-spec`. |
 | [`productivity/`](productivity/README.md) | `givename` | Suggests names (variables, files, branches, commits, new projects/skills) by reading the actual naming convention nearby first. |
 
@@ -55,7 +55,8 @@ Restart Claude Code (or start a new session) afterward so the updated skills get
 external dependencies to install — every script in the repo needs a plain `python3` and nothing
 else, no PyYAML or any third-party package: `kestra-build`'s dry-run (`validate_workflow.py`) and
 the `validate_spec.py` + `requirement_surface.py` pair `kestra-spec` runs on its own `0-spec.md`
-before committing the raise. The other skills need nothing at all.
+before committing the raise. `kestra-exam`'s four scripts and the exam harness it copies into each
+exam are stdlib-only too. The other skills need nothing at all.
 
 ## Adding a new skill
 
