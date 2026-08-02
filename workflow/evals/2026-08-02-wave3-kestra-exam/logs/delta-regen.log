@@ -1,0 +1,260 @@
+
+=== leg 8 — exam_delta's four scopes, then a real delta regeneration ===
+
+--- 8a nothing moved ---
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+scope: current
+why:        nothing moved
+regenerate: -
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      C-0 C-1 C-2 C-3 C-4 C-5 C-6
+re-anchor:  surface 7e47c7ab7978 -> 7e47c7ab7978 ; raise f59837b1 -> f59837b1 ; extractor v1 -> v1
+generation: unchanged — nothing moved, so no regeneration, no re-anchor and no pointer edit
+exit=0
+
+--- 8b prose the ACs paraphrase moved (Edge Cases) => re-anchor ---
+41c41
+< - A CSV with a header and no data rows tallies `total: 0` and exits 0.
+---
+> - A CSV whose header has no data rows tallies `total: 0` and exits 0.
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+scope: re-anchor
+why:        Edge Cases & Error States moved
+note:       re-anchored only; FR/EC/RI moved without an AC row — verify the Coverage Map still paraphrases them
+regenerate: -
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      C-0 C-1 C-2 C-3 C-4 C-5 C-6
+re-anchor:  surface 7e47c7ab7978 -> f7e748aa09ad ; raise f59837b1 -> f59837b1 ; extractor v1 -> v1
+generation: 1 -> 2
+red-proof:  every regenerated must-flip needs a FRESH red proof in a new disposable clone at the new raise commit; C-0 runs regardless of --only
+exit=0
+
+--- 8c the declared seam moved (External Interface) => full ---
+57c57
+< python3 src/tally.py [--refund] <csv-path>
+---
+> python3 src/tally.py [--refund] [--json] <csv-path>
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+scope: full
+why:        External Interface moved
+note:       the declared seam moved — every check is driven through it, so nothing is delta-able
+regenerate: C-0 C-1 C-2 C-3 C-4 C-5 C-6
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      -
+re-anchor:  surface 7e47c7ab7978 -> 67a20a05f5df ; raise f59837b1 -> f59837b1 ; extractor v1 -> v1
+generation: 1 -> 2
+red-proof:  every regenerated must-flip needs a FRESH red proof in a new disposable clone at the new raise commit; C-0 runs regardless of --only
+exit=0
+
+--- 8d one AC row moved => delta, and only its check regenerates ---
+87c87
+< | AC-1 | US-1 | `src/tally.py` — the `--refund` branch |
+---
+> | AC-1 | US-1, US-4 | `src/tally.py` — the `--refund` branch |
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+scope: delta
+why:        AC-1 changed
+regenerate: C-1
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      C-0 C-2 C-3 C-4 C-5 C-6
+re-anchor:  surface 7e47c7ab7978 -> 7f2b7f2fa398 ; raise f59837b1 -> f59837b1 ; extractor v1 -> v1
+generation: 1 -> 2
+red-proof:  every regenerated must-flip needs a FRESH red proof in a new disposable clone at the new raise commit; C-0 runs regardless of --only
+exit=0
+
+--- 8e FINDING: the map is a byte match, so a decorated AC cell silently
+    under-regenerates. Same spec change, one manifest whose AC column reads
+    'AC-1 — refund subtraction' instead of 'AC-1'. ---
+55c55
+< | AC-1 | C-1 | must-flip | US-1 | red 2026-08-02T15:22:36Z behavioral | `CheckFailure: exit 1 != 0 @ tally --refund` | — |
+---
+> | AC-1 — refund subtraction | C-1 | must-flip | US-1 | red 2026-08-02T15:22:36Z behavioral | `CheckFailure: exit 1 != 0 @ tally --refund` | — |
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exam-decorated
+scope: delta
+why:        AC-1 changed
+regenerate: -
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      C-0 C-1 C-2 C-3 C-4 C-5 C-6
+re-anchor:  surface 7e47c7ab7978 -> 7f2b7f2fa398 ; raise f59837b1 -> UNRESOLV ; extractor v1 -> v1
+generation: 1 -> 2
+red-proof:  every regenerated must-flip needs a FRESH red proof in a new disposable clone at the new raise commit; C-0 runs regardless of --only
+exit=0
+
+scope is still delta and the AC is still reported changed, but `regenerate:`
+is empty — the AC->check map missed, so nothing would be re-proved. The
+manifest AC cell must be a byte match for the spec Coverage Map AC cell.
+
+--- 8f the delta regeneration itself (SKILL.md §Regeneration) ---
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave3-kestra-exam/fixtures/build-exam.py regenerate
+origin_url: https://git.example.test/kx-fixture/tally.git
+origin_key: git.example.test__kx-fixture__tally
+feature_slug: tally-refund
+exams_root: /tmp/kx36/exams
+exams_root_overridden: yes
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+pointer_file: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer
+pointer_log: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.log
+exam_dir_exists: yes
+transport: local
+chain_repo: -
+
+$ exam_delta.py <run> <exam>
+scope: delta
+why:        AC-1 changed
+regenerate: C-1
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      C-0 C-2 C-3 C-4 C-5 C-6
+re-anchor:  surface 7e47c7ab7978 -> 7f2b7f2fa398 ; raise f59837b1 -> f59837b1 ; extractor v1 -> v1
+generation: 1 -> 2
+red-proof:  every regenerated must-flip needs a FRESH red proof in a new disposable clone at the new raise commit; C-0 runs regardless of --only
+
+red-proof (gen2) json exit=1 human exit=1
+unproven C-4 (AC-4): born green — the AC was already satisfied on the pre-implementation tree, so this red proof shows no flip. Class stays must-flip; the evidence is degraded, not the class.
+--- /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer ---
+<!-- kestra-exam-pointer v1 -->
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/
+exam_script_sha256: a403e490b02f7e0b025b0775d2409978b2f3b57c50fc5cfe343b2e88c137be54
+manifest_sha256: 8784a6ee021a165e5e5be1fd6cfea5dd9ec06e62afea75d8ae7e19d9b69ebd05
+raise_commit: f59837b1323b009647d266ed99ee35f49b2bb10d
+surface_hash: 7f2b7f2fa39846c3e572676b9c0abe0b1b903cfafddbdc1ac9f7241f87423c58
+extractor_version: 1
+recorded_at: 2026-08-02T15:22:43Z
+generation: 2
+
+--- /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.log ---
+2026-08-02T15:22:43Z regenerated C-1 (AC-1 changed); surface 7e47c7ab… → 7f2b7f2f…; raise f59837b1… → f59837b1…; generation 1 → 2
+committed: exam(tally-refund): regenerate C-1 for surface 7f2b7f2fa398 @ raise f59837b1323b
+$ git -C <exam-dir> log --oneline
+4287ecb exam(tally-refund): regenerate C-1 for surface 7f2b7f2fa398 @ raise f59837b1323b
+bd3982e exam(tally-refund): create from surface 7e47c7ab7978 @ raise f59837b1323b
+
+coverage: {'N': 6, 'M': 5, 'K': 1, 'F': 3, 'H': 3, 'U': 1, 'unproven_ids': ['C-4'], 'unexaminable_acs': ['AC-6']}
+
+$ exam_anchor.py <run> <exam>
+FRESH: surface 7f2b7f2fa398 @ raise f59837b1323b · extractor v1 — manifest, pointer and exam.py agree.
+anchor exit=0
+exit=0
+
+--- 8g the regeneration is a bounded diff in the exam dir ---
+$ git -C <exam-dir> log --oneline
+4287ecb exam(tally-refund): regenerate C-1 for surface 7f2b7f2fa398 @ raise f59837b1323b
+bd3982e exam(tally-refund): create from surface 7e47c7ab7978 @ raise f59837b1323b
+
+$ git -C <exam-dir> diff --stat HEAD~1 HEAD
+ exam.py        |  4 ++--
+ manifest.md    | 14 +++++++-------
+ red-proof.json | 23 +++++++++++++++--------
+ red-proof.log  | 10 ++++++++++
+ 4 files changed, 34 insertions(+), 17 deletions(-)
+
+$ git -C <exam-dir> diff HEAD~1 HEAD -- manifest.md exam.py
+diff --git a/exam.py b/exam.py
+index 0a8cf1d..67e4870 100644
+--- a/exam.py
++++ b/exam.py
+@@ -22,7 +22,7 @@ EXAM = "tally-refund"
+ 
+ ANCHOR = {
+     "raise_commit": "f59837b1323b009647d266ed99ee35f49b2bb10d",
+-    "surface_hash": "7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718",
++    "surface_hash": "7f2b7f2fa39846c3e572676b9c0abe0b1b903cfafddbdc1ac9f7241f87423c58",
+     "extractor_version": 1,
+ }
+ 
+@@ -41,7 +41,7 @@ def c0(seam):
+     expect_contains(r.stderr, "usage: tally.py", "usage line", "tally (no args)")
+ 
+ 
+-@check(id="C-1", ac="AC-1", cls="must-flip", provenance="US-1")
++@check(id="C-1", ac="AC-1", cls="must-flip", provenance="US-1, US-4")
+ def c1(seam):
+     """--refund subtracts refund rows from the total"""
+     r = seam.call(["--refund", "data/mixed.csv"])
+diff --git a/manifest.md b/manifest.md
+index 93c06aa..ac5e93b 100644
+--- a/manifest.md
++++ b/manifest.md
+@@ -5,14 +5,14 @@
+ | Field | Value |
+ |---|---|
+ | raise_commit | f59837b1323b009647d266ed99ee35f49b2bb10d |
+-| surface_hash | 7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718 |
++| surface_hash | 7f2b7f2fa39846c3e572676b9c0abe0b1b903cfafddbdc1ac9f7241f87423c58 |
+ | extractor_version | 1 |
+ | origin_key | git.example.test__kx-fixture__tally |
+ | feature_slug | tally-refund |
+ | spec_path | workflows/runs/tally-refund/0-spec.md |
+-| exam_script_sha256 | 202404e5e49f74030a6ffa04a26d6ab57b053432dee602153da52469b6a26ae5 |
+-| generated_at | 2026-08-02T15:22:36Z |
+-| generation | 1 |
++| exam_script_sha256 | a403e490b02f7e0b025b0775d2409978b2f3b57c50fc5cfe343b2e88c137be54 |
++| generated_at | 2026-08-02T15:22:42Z |
++| generation | 2 |
+ 
+ ## Read rule
+ 
+@@ -52,7 +52,7 @@ file line 3).
+ | AC | Check | Class | Provenance | Red-proof | Failure signature | Unexaminable |
+ |----|-------|-------|------------|-----------|-------------------|--------------|
+ | — | C-0 | must-hold | — | n/a — must-hold | — | — |
+-| AC-1 | C-1 | must-flip | US-1 | red 2026-08-02T15:22:36Z behavioral | `CheckFailure: exit 1 != 0 @ tally --refund` | — |
++| AC-1 | C-1 | must-flip | US-1, US-4 | red 2026-08-02T15:22:42Z behavioral | `CheckFailure: exit 1 != 0 @ tally --refund` | — |
+ | AC-2 | C-2 | must-flip | US-1 | red 2026-08-02T15:22:36Z behavioral | `CheckFailure: exit 1 != 2 @ tally bad.csv` | — |
+ | AC-3 | C-3 | must-hold | US-2 | n/a — must-hold | — | — |
+ | AC-4 | C-4 | must-flip | ⚠ inferred | **born-green — `unproven`** | — | — |
+@@ -68,14 +68,14 @@ file line 3).
+ | Functional Requirements | 468d9b4429be |
+ | Edge Cases & Error States | 96af6d52699e |
+ | Runtime Invariants | caaf14b4dad4 |
+-| AC Coverage Map | ba1c46dcd579 |
++| AC Coverage Map | 35120d8c1d66 |
+ | External Interface | a89548934a5b |
+ 
+ ### AC fingerprints
+ 
+ | AC | sha256-12 |
+ |---|---|
+-| AC-1 | 34958c6fea62 |
++| AC-1 | c88e477bc048 |
+ | AC-2 | faf6c8170346 |
+ | AC-3 | 0c22c6dc34e8 |
+ | AC-4 | 1804bb8ab08d |
+
+$ git -C <exam-dir> remote
+(empty)
+
+--- 8h the exam still runs, and the anchor is fresh at generation 2 ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --repo /tmp/kx36/clone-impl
+exam: tally-refund   seam: cli · python3 src/tally.py
+anchor: surface 7f2b7f2fa398 @ raise f59837b1323b · extractor v1
+C-0    —        must-hold     pass          -                 0.03s  
+C-1    AC-1     must-flip     pass          -                 0.04s  
+C-2    AC-2     must-flip     pass          -                 0.03s  
+C-3    AC-3     must-hold     pass          -                 0.03s  
+C-4    AC-4     must-flip     pass          -                 0.03s  
+C-5    AC-5     must-hold     pass          -                 0.03s  
+C-6    AC-6     unexaminable  UNEXAMINABLE  -                 0.00s  a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth
+pass 6 · fail 0 · blocked 0 · unexaminable 1 · unproven 3 · exit 0
+exit=0
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+FRESH: surface 7f2b7f2fa398 @ raise f59837b1323b · extractor v1 — manifest, pointer and exam.py agree.
+exit=0
+
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+scope: current
+why:        nothing moved
+regenerate: -
+new-ac:     -   (ACs with no check row yet — author one each)
+delete:     -
+carry:      C-0 C-1 C-2 C-3 C-4 C-5 C-6
+re-anchor:  surface 7f2b7f2fa398 -> 7f2b7f2fa398 ; raise f59837b1 -> f59837b1 ; extractor v1 -> v1
+generation: unchanged — nothing moved, so no regeneration, no re-anchor and no pointer edit
+exit=0
+

@@ -1,0 +1,85 @@
+
+=== leg 10 — origin keying and its hard stops (nothing is created) ===
+
+--- 10a the fixture origin keys cleanly ---
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_paths.py /tmp/kx36/repo /tmp/kx36/repo/workflows/runs/tally-refund
+origin_url: https://git.example.test/kx-fixture/tally.git
+origin_key: git.example.test__kx-fixture__tally
+feature_slug: tally-refund
+exams_root: /tmp/kx36/exams
+exams_root_overridden: yes
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+pointer_file: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer
+pointer_log: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.log
+exam_dir_exists: yes
+transport: local
+chain_repo: -
+exit=0
+
+--- 10b no origin remote at all ---
+FAIL: no `origin` remote on /tmp/kx36/clone-noorigin — kestra-exam refuses to create an exam.
+The exam directory is keyed by the origin URL so two clones or forks sharing a
+directory basename cannot cross-wire onto one exam dir. There is no fallback
+naming: add an origin remote (`git remote add origin <url>`), or run without an
+exam — the exam is opt-in on kestra-build's full mode.
+exit=1
+$ test ! -d /tmp/kx36/exams-noorigin ; echo $?
+0 (0 = nothing was created)
+
+--- 10c a file:// origin cannot be keyed (it has no host) ---
+FAIL: no `origin` remote on /tmp/kx36/clone-noorigin — kestra-exam refuses to create an exam.
+The exam directory is keyed by the origin URL so two clones or forks sharing a
+directory basename cannot cross-wire onto one exam dir. There is no fallback
+naming: add an origin remote (`git remote add origin <url>`), or run without an
+exam — the exam is opt-in on kestra-build's full mode.
+  — the origin URL yields fewer than two path segments (file:///tmp/kx36/origin.git)
+exit=1
+
+--- 10d a bare local path origin, same stop ---
+FAIL: no `origin` remote on /tmp/kx36/clone-noorigin — kestra-exam refuses to create an exam.
+The exam directory is keyed by the origin URL so two clones or forks sharing a
+directory basename cannot cross-wire onto one exam dir. There is no fallback
+naming: add an origin remote (`git remote add origin <url>`), or run without an
+exam — the exam is opt-in on kestra-build's full mode.
+  — the origin URL yields fewer than two path segments (/tmp/kx36/origin.git)
+exit=1
+
+CONSEQUENCE for this eval: the fixture origin must be host-shaped with >=2
+path segments, so it is https://git.example.test/kx-fixture/tally.git — a URL
+that is never contacted (no fetch, no push, local transport).
+
+--- 10e a run folder whose basename is not a usable slug ---
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_paths.py /tmp/kx36/repo /tmp/kx36/repo/workflows/runs/Tally_Refund
+FAIL: run folder basename 'Tally_Refund' is not a usable feature slug (needs ^[a-z0-9][a-z0-9-]{0,63}$) — rename the run folder (/tmp/kx36/repo/workflows/runs/Tally_Refund); kestra-exam never invents a slug.
+exit=1
+
+--- 10f the exam repo has grown a remote ---
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_paths.py /tmp/kx36/repo /tmp/kx36/repo/workflows/runs/tally-refund
+FAIL: the exam repo /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund has remotes (['origin']) — an exam is local evidence and is never pushed. Remove them (`git -C <exam-dir> remote remove <name>`) before continuing.
+exit=1
+
+--- 10g origin keying on six URL forms + the nested-group collision ---
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave3-kestra-exam/fixtures/keying.py
+ok   https://github.com/arkaphat/kestra.git                  -> github.com__arkaphat__kestra
+ok   ssh://git@github.com/arkaphat/kestra.git                -> github.com__arkaphat__kestra
+ok   git@github.com:arkaphat/kestra.git                      -> github.com__arkaphat__kestra
+ok   https://github.com:443/Arkaphat/Kestra                  -> github.com__arkaphat__kestra
+ok   https://github.com/bob/kestra                           -> github.com__bob__kestra
+ok   https://github.com/arkaphat/kestra/                     -> github.com__arkaphat__kestra
+ok   https://git.example.test/kx-fixture/tally.git           -> git.example.test__kx-fixture__tally
+ok   https://gitlab.example.co.th/team/sub/kestra.git        -> gitlab.example.co.th__team__sub__kestra
+ok   https://gitlab.example.co.th/other/sub/kestra.git       -> gitlab.example.co.th__other__sub__kestra
+
+last-two-segments key 'gitlab.example.co.th__sub__kestra' would be shared by 2 repos:
+    https://gitlab.example.co.th/team/sub/kestra.git
+    https://gitlab.example.co.th/other/sub/kestra.git
+full-path keys are distinct: True
+
+ok    file:///tmp/kx36/origin.git -> hard stop: — the origin URL yields fewer than two path segments (file:///tmp/kx36/origin.git)
+ok    /tmp/kx36/origin.git -> hard stop: — the origin URL yields fewer than two path segments (/tmp/kx36/origin.git)
+ok    https://github.com/kestra -> hard stop: — the origin URL yields fewer than two path segments (https://github.com/kestra)
+ok    https://github.com/ -> hard stop: — the origin URL yields fewer than two path segments (https://github.com/)
+
+exams root: /tmp/kx36/exams  (KESTRA_EXAMS_ROOT set: True)
+exit=0
+

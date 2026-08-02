@@ -1,0 +1,60 @@
+
+=== leg 11 — the skill's own tests and py_compile ===
+
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/test_exam_harness.py
+test_red_c0_blocks_every_other_check (__main__.TestBlocking.test_red_c0_blocks_every_other_check) ... ok
+test_audit_seam_fails_on_a_stale_quote (__main__.TestCli.test_audit_seam_fails_on_a_stale_quote) ... ok
+test_audit_seam_matches_the_manifest_quote (__main__.TestCli.test_audit_seam_matches_the_manifest_quote) ... ok
+test_human_run_exits_one_on_a_behavioral_red (__main__.TestCli.test_human_run_exits_one_on_a_behavioral_red) ... ok
+test_json_shape (__main__.TestCli.test_json_shape) ... ok
+test_list_touches_no_seam (__main__.TestCli.test_list_touches_no_seam) ... ok
+test_only_always_runs_c0 (__main__.TestCli.test_only_always_runs_c0) ... ok
+test_only_rejects_an_undeclared_check (__main__.TestCli.test_only_rejects_an_undeclared_check) ... ok
+test_optimize_flag_is_refused (__main__.TestCli.test_optimize_flag_is_refused) ... ok
+test_red_c0_exits_two_and_blocks (__main__.TestCli.test_red_c0_exits_two_and_blocks) ... ok
+test_repo_flag_redirects_the_seam (__main__.TestCli.test_repo_flag_redirects_the_seam) ... ok
+test_unknown_argument_is_usage (__main__.TestCli.test_unknown_argument_is_usage) ... ok
+test_behavioral_red_reaches_the_seam (__main__.TestDiscriminator.test_behavioral_red_reaches_the_seam) ... ok
+test_checkfailure_before_any_call_is_infrastructure (__main__.TestDiscriminator.test_checkfailure_before_any_call_is_infrastructure)
+An expectation about a call that never happened proves nothing. ... ok
+test_pass (__main__.TestDiscriminator.test_pass) ... ok
+test_seam_unavailable_is_infrastructure (__main__.TestDiscriminator.test_seam_unavailable_is_infrastructure) ... ok
+test_unexaminable_runs_nothing (__main__.TestDiscriminator.test_unexaminable_runs_nothing) ... ok
+test_unexpected_exception_is_infrastructure (__main__.TestDiscriminator.test_unexpected_exception_is_infrastructure) ... ok
+test_missing_anchor_is_a_hard_stop (__main__.TestMalformedExam.test_missing_anchor_is_a_hard_stop) ... ok
+test_missing_c0_is_a_hard_stop (__main__.TestMalformedExam.test_missing_c0_is_a_hard_stop) ... ok
+test_unexaminable_without_a_reason_is_a_hard_stop (__main__.TestMalformedExam.test_unexaminable_without_a_reason_is_a_hard_stop) ... ok
+test_unknown_seam_kind_is_a_hard_stop (__main__.TestMalformedExam.test_unknown_seam_kind_is_a_hard_stop) ... ok
+test_fewer_than_two_segments_is_a_hard_stop (__main__.TestOriginKey.test_fewer_than_two_segments_is_a_hard_stop) ... ok
+test_forms_agree (__main__.TestOriginKey.test_forms_agree) ... ok
+test_nested_groups_do_not_collide (__main__.TestOriginKey.test_nested_groups_do_not_collide) ... ok
+test_slug_must_be_conventional (__main__.TestOriginKey.test_slug_must_be_conventional) ... ok
+test_all_pass (__main__.TestSummary.test_all_pass) ... ok
+test_behavioral_fail_is_one (__main__.TestSummary.test_behavioral_fail_is_one) ... ok
+test_infrastructure_red_is_two (__main__.TestSummary.test_infrastructure_red_is_two) ... ok
+test_red_smoke_is_two (__main__.TestSummary.test_red_smoke_is_two) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 1.840s
+
+OK
+exit=0
+
+$ python3 -m py_compile-equivalent (cfile redirected to /tmp/kx36/pyc)
+compiled 8 files
+compile exit=0
+
+line counts (wc -l):
+     403 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/SKILL.md
+     208 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/references/exam-script-contract.md
+     234 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/references/gate-procedure.md
+     167 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/references/manifest-schema.md
+     148 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/references/regeneration.md
+     382 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_anchor.py
+     220 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_delta.py
+     644 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_harness.py
+     211 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/exam_paths.py
+     392 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam/scripts/test_exam_harness.py
+      94 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py
+     103 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/manifest.md
+    3206 total

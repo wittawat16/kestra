@@ -1,0 +1,53 @@
+
+=== leg 9 — one pointer record, edited in place; >1 is a hard fail ===
+
+$ cat <slug>.pointer
+<!-- kestra-exam-pointer v1 -->
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/
+exam_script_sha256: a403e490b02f7e0b025b0775d2409978b2f3b57c50fc5cfe343b2e88c137be54
+manifest_sha256: 8784a6ee021a165e5e5be1fd6cfea5dd9ec06e62afea75d8ae7e19d9b69ebd05
+raise_commit: f59837b1323b009647d266ed99ee35f49b2bb10d
+surface_hash: 7f2b7f2fa39846c3e572676b9c0abe0b1b903cfafddbdc1ac9f7241f87423c58
+extractor_version: 1
+recorded_at: 2026-08-02T15:22:43Z
+generation: 2
+
+$ cat <slug>.pointer.log
+2026-08-02T15:22:43Z regenerated C-1 (AC-1 changed); surface 7e47c7ab… → 7f2b7f2f…; raise f59837b1… → f59837b1…; generation 1 → 2
+
+generation in the body and one appended log line per regeneration; the file
+itself was rewritten, never duplicated.
+
+$ sha256sum exam.py manifest.md   (vs the two hashes in the pointer body)
+a403e490b02f7e0b025b0775d2409978b2f3b57c50fc5cfe343b2e88c137be54  /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py
+8784a6ee021a165e5e5be1fd6cfea5dd9ec06e62afea75d8ae7e19d9b69ebd05  /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/manifest.md
+
+--- 9a the design's multiplicity glob, as written ---
+$ ls <exams-root>/<key>/tally-refund.pointer*
+/tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer
+/tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.log
+matches=2
+FINDING: the glob in gate-procedure.md §4 matches `<slug>.pointer.log` too, so
+the very first regeneration makes the multiplicity check report 2 and hard-fail
+a healthy exam. The predicate has to exclude the .log sibling.
+
+--- 9b plant a second pointer ---
+$ ls <slug>.pointer* (excluding the .log sibling)
+/tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer
+/tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.bak
+matches=2
+
+FAIL: 2 pointer records titled 'kestra-exam: tally-refund' (/tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.bak ) — ambiguous by
+construction. A regeneration edits the existing pointer in place; a second record is
+forgery or confusion, and picking the newer one crowns the forgery. Close or retitle
+the wrong one by hand, then re-run. Never auto-select, never take the newest.
+
+(the local-transport form of the >1 hard fail: paths in place of issue
+numbers, same text, same never-take-the-newest.)
+
+--- 9c newest-wins is refused, not applied ---
+$ ls -t <slug>.pointer* | head -1     # what recency WOULD pick
+/tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.bak
+
+--- 9d back to exactly one ---
+matches=1

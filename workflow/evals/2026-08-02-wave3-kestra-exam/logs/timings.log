@@ -1,0 +1,54 @@
+
+=== leg 14 — what the exam costs to run (wall time, this machine) ===
+
+$ time python3 exam.py --repo <clone-impl>          # 7 checks, 6 spawns
+
+real	0m0.304s
+user	0m0.136s
+sys	0m0.069s
+
+$ time python3 exam.py --only C-1 --repo <clone-impl>   # delta subset + C-0
+
+real	0m0.152s
+user	0m0.071s
+sys	0m0.032s
+
+$ time (git clone --no-hardlinks + checkout <raise>)   # the red-proof clone
+
+real	0m0.099s
+user	0m0.015s
+sys	0m0.038s
+
+$ time python3 exam_anchor.py <run> <exam>
+
+real	0m0.113s
+user	0m0.043s
+sys	0m0.033s
+
+$ time python3 exam_delta.py <run> <exam>
+
+real	0m0.104s
+user	0m0.042s
+sys	0m0.028s
+
+$ time python3 test_exam_harness.py
+
+real	0m2.001s
+user	0m0.901s
+sys	0m0.403s
+
+$ time <S1 with exemptions>
+
+real	0m0.040s
+user	0m0.008s
+sys	0m0.086s
+
+$ time <S3 guarded, under sh -c>
+
+real	0m0.230s
+user	0m0.193s
+sys	0m0.242s
+
+recorded durations from the JSON artifacts (harness-measured, not wall):
+  red-proof.json duration_s: 0.072 · per-check: {'C-0': 0.034, 'C-1': 0.037, 'C-2': 0.046, 'C-3': 0.032, 'C-4': 0.035, 'C-5': 0.046, 'C-6': 0.0}
+  red-proof generations: [{'generation': 1, 'started_at': '2026-08-02T15:22:36Z', 'only': None}, {'generation': 2, 'started_at': '2026-08-02T15:22:42Z', 'only': ['C-1']}]

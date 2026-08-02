@@ -1,0 +1,76 @@
+
+=== leg 1 — kestra-exam Process steps 1-7 against the fixture ===
+
+KESTRA_EXAMS_ROOT=/tmp/kx36/exams
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave3-kestra-exam/fixtures/build-exam.py create
+origin_url: https://git.example.test/kx-fixture/tally.git
+origin_key: git.example.test__kx-fixture__tally
+feature_slug: tally-refund
+exams_root: /tmp/kx36/exams
+exams_root_overridden: yes
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+pointer_file: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer
+pointer_log: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer.log
+exam_dir_exists: no
+transport: local
+chain_repo: -
+
+extractor candidates, in resolution order:
+  absent  /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/requirement_surface.py
+  absent  /tmp/kx36/repo/workflows/runs/tally-refund/requirement_surface.py
+  absent  /tmp/kx36/repo/workflow/kestra-build/scripts/requirement_surface.py
+  absent  /Users/arkaphatp/.claude/skills/kestra-build/scripts/requirement_surface.py
+copied extractor from /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/requirement_surface.py (the fixture repo is not the skill repo, so candidate 3 cannot resolve — see the eval README)
+
+$ exam_anchor.py --creatable
+CREATABLE: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund holds no manifest.md yet.
+creatable exit=0
+
+raise_commit: f59837b1323b009647d266ed99ee35f49b2bb10d
+surface_hash: 7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718
+extractor_version: 1
+
+$ exam.py --list
+seam: cli · python3 src/tally.py
+C-0    —        must-hold     —            harness smoke — the declared seam answers
+C-1    AC-1     must-flip     US-1         --refund subtracts refund rows from the total
+C-2    AC-2     must-flip     US-1         a non-integer amount is refused with exit 2, naming the file line
+C-3    AC-3     must-hold     US-2         without --refund every row still adds — pre-existing behavior preserved
+C-4    AC-4     must-flip     ⚠ inferred   an undefined option is refused with the usage line and exit 1
+C-5    AC-5     must-hold     US-3         a refusal leaves stdout empty
+C-6    AC-6     unexaminable  ID§2         single streaming pass; memory does not grow with row count
+exit=0
+
+$ exam.py --audit-seam
+OK: seam target 'python3 src/tally.py' appears verbatim in manifest.md's quoted External Interface block
+exit=0
+red-proof (create) json exit=1 human exit=1
+unproven C-4 (AC-4): born green — the AC was already satisfied on the pre-implementation tree, so this red proof shows no flip. Class stays must-flip; the evidence is degraded, not the class.
+
+coverage: {'N': 6, 'M': 5, 'K': 1, 'F': 3, 'H': 3, 'U': 1, 'unproven_ids': ['C-4'], 'unexaminable_acs': ['AC-6']}
+exam.py sha256:    202404e5e49f74030a6ffa04a26d6ab57b053432dee602153da52469b6a26ae5
+manifest.md sha256:4959697282289d3c4dfbb9ff1218b3d106627504461f2843486e182171d7b565
+
+--- /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund.pointer ---
+<!-- kestra-exam-pointer v1 -->
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/
+exam_script_sha256: 202404e5e49f74030a6ffa04a26d6ab57b053432dee602153da52469b6a26ae5
+manifest_sha256: 4959697282289d3c4dfbb9ff1218b3d106627504461f2843486e182171d7b565
+raise_commit: f59837b1323b009647d266ed99ee35f49b2bb10d
+surface_hash: 7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718
+extractor_version: 1
+recorded_at: 2026-08-02T15:22:37Z
+generation: 1
+
+committed: exam(tally-refund): create from surface 7e47c7ab7978 @ raise f59837b1323b
+$ git -C <exam-dir> log --oneline
+bd3982e exam(tally-refund): create from surface 7e47c7ab7978 @ raise f59837b1323b
+exit=0
+$ git -C <exam-dir> remote
+(empty=True) exit=0
+
+$ exam_anchor.py <run> <exam>
+FRESH: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1 — manifest, pointer and exam.py agree.
+anchor exit=0
+exit=0
+

@@ -1,0 +1,13 @@
+$ python3 exam.py --repo /tmp/kx36/redproof-clone-create
+exam: tally-refund   seam: cli · python3 src/tally.py
+anchor: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1
+C-0    —        must-hold     pass          -                 0.03s  
+C-1    AC-1     must-flip     FAIL          behavioral        0.04s  CheckFailure: exit 1 != 0 @ tally --refund
+C-2    AC-2     must-flip     FAIL          behavioral        0.05s  CheckFailure: exit 1 != 2 @ tally bad.csv
+C-3    AC-3     must-hold     pass          -                 0.04s  
+C-4    AC-4     must-flip     pass          -                 0.04s  
+C-5    AC-5     must-hold     pass          -                 0.05s  
+C-6    AC-6     unexaminable  UNEXAMINABLE  -                 0.00s  a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth
+pass 4 · fail 2 · blocked 0 · unexaminable 1 · unproven 1 · exit 1
+exit=1
+unproven C-4 (AC-4): born green — the AC was already satisfied on the pre-implementation tree, so this red proof shows no flip. Class stays must-flip; the evidence is degraded, not the class.

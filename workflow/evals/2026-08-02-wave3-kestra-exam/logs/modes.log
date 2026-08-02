@@ -1,0 +1,99 @@
+
+=== leg 5 — the six modes and the exit-code ladder ===
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --list
+seam: cli · python3 src/tally.py
+C-0    —        must-hold     —            harness smoke — the declared seam answers
+C-1    AC-1     must-flip     US-1         --refund subtracts refund rows from the total
+C-2    AC-2     must-flip     US-1         a non-integer amount is refused with exit 2, naming the file line
+C-3    AC-3     must-hold     US-2         without --refund every row still adds — pre-existing behavior preserved
+C-4    AC-4     must-flip     ⚠ inferred   an undefined option is refused with the usage line and exit 1
+C-5    AC-5     must-hold     US-3         a refusal leaves stdout empty
+C-6    AC-6     unexaminable  ID§2         single streaming pass; memory does not grow with row count
+exit=0
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --audit-seam
+OK: seam target 'python3 src/tally.py' appears verbatim in manifest.md's quoted External Interface block
+exit=0
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --only C-2 --repo /tmp/kx36/clone-impl --json
+{
+  "exam": "tally-refund",
+  "anchor": {
+    "raise_commit": "f59837b1323b009647d266ed99ee35f49b2bb10d",
+    "surface_hash": "7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718",
+    "extractor_version": 1
+  },
+  "seam": {
+    "kind": "cli",
+    "target": "python3 src/tally.py"
+  },
+  "started_at": "2026-08-02T15:22:39Z",
+  "duration_s": 0.068,
+  "harness_version": 1,
+  "smoke": {
+    "id": "C-0",
+    "result": "pass"
+  },
+  "checks": [
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.035,
+      "id": "C-0",
+      "ac": "\u2014",
+      "class": "must-hold",
+      "provenance": "\u2014"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.033,
+      "id": "C-2",
+      "ac": "AC-2",
+      "class": "must-flip",
+      "provenance": "US-1"
+    }
+  ],
+  "summary": {
+    "pass": 2,
+    "fail": 0,
+    "blocked": 0,
+    "unexaminable": 0,
+    "unproven": 1,
+    "exit_code": 0
+  }
+}
+exit=0
+
+NOTE above: --only C-2 ran C-0 as well — C-0 runs regardless of --only.
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --only C-99 --repo /tmp/kx36/clone-impl
+FAIL: --only names checks this exam does not declare: C-99
+exit=3
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --bogus-flag
+FAIL: unknown argument '--bogus-flag'. Usage: exam.py [--json|--list|--audit-seam] [--only C-3 C-7] [--repo <path>]
+exit=3
+
+$ python3 -O /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --repo /tmp/kx36/clone-impl
+FAIL: this exam was run with assertions disabled (`python3 -O` or PYTHONOPTIMIZE). Refusing: -O strips `assert`, so a check that used one would be born green. Re-run without -O.
+exit=3
+
+
+=== leg 5b — --audit-seam fails when the manifest's quoted seam does not match ===
+
+$ python3 /tmp/kx36/exam-auditneg/exam.py --audit-seam
+FAIL: seam target 'python3 src/tally.py' does not appear in manifest.md's quoted External Interface block — the exam drives a seam the spec did not declare, or the quote is stale
+exit=1
+
+
+=== leg 5c — the fixture spec through kestra-build's own spec validator ===
+
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_spec.py /tmp/kx36/repo/workflows/runs/tally-refund/0-spec.md /tmp/kx36/repo
+exit=0
+

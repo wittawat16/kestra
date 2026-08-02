@@ -1,0 +1,26 @@
+commit 4287ecb215706d0cc8ea9531b28656c21ccc359e
+Author: Arkaphat Pathomwongsa <arkaphatp@set.or.th>
+Date:   Sun Aug 2 22:22:43 2026 +0700
+
+    exam(tally-refund): regenerate C-1 for surface 7f2b7f2fa398 @ raise f59837b1323b
+
+ exam.py        |  4 ++--
+ manifest.md    | 14 +++++++-------
+ red-proof.json | 23 +++++++++++++++--------
+ red-proof.log  | 10 ++++++++++
+ 4 files changed, 34 insertions(+), 17 deletions(-)
+
+commit bd3982e2f051a360dfdc7f3f89b48f611ab6c870
+Author: Arkaphat Pathomwongsa <arkaphatp@set.or.th>
+Date:   Sun Aug 2 22:22:37 2026 +0700
+
+    exam(tally-refund): create from surface 7e47c7ab7978 @ raise f59837b1323b
+
+ exam.py                |  94 ++++++++
+ exam_anchor.py         | 382 +++++++++++++++++++++++++++++
+ exam_harness.py        | 644 +++++++++++++++++++++++++++++++++++++++++++++++++
+ manifest.md            | 103 ++++++++
+ red-proof.json         | 121 ++++++++++
+ red-proof.log          |  13 +
+ requirement_surface.py | 301 +++++++++++++++++++++++
+ 7 files changed, 1658 insertions(+)
