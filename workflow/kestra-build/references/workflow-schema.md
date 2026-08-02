@@ -8,7 +8,9 @@ the fields only make sense in light of *why* they exist.
 ```yaml
 feature: <feature-id>              # kebab-case, matches the spec's feature id
 source_spec: <path>                # spec this workflow was derived from
+spec_anchor: { ... }               # optional mapping — which commit of that spec, see below
 mode: lite | full                  # which stage shape was derived — see SKILL.md's lite/full table
+tickets: [ ... ]                   # optional list — the sliced ticket set folded in, see below
 stages: [ ... ]                    # ordered list, see below — order is for readability only,
                                     # actual execution order comes from depends_on
 ```
@@ -20,6 +22,69 @@ derivation choice made against a spec with no test doubles, rather than an omiss
 value by hand does nothing; the stage list is the truth. If a lite workflow needs to become full —
 a second component appears, a dependency gets mocked — regenerate from the spec rather than
 hand-editing stages in, so the freeze and the write_scope non-overlap get re-validated by step 7.
+
+### `spec_anchor` and `tickets` — the anchor triple and the ticket map
+
+Both are optional and both are written by the fold, never by hand. `spec_anchor` says *which commit
+of the spec* this workflow was derived from; `tickets` says *which slices* were folded into it. A
+monolithic workflow (no ticket set) carries `tickets` not at all, and carries `spec_anchor` only when
+its spec is chain-marked with a `> Spec-ticket:` preamble line.
+
+`spec_anchor` sits immediately after `source_spec` and before `mode` — literally beside the spec
+reference, so a reader sees which spec and which commit of it in one eyeful.
+
+```yaml
+feature: order-cancellation-refund
+source_spec: workflow/runs/order-cancellation-refund/0-spec.md
+spec_anchor:
+  raise_commit: 4f1c0b9e2d7a5c3b8e6f0a1d2c3b4a5968778899
+  surface_hash: e1c70ae8e3f6810cd8d85503f91b31e851aa9eb79af1f7da1c3c93dc159acc27
+  extractor_version: 1
+mode: full
+
+tickets:
+  - id: issue-47
+    ref: https://github.com/<owner>/<repo>/issues/47
+    body_sha256: 9f2c1a…<64 hex>
+    ac_hash: 7ab13f…<64 hex>
+    verified_against: 4f1c0b9e2d7a5c3b8e6f0a1d2c3b4a5968778899
+    verified_at: 2026-08-02T09:14:03Z
+```
+
+| Field | Grammar | Where the value comes from |
+|---|---|---|
+| `spec_anchor.raise_commit` | `^[0-9a-f]{40}$` — full SHA, never abbreviated | `kestra-spec`'s `references/chain-provenance.md` §2 exactly-one-match predicate |
+| `spec_anchor.surface_hash` | `^[0-9a-f]{64}$` | `extract_surface(<spec at raise_commit>).surface_hash` |
+| `spec_anchor.extractor_version` | `^[1-9][0-9]*$` | `requirement_surface.EXTRACTOR_VERSION` of the run's own copy |
+| `tickets[].id` | the same string as `tickets/<id>.md` and the brief delimiter's id | the tracker's own identifier, normalized (`ticket-fold.md` §1) |
+| `tickets[].ref` | URL, or a repo-relative ticket path; not graded by the validator | the invocation |
+| `tickets[].body_sha256` | `^[0-9a-f]{64}$` over the materialized `tickets/<id>.md` | the fold |
+| `tickets[].ac_hash` | `^[0-9a-f]{64}$` | `ticket-fold.md` §3 F3 — one definition, stated there only |
+| `tickets[].verified_against` | `^[0-9a-f]{40}$`, and must equal `spec_anchor.raise_commit` | the per-ticket last-checked marker |
+| `tickets[].verified_at` | ISO-8601 UTC, `YYYY-MM-DDTHH:MM:SSZ` | the fold clock |
+
+**Full SHAs, never abbreviated:** abbreviations collide, and every use of `raise_commit` /
+`verified_against` is a byte-wise equality compare, not a lookup. An abbreviation would make a real
+mismatch unprovable in exactly the case that matters.
+
+**`verified_against` duplicating `raise_commit` is deliberate, not redundant.** It is the per-ticket
+last-checked marker, it is the tuple the tracker-side `Verified-against:` line mirrors, and a
+divergence between the two is a real checkable defect — a partial re-fold, or a hand edit — rather
+than dead weight. A single shared value could not express "this ticket was checked against a
+different raise than that one."
+
+**Why the ticket map lives here and not in `state.json`:** `workflow.yaml` is the derived definition
+and is immutable for the run's life; `state.json` is mutable run state the orchestrator rewrites at
+every commit. Provenance the orchestrator must never rewrite belongs in the immutable file. See
+`state-schema.md`, which records the same decision from the other side so nobody adds a second copy.
+
+**Validator posture — absent is a WARN, partial is a FAIL.** `spec_anchor` missing entirely is a
+WARN (a standalone or hand-written spec is a legitimate shape, story 24); `spec_anchor` present with
+any of its three keys missing, empty, or the wrong shape is a FAIL, because a partial anchor reads as
+provenance while proving nothing. The same split applies to a `tickets[]` entry missing any of its
+five hash/marker fields, and to a `ticket:begin` delimiter with no matching `ticket:end`. This is the
+precedent `validate_spec.py` and `chain-provenance.md` already cite as "validate_workflow.py's
+partial anchor triple."
 
 ## Per-stage fields
 
@@ -114,6 +179,76 @@ it **inside the brief text as a suggestion** — worth trying if it's there, har
 isn't. The stage's enforcement (`write_scope`, `exit_criteria`, `on_fail`) stays entirely
 skill-agnostic; `brief` is the only place that ever mentions a skill by name, and only as a hint.
 
+#### Embedded ticket blocks (sliced folds only)
+
+On a sliced fold, the stage that owns a slice carries **the whole ticket file, verbatim, between
+machine-readable delimiters, as a literal block scalar**:
+
+```yaml
+    brief: |
+      <!-- ticket:begin issue-47 sha256:9f2c1a…<64 hex> -->
+      ## What to build
+      …the byte content of tickets/issue-47.md, unaltered…
+      ## Acceptance criteria
+      - [ ] Refund is issued in full within the same request
+      <!-- ticket:end issue-47 -->
+
+      Folded in at build time from tickets/issue-47.md. Do not edit this block — see
+      workflow-schema.md "re-fold, never hand-edit". Source for each AC above: the spec's AC
+      Coverage Map (AC-3 → US-3, AC-4 → ID§refunds).
+
+      <the stage's own instructions go here, BELOW the block>
+```
+
+Every rule here is mechanically checkable, which is the reason each one is shaped the way it is:
+
+- **The whole file, not selected sections.** One rule, one hash, no extraction ambiguity to argue
+  about later. `## Blocked by` riding along is harmless, and informative next to `depends_on`.
+- **`|` literal, never `>` folded.** Both parse, but `|` keeps the checkbox lines readable for the
+  human reading the diff — a folded body silently reflows the acceptance criteria into a paragraph.
+- **The delimiter carries the id and the full 64-hex `sha256` of `tickets/<id>.md`**, not a 12-char
+  short form: the check is an exact-match compare, and 64 characters once per stage is nothing next to
+  a body that is re-pasted on every spawn.
+- **The only permitted transform is the block-scalar indentation.** No re-wrapping, no whitespace
+  normalization, no `#`-escaping, no trimming. Byte provenance dies the moment a transform is
+  negotiable, and the `sha256` is what would stop meaning anything.
+- **The stage's own instructions live strictly below `ticket:end`**, never interleaved, so the block
+  stays one contiguous extractable region.
+- **One ticket per stage, one stage-set per ticket.** Two stages may embed the *same* ticket (an
+  `implement-*` / `verify-*` pair over one slice); a stage never embeds two tickets, because a brief
+  with two blocks has no unambiguous owner for `on_fail.target` routing.
+- **The `Source:` line under the block is derived, not authored** — the `AC → Source` pairs are read
+  out of the spec's AC Coverage Map at fold time (see `ticket-fold.md` §2), so a reader can trace a
+  requirement to its intent-layer origin without opening the spec.
+
+##### Two parser traps that decide how this is verified
+
+1. **`parse_yaml`'s pre-pass runs `_strip_comment` and drops `---` / blank lines over *every* raw
+   line, block-scalar bodies included.** `_strip_comment` cuts at a `#` preceded by a space, and a
+   block-scalar body is indented by definition, so **every `## …` heading in an embedded ticket loses
+   itself in the parsed value** — this is a standing property of sliced briefs, not a rare case
+   involving a `#47` reference (measured: 3 of 3 briefs in
+   `../../evals/2026-08-02-wave4a-build-fold/logs/02-parsed-brief-loss.log`). A `---` horizontal rule
+   goes the same way. The file on disk is intact throughout. Consequence: **the raw `workflow.yaml`
+   text is the truth for an embedded block; the parsed brief is a lossy view.** Every check compares
+   raw text, and `validate_workflow.py` emits one `WARN` per affected stage, so on a normal sliced
+   fold expect one per embedded block — a standing note that the parsed view is lossy, not an alarm
+   about that particular ticket. Blank-line collapse is accepted and harmless for prose.
+2. **Do not "fix" trap 1 by escaping the ticket body.** Escaping breaks byte-identity, which is the
+   only thing the `sha256` is protecting — trading a documented, warned-about parse loss for an
+   undetectable content change.
+
+#### re-fold, never hand-edit
+
+An embedded block, its delimiter hash, and the matching `tickets[]` entry are **derived** — the
+`tickets/<id>.md` file is the truth. A ticket that changes is re-folded (a plain re-run of
+kestra-build over the same run folder); there is no hand-edit path, and `validate_workflow.py` FAILs
+on every combination of hand edits rather than trusting the instruction. The reason is the same one
+`mode` gives above, one step stronger: a re-fold is what re-runs the freeze / `write_scope`
+non-overlap validation, the anchor recompute, and the `ac_hash` refresh, so a hand-patched brief
+holds current words behind a stale anchor and an un-revalidated freeze. Full detection matrix, the
+four hand-edit routes it closes, and the mid-run refusal: `ticket-fold.md` §4.
+
 ### `exit_criteria`
 
 ```yaml
@@ -121,6 +256,7 @@ exit_criteria:
   type: command             # command | artifact_exists | human_approval
   run: "npm test"           # required when type: command — the orchestrator's verifying step
   artifact: "path/to/file"  # required when type: artifact_exists
+  progress: "<one spec bullet, verbatim>"   # optional — see below; absent is the normal case
 ```
 
 - `command` — orchestrator runs `run`, exit code 0 = pass. When `run` executes a real test suite
@@ -142,6 +278,65 @@ exit_criteria:
   stages (spec sanity, review, security) default to `command` against a verdict artifact instead
   (see the worked example below) — the fix loop and `fixing → reworking` remain the one place a
   human is always in the loop.
+
+#### `exit_criteria.progress`
+
+The number a `fixing` loop has to move. Division of labor: **the spec declares it, kestra-build copies
+it, kestra-run compares it** across attempt rounds — that is what makes clause 2 of the spec's
+two-clause stop condition ("two consecutive attempt rounds without the number moving") mechanical
+instead of a feeling.
+
+```yaml
+    exit_criteria:
+      type: command
+      run: "npm test -- csv-export"
+      progress: "number of failing assertions reported by `npm test` — must reach 0, from a baseline of 2 passing / 0 failing"
+```
+
+**The copy rule is exact and mechanical:**
+
+- Source: the spec's `## Exit Criteria` section, every bullet matching
+  `^\s*[-*]\s+progress:\s*(.+)$`. The captured group is the value.
+- **Verbatim** — including the trailing period and the backticks. The only permitted transform is
+  joining a wrapped continuation line with a single space, the same join `requirement_surface._units`
+  does. No rewording, no shortening, no re-quoting: kestra-run compares a *number* across rounds, and
+  a reworded metric is a different metric.
+- The section's head line (the two-clause stop condition) is **not** copied anywhere. It is a
+  spec-level fact about the whole run; duplicating it per stage would create N copies to drift.
+- The closing "single-shot pass/fail, no progress number" bullet generates nothing. A stage without
+  `progress:` is the normal case.
+
+**Owner resolution — deterministic first, then ask; never guess:**
+
+1. **Exact match** — the bullet's backticked command, whitespace-collapsed, equals some stage's
+   `exit_criteria.run`, whitespace-collapsed ⇒ that stage.
+2. **Unique containment** — exactly one stage's `exit_criteria.run` contains that command as a
+   substring ⇒ that stage.
+3. **Named stage** — the bullet text contains a stage id verbatim ⇒ that stage.
+4. **0 or >1 candidates after 1–3 ⇒ ask the user once**, quoting the bullet and listing the candidate
+   stage ids. Never attach it to the nearest-looking stage: a metric on the wrong stage is compared
+   forever against a number that stage cannot move.
+5. **Still unassignable ⇒ stop the fold:**
+   ```
+   FAIL: the spec declares a loop-shaped check ("progress: …") that no stage owns — kestra-run would
+   have nothing to compare across attempts, so clause 2 of the stop condition could never fire.
+   ```
+   A declared metric silently dropped is exactly the "logs it, then continues" shape this design
+   rejects everywhere else.
+
+**Two fold-time consistency checks, both cheap:**
+
+- Owner resolved but `on_fail.action != fixing` ⇒ WARN in the audit line: *"the metric on `<stage>`
+  will never be compared — this stage does not retry."*
+- Every `progress:` bullet lands on exactly one stage. A bullet assigned twice is a fold-time stop —
+  two stages comparing the same number is two answers to one question.
+- Expand–contract: a **suite-level** metric belongs on the final `integrate-and-verify` stage, never
+  on an individual migrate batch, because a batch structurally cannot move the suite's number.
+
+**Validator:** `progress` present but empty ⇒
+`FAIL: stage '<id>' exit_criteria.progress is empty — omit the field or give it the spec's own
+progress fragment` — same family as the existing "type is `command` but `run` is empty". Nothing
+more: comparing the metric is kestra-run's job, and the validator must not pre-empt its semantics.
 
 ### The verdict artifact
 
@@ -464,6 +659,14 @@ just `review` — the full diff isn't actually finished-and-passed until verify 
 though it ran alongside review rather than after it. No stage in this example stops for a human
 unless `reworking` is reached; see `design-principles.md`'s "Default HITL posture" for why that's
 now the default, not the exception.
+
+**This example is a monolithic, unanchored workflow, and stays one on purpose** — no `spec_anchor`,
+no `tickets:`, no embedded ticket blocks, no `exit_criteria.progress`. That shape is still fully
+valid: it is what a fold over a spec with no sliced ticket set produces, and what a hand-written or
+standalone spec produces. The sliced-fold additions are all optional and all field-local — read
+`spec_anchor` / `tickets` above for the map, "Embedded ticket blocks" for what an owning stage's
+`brief` looks like, `exit_criteria.progress` for the copied metric, and
+[`ticket-fold.md`](ticket-fold.md) for the procedure that fills them in.
 
 ---
 

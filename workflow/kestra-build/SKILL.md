@@ -3,7 +3,10 @@ name: kestra-build
 description: >
   This skill should be used when the user asks to "generate a workflow from this spec", "turn this
   spec into a workflow.yaml", "produce a workflow.yaml + state.json", "design a TDD-locked pipeline
-  definition", "make a generator output with stages, exit criteria, and on_fail blocks", references
+  definition", "make a generator output with stages, exit criteria, and on_fail blocks", "fold this
+  sliced ticket set into one long-run workflow", "embed the ticket bodies into the stage briefs",
+  "re-fold — issue #47 changed", "record the anchor triple / Verified-against / ac_hash for these
+  slices", references
   the Hermes orchestration notes, or wants a feature spec turned into an executable plan file
   before any code is written. Writes a workflow.yaml + state.json — a TDD-first stage machine with
   write-scope allowlists, a test-hash freeze, and a fixing→reworking escalation — then stops. Does
@@ -102,6 +105,111 @@ specified** when you show the workflow to the user. That distinction carries wei
 spec stated is a decision a human made and stands behind, while something you inferred is a
 plausible guess that deserves a second look before it hardens into a stage's `exit_criteria`.
 Presenting the two as equivalent is how a guess quietly acquires the authority of a requirement.
+
+**A spec plus a sliced ticket set is a third input shape** — one `0-spec.md`, N tickets, one
+`workflow.yaml` whose stages each own one slice. Decide which of three forms you were handed before
+doing anything else, the same way `kestra-spec` decides in-chain vs. standalone:
+
+| Form | The invocation names | Do |
+|---|---|---|
+| **A — sliced fold** | a run folder with `0-spec.md` **plus** the slice set: GitHub refs (`#N` / URLs) with the repo, or a directory of local-file tickets | the fold below, in full |
+| **B — monolithic fold** | a run folder with `0-spec.md` only | the ordinary Process below; no `tickets:` block, and `spec_anchor` only if the spec carries a `> Spec-ticket:` preamble marker |
+| **C — chain-marked, no set named** | a chain-marked `0-spec.md`, no slices | ask **once**: "this spec is chain-marked `<url>` — name the sliced ticket set, or fold monolithically?" |
+
+**Never search the tracker for tickets nobody named.** No named set *is* the monolithic signal, and
+guessing a set is how scope no human vetted gets frozen into a workflow. This is verbatim the rule
+`kestra-spec`'s Input section already holds, kept identical on purpose.
+
+---
+
+## Folding a sliced ticket set — run F0–F5 before the Process below
+
+Form A only; form B skips this whole section. These are the **fold-start** steps, labelled F0–F5 so
+they never read as the numbered Process steps further down. Exact commands, regexes, hashes and
+refusal texts: [`references/ticket-fold.md`](references/ticket-fold.md) — open it now if you are
+folding a set, it is the file this section points at for every detail it deliberately doesn't repeat.
+
+**F0. Materialize the slices, then resolve the raise commit.** Copy every slice into
+`<run>/tickets/<id>.md` with `tr -d '\r'` and nothing else — the same one declared normalization
+`kestra-spec` step 0b uses, so "verbatim" means the same thing at both ends of the chain. This is the
+**only** point in the whole run where the tracker is read; everything downstream reads
+`tickets/*.md`, which is what lets `kestra-run` work with no network and no `gh`. `id` is the
+tracker's own identifier (`issue-<N>`, or the local file's basename), never derived from the title —
+a retitled ticket must not orphan its file on the next fold. Then resolve the raise commit with
+`kestra-spec`'s `references/chain-provenance.md` §2 exactly-one predicate; 0 or >1 matches ⇒ that
+file's hard-fail messages verbatim, never a hand-picked SHA.
+
+**F1. Prove the spec hasn't moved since the raise** — recompute both sides, never compare a stored
+hash to a fresh one:
+
+```bash
+python3 "$RUN"/requirement_surface.py "$RUN"/0-spec.md --hash                   # working tree
+git show <raise>:<spec-path> > /tmp/kestra-fold-raise-spec.md
+python3 "$RUN"/requirement_surface.py /tmp/kestra-fold-raise-spec.md --hash     # as raised
+```
+
+Different ⇒ **stop**, print both hashes plus the extract diff, and name the two honest paths:
+re-raise (`kestra-spec`), or re-anchor to the current raise if the human judges the slice boundaries
+still intact. **Whether the boundaries survived is never automated** — the hash says the surface
+moved, the diff says which rows, the human says whether the slicing still holds.
+
+**F2. Match every ticket AC against the spec's `## AC Coverage Map`, and read each AC's Source off
+the matched row.** Normalize the ticket line exactly as `requirement_surface._units` does, then strip
+a trailing label with `\s*\(Source:\s*[^()]*\)\s*$` and nothing wider. An unmatched ticket AC **refuses
+the fold** (the slice set and the raised spec disagree, and reconciling them is a human's call); an
+empty `Source` cell on a matched row stops too; a ticket label contradicting the row stops, printing
+both. Map rows covered by no ticket, or by two, are WARNs that must appear in the audit line. The map
+is the single owner of the AC→Source mapping — a slice may echo it, never restate it independently,
+because a second copy can drift while both still look populated.
+
+**F3–F4. Compute `ac_hash` per slice, then refresh and *print* the marker table** — `body_sha256`,
+`ac_hash`, `verified_against` (= F0's raise SHA), `verified_at` (ISO-8601 UTC) for every slice,
+including rows whose status is `unchanged`. A refresh nobody can see is indistinguishable from a
+refresh that did not run.
+
+**F5. Emit this run's frozen tooling and commit it with the workflow:**
+
+```bash
+cp <skill-scripts-dir>/requirement_surface.py <skill-scripts-dir>/validate_spec.py \
+   <skill-scripts-dir>/validate_workflow.py "$RUN"/
+```
+
+All three, on **every** fold including form B — this is the single owner of that `cp`, referenced by
+the `spec-review` bullet and by step 7 rather than repeated. `kestra-spec` already emits the first
+two; overwriting them is idempotent, and a genuine skill-version difference then shows up as a git
+diff instead of hiding. The third is not optional: `validate_workflow.py` imports
+`requirement_surface` as a same-directory sibling with no path setup, so run from the skill directory
+it would bind the *skill's* extractor and quietly defeat the per-run freeze. A check that reads this
+run in six months must not change its answer because a skill was reinstalled since.
+
+**Then record what F0–F4 produced, in `workflow.yaml`:** the `spec_anchor` triple beside
+`source_spec`, the `tickets:` map, and each owning stage's `brief` carrying its ticket body verbatim
+between `<!-- ticket:begin <id> sha256:<64 hex> -->` / `<!-- ticket:end <id> -->` delimiters, with the
+stage's own instructions strictly below the block. Field grammars, the embedded-block rules, and the
+two parser traps that decide how it's all verified:
+[`references/workflow-schema.md`](references/workflow-schema.md). Stage `depends_on` ordering comes
+from each slice's `## Blocked by`, never from filename order.
+
+**Any ticket-body change ⇒ re-fold; there is no hand-edit path.** A re-fold is a plain re-run of
+kestra-build over the same run folder (no flag, no CLI) and overwrites `workflow.yaml`,
+`tickets/*.md`, the emitted scripts, and `state.json`. It has to be a re-fold rather than a patched
+brief because only the fold re-runs the freeze/`write_scope` validation, the anchor recompute, and the
+`ac_hash` refresh — a hand-patched brief carries current words behind a stale anchor. Say that in the
+brief's own footer too, so the rule travels with the artifact into every spawn.
+
+**One hard guard: refuse to re-fold a live run.** If any stage in the existing `state.json` is past
+`pending`, stop and print the refusal in `ticket-fold.md` §4 — the honest paths are letting
+`kestra-run` escalate to `reworking`, or a destructive reset to the pre-run commit. Overwriting
+`state.json` mid-run destroys the resume checkpoints and orphans the commits that were the rollback
+points, so this is a `reworking`-class event, not a regeneration: escalate upward, never patch
+sideways.
+
+**Print the tracker-side line; never post it.** One line per slice in the closing report —
+`Verified-against: <sha…> · ac_hash: <hex…> · extractor: v<N> · fold: <ISO-8601>` — for a human to
+paste. kestra-build produces artifacts and stops; it doesn't even commit, so writing to an external
+tracker is outside its contract, and its sibling `kestra-spec` is read-only on the tracker for the
+same reason. Named residual: a human who never pastes leaves that ticket anchorless, visible only at
+the next fold.
 
 ---
 
@@ -382,9 +490,10 @@ implementation-specific instructions (what a script-only stage's brief should sa
      and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
      rather than assuming a human already blessed it.
 
-     **Chain a mechanical pre-check ahead of the verdict grep.** Emit
-     `scripts/validate_spec.py` (ships with `kestra-build`) into the run folder alongside
-     `workflow.yaml`/`state.json` — same convention as `harness/` and `evidence/` — so the frozen
+     **Chain a mechanical pre-check ahead of the verdict grep.** This stage's `exit_criteria` runs the
+     run folder's **own** copy of `validate_spec.py`, emitted by step F5 above (the single owner of
+     that `cp`, which emits all three scripts on every fold) alongside `workflow.yaml`/`state.json` —
+     same convention as `harness/` and `evidence/` — so the frozen
      `exit_criteria` field carries no dependency on the `kestra-build` skill being installed on
      whatever machine later executes the workflow. Set `exit_criteria.run` to
      `python3 <run-folder>/validate_spec.py <source_spec> <repo-root> && grep -q '^VERDICT: CLEAR$' spec-verdict.md`.
@@ -423,6 +532,44 @@ implementation-specific instructions (what a script-only stage's brief should sa
      in which case a small upstream `define-shared-contract` stage isolates just that file. The
      reference file has the full reasoning, the risk table `test-review`'s brief should use, and the
      measured evidence behind each rule — read it there rather than here.
+   - **A wide refactor folds as `expand` → migrate-batch × N → `contract`, and needs no new
+     vocabulary — but a batch whose blast radius reaches call sites *inside test files* has exactly
+     two legal shapes.** Both obvious escapes weaken the freeze, and both are already mechanically
+     rejected by step 7's validator: giving a post-freeze migrate stage test paths in its
+     `write_scope` FAILs ("after the freeze, only a reworking pass may touch test paths"), and adding
+     a second `freeze_after: true` to re-freeze FAILs too ("more than one stage has
+     `freeze_after: true`"). There is no third shape, so pick one at fold time and **name the choice
+     in the mode/stage audit line**:
+     **(a) Pull the test-side migration in front of the freeze — the preferred shape.** The `expand`
+     stage's `write_scope` includes the test files the migration will touch, and it updates those call
+     sites to the new form *before* `freeze-tests` runs; the frozen hash then already covers the
+     migrated form and no batch ever touches a test path. Available whenever the blast radius is known
+     at fold time — which it normally is, because whatever sized the batches sized them by exactly
+     that radius.
+     **(b) Accept `reworking` as the honest path.** When a batch's test-side radius genuinely cannot
+     be known before the migration runs, don't invent a second freeze: let the batch hit the
+     write-scope rejection and escalate. `reworking` unlocks the test paths, re-freezes, and resets
+     the counters — the design's one guaranteed human stop, which is the correct price for a change
+     that alters what the frozen tests *mean*. Say so in that batch's brief up front, so the stop
+     reads as a designed outcome rather than a surprise.
+     Never pair (a) with a partial radius and "fix the rest later": a freeze covering some migrated
+     call sites and not others is precisely the false-positive shape the freeze exists to close.
+   - **When batches can't stay green alone and land on a shared integration branch, fold the
+     weakening honestly instead of hiding it inside a green.** Each batch's `exit_criteria.run` is the
+     **narrowest command that is genuinely green for that batch alone** — the migrated package's own
+     tests, a type-check, a build of the touched target — never the full suite. **Never a full-suite
+     invocation weakened to pass:** no skip list, no `-k 'not migrated'`, no `--passWithNoTests`, no
+     `|| true`, no allow-fail flag. A green produced by narrowing the check is the exact false positive
+     this whole machine exists to prevent, and it is worse than a red because it leaves evidence
+     behind. The unmodified full-suite command belongs to **exactly one** stage: a final
+     `integrate-and-verify` that `depends_on` every batch, which is also the only stage a suite-level
+     `progress:` metric may be copied onto (a batch structurally cannot move the suite's number).
+     Each batch's brief states its own weakening in one sentence — *"this gate proves `<X>` only; the
+     suite is proven at `integrate-and-verify`"* — because without it a reader, or a `review` stage,
+     reads a batch's green as a suite green, which is the whole defect this bullet exists to prevent.
+     And the `contract` stage (delete the old form) `depends_on: [integrate-and-verify]`, not the last
+     batch: deleting the compatibility shim before the suite has ever passed removes the only thing
+     keeping the intermediate states green.
    - **Reality Constraints listing an external dependency triggers `test-review` by the table above
      — but check what the *actual chosen test design* does before assuming that pass has real work
      to do.** A spec can name an external dependency while `generate-tests` legitimately sidesteps
@@ -703,17 +850,40 @@ implementation-specific instructions (what a script-only stage's brief should sa
      diff (`test-review`, `verify`, `review`, and any `fixing` retry), so a comment that costs one
      line to write costs that line again on every stage downstream of it.
 5. **Write `workflow.yaml`** — schema and a full worked example in `references/workflow-schema.md`.
+   - **Copy every `progress:` bullet out of the spec's `## Exit Criteria` onto the one stage that
+     owns it**, as `exit_criteria.progress`, verbatim. The spec declares the metric, kestra-build
+     copies it, `kestra-run` compares it across attempt rounds — so a reworded metric is a different
+     metric, and a dropped one leaves clause 2 of the spec's stop condition unable to ever fire. The
+     owner-resolution ladder (exact match → unique containment → named stage → ask the user once →
+     stop the fold), the two fold-time consistency checks, and the exact FAIL text are in
+     `references/workflow-schema.md`'s `exit_criteria.progress` section. A stage with no `progress:`
+     is the normal case; don't invent one.
 6. **Write `state.json`** — initial state matching the stage list, schema + example in
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
 7. **Dry-run it before showing it to the user.** Run
-   `python3 <skill-dir>/scripts/validate_workflow.py <output-dir>` — a dependency-free, zero-LLM
+   `python3 <run-folder>/validate_workflow.py <run-folder>` — the run's **own** copy, emitted by step
+   F5, not the skill's: the checker imports `requirement_surface` as a same-directory sibling with no
+   path setup, so running it from the skill directory binds the skill's extractor and defeats the
+   per-run freeze the emit exists to create. (The in-place `python3
+   workflow/kestra-build/scripts/validate_workflow.py <dir>` invocation documented in `CLAUDE.md`
+   stays valid as a convenience; if it reports an extractor-version mismatch, that is a true signal
+   about this run, not a bug in the check.) It is a dependency-free, zero-LLM
    structural check (no third-party packages, works with a plain `python3`) that catches structural
    mistakes mechanically: a post-freeze `write_scope`
    overlapping the frozen test paths (pre-freeze stages are correctly exempt — they own those paths
    on purpose), a missing `on_fail.target` on a `write_scope: []` fixing stage, a dependency cycle,
    a stage unreachable from any start stage, `freeze_after: true` on more than one stage or on a
    stage whose `write_scope` is empty (which would snapshot nothing), and independent stages with
-   colliding `write_scope`s that kestra-run might run in parallel. This is a
+   colliding `write_scope`s that kestra-run might run in parallel. On a sliced fold it additionally
+   re-runs the fold's own arithmetic: the anchor triple's shape and freshness (absent ⇒ WARN, partial
+   or stale ⇒ FAIL), every embedded ticket block against `tickets/<id>.md` and against
+   `tickets[].body_sha256`, each `verified_against` against `spec_anchor.raise_commit`, each `ac_hash`
+   against a recomputed surface, and `exit_criteria.progress` being non-empty where present. **This is
+   where a first fold's refusal actually bites** — on a re-fold F0–F4 refuse before anything is
+   overwritten, but on a first fold there is no prior `workflow.yaml` to check against, so the
+   mechanical half of F1–F3 lands here: after the artifacts are written, and before they are shown,
+   committed, or handed off. Accepted cost, worth stating rather than hiding: a first fold over a
+   mismatched slice set wastes one derivation pass. This is a
    mechanical graph/set check, not a judgment call — the same "run the real command, don't eyeball
    the diff" standard kestra-run's own enforcement holds itself to, just applied here before the
    first stage ever executes instead of after. If it reports `FAIL`, fix the stage list and re-run
@@ -730,11 +900,22 @@ implementation-specific instructions (what a script-only stage's brief should sa
 
 Default to `<repo>/<feature-id>/workflow.yaml` and `<repo>/<feature-id>/state.json` next to the
 spec you generated from (e.g. alongside `workflows/runs/<feature-id>/0-spec.md` if that's where the
-spec lives). Ask if the repo has a different convention already.
+spec lives). Ask if the repo has a different convention already. A sliced fold adds
+`<run-folder>/tickets/<id>.md` per slice plus the three emitted scripts (step F5) — all of them
+committed with the workflow, because a hash recorded against a file that isn't in the commit proves
+nothing later.
 
 ## What kestra-build does not do
 
 - Does not execute the workflow, call any skill, write application code, or commit anything.
+- Does not write to the tracker. It reads a ticket once, at F0, to materialize `tickets/<id>.md`, and
+  it *prints* the `Verified-against:` line for a human to paste — it never comments, labels, edits or
+  closes, the same read-only posture `kestra-spec` holds.
+- Does not edit a ticket body, and does not slice a spec into tickets. Whatever produced the slices
+  (`to-tickets` is the suggested tool, *if installed*) owns their shape; a mismatch between a slice and
+  the spec is a stop, not something to reconcile by rewriting either side.
+- Does not re-fold a run whose `state.json` shows any stage past `pending` — that is a
+  `reworking`-class event (see the fold section's hard guard), not a regeneration.
 - Does not add a `human_approval` stage on its own initiative — the default template has none (see
   `references/design-principles.md`'s "Default HITL posture"). If the user wants a manual milestone
   beyond that default, ask, don't assume.

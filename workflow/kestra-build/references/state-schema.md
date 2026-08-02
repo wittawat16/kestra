@@ -24,6 +24,18 @@ yet.
   snapshot hash of the test suite. Every later stage checks this before running; a mismatch halts
   the pipeline. kestra-build always initializes this to `null`.
 
+**No ticket map and no anchor triple here — deliberately.** A sliced fold's `spec_anchor` and
+`tickets[]` (`body_sha256`, `ac_hash`, `verified_against`, `verified_at`) live in `workflow.yaml`
+instead; see `workflow-schema.md`'s "`spec_anchor` and `tickets`". The reason is the split this file
+already embodies: `workflow.yaml` is the derived definition and is immutable for the run's life, while
+`state.json` is mutable run state the orchestrator rewrites at **every** commit. Provenance the
+orchestrator must never rewrite belongs in the file the orchestrator never rewrites. Don't add a
+second copy here for convenience — two copies of a hash is two answers to "did this ticket change?".
+
+`state.json` does gate one fold-time decision, read-only: kestra-build refuses to **re-fold** a run
+folder in which any stage's `status` is past `pending`, because overwriting this file mid-run destroys
+the resume checkpoints and orphans the commits that were the rollback points (`ticket-fold.md` §4).
+
 ## Per-stage state
 
 ```json
