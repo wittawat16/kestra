@@ -175,6 +175,7 @@ A manifest is defective — fix it, do not work around it — when any of these 
 * a Failure signature does not appear verbatim in `red-proof.json`
 * `Class` contradicts what the red proof measured (a `must-hold` that was red, a `must-flip` recorded
   `n/a — must-hold`)
-* `## Coverage`'s `unproven: U` disagrees with `summary.unproven`
+* `## Coverage`'s `unproven: U` disagrees with `summary.unproven` in `red-proof.json`
+* the manifest carries no `--- verdict … ---` delimiter line (§7)
 * the seven sections are out of order, or `## Verdict contract` is not last
 * a `PASS` verdict with `U > 0` and no `evidence: degraded` clause

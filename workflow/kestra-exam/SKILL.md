@@ -202,9 +202,9 @@ preservation. A declared class the measurement contradicts is a manifest defect 
 
 | Producer | Red-proof cell |
 |---|---|
-| **born green** — a `must-flip` that passed at red-proof | `**born-green — `unproven`**` |
-| **infrastructure red** — the seam was never reached, so the red proves nothing | `**red <ISO> infrastructure — `unproven`**` |
-| **void red-proof** — C-0 was red | ``void — C-0 red at red-proof (harness) — `unproven``` |
+| **born green** — a `must-flip` that passed at red-proof | ``**born-green — `unproven`**`` |
+| **infrastructure red** — the seam was never reached, so the red proves nothing | ``red <ISO> infrastructure — `unproven` `` |
+| **void red-proof** — C-0 was red | ``void — C-0 red at red-proof (harness) — `unproven` `` |
 
 **Never auto-demote a born-green `must-flip` to `must-hold`.** Demotion would turn missing evidence
 into a legitimate-looking regression guard — the laundering the class split exists to make visible.

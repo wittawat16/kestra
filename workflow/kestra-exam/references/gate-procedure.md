@@ -58,8 +58,10 @@ outcome.** `0` means a hit, i.e. a leak. `≥2` means the check itself failed (e
 ```sh
 EX=". ':(exclude).claude/skills/kestra-exam/*' ':(exclude)workflow/kestra-exam/*'"
 
-# S1 — worktree, tracked + untracked
+# S1 — worktree. TWO commands, both must be clean (see §3 — `--untracked`
+# implies --exclude-standard and skips tracked-but-excluded paths):
 git grep -q --untracked 'kestra/exams' -- $EX ; [ $? -eq 1 ]
+git grep -q             'kestra/exams' -- $EX ; [ $? -eq 1 ]
 
 # S2 — commit messages (git grep cannot see them). NO exemption, by decision.
 test -z "$(git log --all --grep='kestra/exams' --oneline)"
@@ -302,8 +304,8 @@ indistinguishable from tampering.
 
 ## 6. The gate's own stopping rule
 
-A gate run is complete when: the four sweeps each reported their clean outcome (S1/S3 exit `1`, S2 empty,
-S4 length `0`); exactly one pointer resolved by exact title and its `v1` body parsed; the two hashes and
+A gate run is complete when: the four sweeps each reported their clean outcome (S1's two passes and S3
+exit `1`, S2 empty, S4 length `0`); exactly one pointer resolved by exact title and its `v1` body parsed; the two hashes and
 the anchor triple all matched; `exam.py --json` ran against the delivered tree; and the verdict block was
 appended to `## Verdict contract` — **with the `evidence: degraded` clause whenever `U > 0`**, since a
 `PASS` missing that clause is itself a gate failure.
