@@ -341,6 +341,7 @@ completed the pipeline", never "this AC passed".
 | [`kestra-build/references/test-quality-taxonomy-research.md`](kestra-build/references/test-quality-taxonomy-research.md) | Why tests can pass while production breaks — six recurring test-fidelity failure modes mapped to established literature, with sources |
 | [`kestra-run/references/enforcement.md`](kestra-run/references/enforcement.md) | The exact real commands used for every check (write_scope diff, test-hash, commit-per-stage, rollback) |
 | [`kestra-run/references/efficiency-notes.md`](kestra-run/references/efficiency-notes.md) | Why each efficiency shortcut is safe (not spawning a fresh agent every stage, resuming instead of respawning, etc.) |
+| [`docs/kestra-sequence.md`](docs/kestra-sequence.md) | Five mermaid sequence diagrams of the whole pipeline — the spec→build→run handoffs, kestra-run's per-stage loop, the freeze/commit path, the `fixing`→`reworking` escalation, and the three primitives behind the freeze ([`docs/`](docs/README.md)) |
 
 ## What's intentionally "not done"
 
