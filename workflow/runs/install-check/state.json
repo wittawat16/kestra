@@ -1,10 +1,10 @@
 {
   "feature": "install-check",
-  "current_stage": ["generate-tests"],
+  "current_stage": ["test-review"],
   "test_hash": null,
   "stages": {
     "spec-review": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "spec-review", "spawn_type": "inline-controller", "attempt": 0 } },
-    "generate-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "generate-tests": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "generate-tests", "spawn_type": "inline-controller-fallback-after-luna-timeout", "attempt": 0 } },
     "test-review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
     "freeze-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
     "implement-install-check": { "status": "pending", "attempt": 0, "seen_diffs": [] },
