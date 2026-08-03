@@ -15,6 +15,7 @@
 #   ./install.sh --force            # overwrite an existing install
 #   ./install.sh --update           # pull latest + refresh an existing install in place
 #   ./install.sh --uninstall        # remove a previous install (global by default)
+#   ./install.sh --check             # read-only freshness check (global by default)
 #   ./install.sh -h | --help
 #
 # Examples:
@@ -24,6 +25,7 @@
 #   ./install.sh --update                        # git pull this repo, then refresh the global copy install
 #   ./install.sh --update --project ~/code/my-app  # same, for a project-scoped install
 #   ./install.sh --uninstall --project ~/code/my-app
+#   ./install.sh --check --project ~/code/my-app
 #
 # --update vs --link:
 #   A --link install already stays current — `git pull` in this repo is enough,
@@ -58,6 +60,7 @@ PROJECT_DIR=""
 FORCE=0
 UNINSTALL=0
 UPDATE=0
+CHECK=0
 
 usage() {
   sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -90,6 +93,10 @@ while [ $# -gt 0 ]; do
       UPDATE=1
       shift
       ;;
+    --check)
+      CHECK=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -102,6 +109,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ "$CHECK" = "1" ] && { [ "$MODE" = "link" ] || [ "$FORCE" = "1" ] || [ "$UPDATE" = "1" ] || [ "$UNINSTALL" = "1" ]; }; then
+  echo "error: --check may be combined only with --project" >&2
+  exit 2
+fi
+
 if [ "$SCOPE" = "global" ]; then
   TARGET_DIR="$HOME/.claude/skills"
 else
@@ -112,6 +124,141 @@ else
     exit 1
   fi
   TARGET_DIR="$PROJECT_DIR/.claude/skills"
+fi
+
+if [ "$CHECK" = "1" ]; then
+  check_problems=0
+
+  check_problem() {
+    printf 'drift: %s: %s\n' "$1" "$2"
+    check_problems=$((check_problems + 1))
+  }
+
+  check_ignored() {
+    case "/$1/" in
+      */__pycache__/*) return 0 ;;
+    esac
+    case "$1" in
+      *.pyc|.DS_Store) return 0 ;;
+    esac
+    return 1
+  }
+
+  check_copy_tree() {
+    local skill="$1" src="$2" dest="$3" path rel other
+    if [ ! -d "$src" ] || [ ! -r "$src" ]; then
+      check_problem "$skill" "source is missing or unreadable: $src"
+      return
+    fi
+    if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+      check_problem "$skill" "installed skill is missing: $dest"
+      return
+    fi
+    if [ -L "$dest" ] || [ ! -d "$dest" ]; then
+      check_problem "$skill" "installed entry is not a copy directory: $dest"
+      return
+    fi
+
+    while IFS= read -r path; do
+      rel="${path#"$src"/}"
+      check_ignored "$rel" && continue
+      other="$dest/$rel"
+      if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+        check_problem "$skill" "source entry is unreadable: $rel"
+      elif [ ! -r "$path" ] || { [ -d "$path" ] && [ ! -x "$path" ]; }; then
+        check_problem "$skill" "source entry is unreadable: $rel"
+      elif [ ! -e "$other" ] && [ ! -L "$other" ]; then
+        check_problem "$skill" "missing entry: $rel"
+      elif [ -L "$path" ]; then
+        if [ ! -L "$other" ] || [ "$(readlink "$path")" != "$(readlink "$other")" ]; then
+          check_problem "$skill" "changed symlink: $rel"
+        fi
+      elif [ -d "$path" ]; then
+        if [ ! -d "$other" ] || [ -L "$other" ]; then
+          check_problem "$skill" "changed entry type: $rel"
+        elif [ ! -r "$other" ] || [ ! -x "$other" ]; then
+          check_problem "$skill" "installed entry is unreadable: $rel"
+        fi
+      elif [ -f "$path" ]; then
+        if [ ! -f "$other" ] || [ -L "$other" ]; then
+          check_problem "$skill" "changed entry type: $rel"
+        elif [ ! -r "$other" ]; then
+          check_problem "$skill" "installed entry is unreadable: $rel"
+        elif ! cmp -s "$path" "$other"; then
+          check_problem "$skill" "modified file: $rel"
+        fi
+      else
+        check_problem "$skill" "unsupported source entry: $rel"
+      fi
+    done < <(find "$src" -mindepth 1 -print 2>/dev/null)
+
+    while IFS= read -r path; do
+      rel="${path#"$dest"/}"
+      check_ignored "$rel" && continue
+      other="$src/$rel"
+      if [ ! -e "$other" ] && [ ! -L "$other" ]; then
+        check_problem "$skill" "extra entry: $rel"
+      fi
+    done < <(find "$dest" -mindepth 1 -print 2>/dev/null)
+  }
+
+  check_symlink() {
+    local skill="$1" src="$2" dest="$3" actual
+    if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+      check_problem "$skill" "installed symlink is missing: $dest"
+    elif [ ! -L "$dest" ]; then
+      check_problem "$skill" "installed entry is a copy, expected canonical symlink"
+    else
+      actual="$(readlink "$dest" 2>/dev/null || true)"
+      if [ "$actual" != "$src" ]; then
+        check_problem "$skill" "wrong or dangling symlink target: ${actual:-<unreadable>} (expected $src)"
+      else
+        printf 'current: %s (symlink)\n' "$skill"
+      fi
+    fi
+  }
+
+  printf 'installer check: %s\n' "$TARGET_DIR"
+  if [ ! -d "$TARGET_DIR" ]; then
+    check_problem "target" "skills directory is missing: $TARGET_DIR"
+  fi
+  for skill in "${SKILLS[@]}"; do
+    src="$SCRIPT_DIR/$skill"
+    dest="$TARGET_DIR/$(basename "$skill")"
+    before_skill_problems="$check_problems"
+    if [ -L "$dest" ]; then
+      check_symlink "$(basename "$skill")" "$src" "$dest"
+    else
+      check_copy_tree "$(basename "$skill")" "$src" "$dest"
+    fi
+    if [ "$check_problems" -eq "$before_skill_problems" ]; then
+      if [ -L "$dest" ]; then
+        : # check_symlink already emitted the current status.
+      else
+        printf 'current: %s (copy)\n' "$(basename "$skill")"
+      fi
+    fi
+  done
+  for retired in "${RETIRED_SKILLS[@]}"; do
+    stale="$TARGET_DIR/$retired"
+    if [ -e "$stale" ] || [ -L "$stale" ]; then
+      check_problem "$retired" "retired skill is still installed"
+    fi
+  done
+  if [ -d "$TARGET_DIR" ]; then
+    while IFS= read -r path; do
+      name="$(basename "$path")"
+      case " ${SKILLS[*]} ${RETIRED_SKILLS[*]} " in
+        *" $name "*) continue ;;
+      esac
+      printf 'ignored: %s (unrelated sibling)\n' "$name"
+    done < <(find "$TARGET_DIR" -mindepth 1 -maxdepth 1 -print 2>/dev/null)
+  fi
+  printf 'summary: %d problem(s)\n' "$check_problems"
+  if [ "$check_problems" -eq 0 ]; then
+    exit 0
+  fi
+  exit 1
 fi
 
 if [ "$UNINSTALL" = "1" ]; then

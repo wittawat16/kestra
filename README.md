@@ -34,7 +34,18 @@ cd claude-skills
 ./install.sh --force                # overwrite an existing install
 ./install.sh --update               # pull the latest code (git pull here), then refresh the install
 ./install.sh --uninstall            # remove it (pass the same --project flag used at install time)
+./install.sh --check                # read-only freshness check (copy or canonical symlink)
+./install.sh --check --project ~/code/app  # check one project-scoped install
 ```
+
+`--check` reports every active skill's status and exits `0` only when all 16 entries are current
+and retired skills are absent. It is observationally pure: it never creates, pulls, copies,
+deletes, compiles, or rewrites anything. A copy is compared with this checkout; a symlink must
+point to its canonical source path. Missing, modified, extra non-ignored, wrong/dangling,
+unreadable, or retired entries return exit `1` after all findings are printed. The only ignored
+artifacts are `__pycache__/`, `*.pyc`, and `.DS_Store`; unrelated sibling skills are not checked.
+Combine `--check` only with `--project`; pairing it with `--link`, `--force`, `--update`, or
+`--uninstall` is invalid usage and returns exit `2` before touching paths.
 
 Each skill installs **flat** by its own folder name under the target skills dir, regardless of
 which group folder it lives in here — that's the layout Claude Code actually discovers. So
