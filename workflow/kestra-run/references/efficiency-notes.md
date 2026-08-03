@@ -4,6 +4,15 @@ SKILL.md states each of these as a short directive. This file holds the full rea
 each one — read it if the directive alone isn't enough context to apply it correctly, or before
 deviating from it.
 
+## Why the slim pack is conditional
+
+An embedded ticket block supplies the selected stage's local ACs, while the provision layer supplies
+the live run context. Omitting the full spec is safe only when the run folder's validator proves that
+block belongs to exactly one ticket and the same-batch anchored surface check proves the working spec
+still matches the raise commit. Then pass the `source_spec` path and read cross-slice context on
+demand. If either proof is absent, use the full verbatim spec; an anchored validation/mismatch
+failure is a hard stop, not permission to fall back and continue on stale provenance.
+
 ## Not every stage needs a fresh subagent
 
 If a stage's entire job reduces to re-running the same mechanical check `exit_criteria` already

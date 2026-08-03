@@ -380,17 +380,27 @@ exit code จริงของคำสั่งเทสต์ — นี่�
 ### ลูปการทำงาน (ต่อรอบ)
 
 1. **เช็ค test hash** (ถ้า `state.json.test_hash` ไม่ใช่ `null`) — ถ้าไม่ตรงกันคือหยุดทันที
-   ไม่ใช่ retry เพราะแปลว่ามีคนแก้เทสต์ที่ freeze ไว้นอกกระบวนการ
+   ไม่ใช่ retry เพราะแปลว่ามีคนแก้เทสต์ที่ freeze ไว้นอกกระบวนการ บน workflow ที่มี anchor ก่อน
+   งานทุกรอบให้คำนวณ requirement surface ฝั่ง working และ raise ใหม่ แล้วบังคับให้ทั้งคู่ตรงกับ
+   anchor ที่บันทึกไว้ ถ้า anchor ผิดรูป/เข้าถึงไม่ได้, คำนวณไม่สำเร็จ หรือไม่ตรงกัน ให้ hard stop
+   แบบ fail-closed ไม่ใช่ retry หรือ `reworking`
 2. **ทำงานของ stage** — spawn subagent (หรือทำเองตรงๆ ถ้าเป็นแค่การเช็ค mechanical ที่ไม่ต้องใช้
    วิจารณญาณ เช่น stage `review`/`verify` ที่ `write_scope: []`) — stage `done` เขียนสรุปของตัวเอง
-   ได้ตรงๆ จาก `state.json`/`git log` โดยไม่ต้อง spawn อะไร
-3. **ตรวจสอบแบบ mechanical** เรียงลำดับเสมอ: `write_scope` (diff จริง, revert ถ้าหลุดขอบเขต) →
-   `exit_criteria` (รันคำสั่งจริง / เช็ค artifact จริง)
+   ได้ตรงๆ จาก `state.json`/`git log` โดยไม่ต้อง spawn อะไร stage แบบ sliced ที่มี anchor จะได้
+   slim pack (brief ของ ticket เดียวที่พิสูจน์ ownership แล้ว + provision layer และอ่าน spec ตาม
+   ต้องการ) ต่อเมื่อ provenance กับ surface check ของรอบนี้ผ่านเท่านั้น stage ที่ไม่มี anchor,
+   monolithic หรือกำกวมต้องได้ spec เต็มแบบ verbatim; anchored gate ที่ล้มเหลวจะหยุด ไม่ fallback
+3. **ตรวจสอบแบบ mechanical** เรียงลำดับเสมอ: `write_scope` (diff จริง; snapshot path ที่ละเมิด
+   ก่อน revert แล้วให้ scope check ล้มเหลว) → `exit_criteria` (รันคำสั่งจริง / เช็ค artifact จริง)
 4. ถ้า `exit_criteria.type` เป็น `human_approval` (มีเฉพาะตอนผู้ใช้ขอ manual milestone ไว้ล่วงหน้า)
    → หยุดถามจริงเสมอ ไม่เคย auto-approve
 5. **ถ้าผ่าน** → stage กลายเป็น `passed`; ถ้าเป็น freeze stage ก็เก็บ test hash; commit (โค้ด +
    `state.json` ในคอมมิตเดียว); ไปยัง stage ถัดไปที่ dependency ครบแล้วโดยอัตโนมัติ
 6. **ถ้าล้มเหลว** → เพิ่ม `attempt`, เช็คว่า diff ซ้ำหรือไม่ (`seen_diffs`):
+   - ถ้ามี `exit_criteria.progress` ให้วัด attempt 0 จาก criterion จริงก่อนงานรอบแรก และเก็บเป็น
+     entry แรกใน `progress_history` — ห้ามใช้ baseline ที่เขียนไว้ใน prose จากนั้น append ค่าที่วัด
+     ได้ของ failed attempt แต่ละรอบ; ถ้าค่าของ failed attempt ไม่ขยับเข้าเป้าติดต่อกันสองรอบ ให้
+     เข้า `reworking` ก่อน attempt ถัดไป
    - ยังไม่ถึง `max_attempts` และไม่ใช่การซ้ำเกิน `escalate_at` → กลับไปข้อ 2 (resume subagent
      ตัวเดิมถ้าทำได้ แทนที่จะ spawn ใหม่ เพื่อไม่ต้องเสียเวลา orient ใหม่)
    - `max_attempts` หมด หรือ diff เดิมซ้ำเกิน `escalate_at` → **`reworking`** — เงื่อนไขหยุดเดียวที่
@@ -398,9 +408,12 @@ exit code จริงของคำสั่งเทสต์ — นี่�
 
 ### เมื่อไหร่ที่มันหยุด
 
-- `fixing → reworking` — retry หมด หรือ diff เดิมซ้ำโดยไม่มีความคืบหน้า (จุดหยุดที่รับประกันเสมอ)
+- `fixing → reworking` — retry หมด, diff เดิมซ้ำ หรือค่าของ failed progress ไม่ขยับเข้าเป้า
+  ติดต่อกันสองรอบ (จุดหยุดที่รับประกันเสมอ)
 - `blocked` — ต้องการมนุษย์มาปลดล็อก
 - Test-hash ไม่ตรงกัน — มีคนแก้เทสต์ที่ freeze ไว้นอกกระบวนการ
+- Anchored-surface mismatch — anchor ผิดรูป/เข้าถึงไม่ได้ หรือ surface ฝั่ง raise/current ไม่ตรงกัน;
+  หยุดแบบ fail-closed ไม่เข้า `reworking`
 - `human_approval` — เฉพาะ workflow ที่ผู้ใช้ขอ manual milestone ไว้ล่วงหน้าเท่านั้น (ไม่ใช่
   ค่าเริ่มต้น)
 

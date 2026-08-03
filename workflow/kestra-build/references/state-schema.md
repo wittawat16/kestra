@@ -47,21 +47,30 @@ the resume checkpoints and orphans the commits that were the rollback points (`t
                                 // hashes, diagnostic only (see kestra-run enforcement.md). Never gates a
                                 // transition — a future stage-generator must not start reading this field
                                 // to decide fixing/reworking; it exists only to inform the reworking report.
-  "metrics": {}                // OPTIONAL, orchestrator-populated: { tokens, wall_ms, spawn_type } per
+  "metrics": {},               // OPTIONAL, orchestrator-populated: { tokens, wall_ms, spawn_type } per
                                 // completed attempt, purely informational. Never read by exit_criteria,
                                 // write_scope diffing, or the test-hash computation — populated by the
                                 // orchestrator itself from data it already holds at commit time (Agent-tool
                                 // usage numbers + timestamps), never by an extra subagent or exit_criteria
                                 // check. A missing/failed metric means an absent row in the done-stage cost
                                 // table, never a stage failure.
+  "progress_history": []       // OPTIONAL for exit_criteria.progress: measured attempt/value entries,
+                                // beginning with attempt 0 before the first work round; failed attempts append.
 }
 ```
 
-kestra-build initializes every stage to `status: "pending", attempt: 0, seen_diffs: []` — `seen_failures`
-and `metrics` are populated later by the orchestrator, not by kestra-build, so the generator may omit
-them entirely at generation time (an orchestrator that supports them adds the keys itself on first use).
+kestra-build initializes every stage to `status: "pending", attempt: 0, seen_diffs: []` — `seen_failures`,
+`metrics`, and `progress_history` are populated later by the orchestrator, not by kestra-build, so the
+generator may omit them entirely at generation time (an orchestrator that supports them adds the keys
+itself on first use).
 This holds regardless of where the stage sits in the dependency graph — the orchestrator is what advances
 stages, not the generator.
+
+For a stage with `exit_criteria.progress`, attempt 0 is measured from the real criterion before work,
+not copied from prose. A later finite value moves only when its distance to the declared target is
+strictly smaller than the preceding value; equal, farther, or unmeasured values do not move. Two
+consecutive failed non-moves route the stage to `reworking` before the next attempt; passing attempts
+do not append a history entry.
 
 ---
 

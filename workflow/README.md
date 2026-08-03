@@ -395,18 +395,29 @@ here: every decision that matters is mechanical, not an opinion.
 
 1. **Check the test hash** (if `state.json.test_hash` isn't `null`) — a mismatch means an
    immediate stop, not a retry, because it means someone edited the frozen tests outside the
-   process.
+   process. On an anchored workflow, before every work round recompute the working and raise-side
+   requirement surfaces and require both to match the recorded anchor. A malformed/unreachable
+   anchor, failed recompute, or mismatch is a fail-closed hard stop, never a retry or `reworking`.
 2. **Do the stage's work** — spawn a subagent (or do it directly if it's just a mechanical check
    with no judgment needed, e.g. a `review`/`verify` stage with `write_scope: []`) — the `done`
    stage can write its own summary directly from `state.json`/`git log` without spawning anything.
-3. **Verify mechanically**, always in this order: `write_scope` (real diff, revert if it strayed
-   out of bounds) → `exit_criteria` (run the actual command / check the actual artifact).
+   An anchored sliced stage gets the slim pack (its proven single-ticket brief + provision layer,
+   spec read on demand) only after this round's provenance and surface checks pass. Unanchored,
+   monolithic, or ambiguous stages get the full spec verbatim; a failed anchored gate stops instead
+   of falling back.
+3. **Verify mechanically**, always in this order: `write_scope` (real diff; snapshot violating
+   paths before reverting them, then fail the scope check) → `exit_criteria` (run the actual command
+   / check the actual artifact).
 4. If `exit_criteria.type` is `human_approval` (only present when the user explicitly asked for a
    manual milestone in advance) → always stop and ask for real, never auto-approve.
 5. **On pass** → stage becomes `passed`; if it's the freeze stage, store the test hash; commit
    (code + `state.json` in one commit); automatically move to whichever next stage now has all its
    dependencies satisfied.
 6. **On fail** → increment `attempt`, check whether the diff repeats (`seen_diffs`):
+   - With `exit_criteria.progress`, measure attempt 0 from the real criterion before the first work
+     round and store it as the first `progress_history` entry — never use a prose baseline. Append
+     each failed attempt's measurement; two consecutive failed measurements that do not move toward
+     the declared target route to `reworking` before the next attempt.
    - Still under `max_attempts` and not a repeat past `escalate_at` → go back to step 2 (resume
      the same subagent if possible, rather than spawning fresh, to avoid re-paying re-orientation
      cost).
@@ -415,10 +426,12 @@ here: every decision that matters is mechanical, not an opinion.
 
 ### When it stops
 
-- `fixing → reworking` — retries exhausted, or the same diff repeats with no progress (the one
-  guaranteed stop).
+- `fixing → reworking` — retries exhausted, the same diff repeats, or two consecutive failed
+  progress measurements do not move toward the target (the one guaranteed stop).
 - `blocked` — needs a human to unblock it.
 - Test-hash mismatch — someone edited the frozen tests outside the process.
+- Anchored-surface mismatch — malformed/unreachable anchor or unequal raise/current surfaces;
+  fail-closed, never `reworking`.
 - `human_approval` — only for a workflow where the user explicitly asked for a manual milestone in
   advance (not the default).
 

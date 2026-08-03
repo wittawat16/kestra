@@ -10,9 +10,12 @@ The pack SKILL.md's step 2 requires is assembled from commands you already have 
 Gather it immediately before spawning, not once per stage-with-retries — a stale pack misleads.
 
 ```bash
-# 0. The full spec, verbatim — not just its path. Paste this into the prompt under a path header;
-#    fall back to path-only only if the file is too large to paste whole (say so explicitly if so).
-cat <source_spec>
+# 0. Spec handoff. Set PACK_MODE=slim only after both proofs pass; otherwise set it to full.
+case "$PACK_MODE" in
+  slim) printf '%s\n' "source_spec=$SPEC" "surface verified against $RAISE; read on demand" ;;
+  full) cat "$SPEC" ;;
+  *) echo "MISMATCH: pack mode was not proven"; exit 1 ;;
+esac
 
 # 1. Starting state: run the stage's own exit_criteria.run yourself first.
 #    Capture the exit code — for a pre-implementation stage a NON-zero code is the expected,
@@ -41,6 +44,36 @@ Paste the real output of each into the spawn prompt. Nothing here reads a langua
 `exit_criteria.run` comes from `workflow.yaml`, the rest is `git` and `ls` — so this works
 unchanged in any repo.
 
+## Anchored surface check — once per batch, before spawning
+
+Read `source_spec` and the three `spec_anchor` values from `workflow.yaml`. When the anchor is
+present, require a complete triple, run the freshness comparison, and only then use the run
+folder's frozen validator to prove the ticket-block shape:
+
+```bash
+RUN=<run-folder>; SPEC=<source_spec>; RAISE=<spec_anchor.raise_commit>
+RECORDED_HASH=<spec_anchor.surface_hash>; RECORDED_VERSION=<spec_anchor.extractor_version>
+
+(
+  RAISED_SPEC=$(mktemp) || exit 1
+  trap 'rm -f -- "$RAISED_SPEC"' EXIT
+  git cat-file -e "$RAISE^{commit}" || exit 1
+  python3 -c "import sys; sys.path.insert(0, '$RUN'); import requirement_surface as r; sys.exit(0 if r.EXTRACTOR_VERSION == $RECORDED_VERSION else 1)" \
+    || exit 1
+  CURRENT_HASH=$(python3 "$RUN/requirement_surface.py" "$SPEC" --hash) || exit 1
+  git show "$RAISE:$SPEC" > "$RAISED_SPEC" || exit 1
+  RAISED_HASH=$(python3 "$RUN/requirement_surface.py" "$RAISED_SPEC" --hash) || exit 1
+  [ "$CURRENT_HASH" = "$RAISED_HASH" ] && [ "$RAISED_HASH" = "$RECORDED_HASH" ]
+) || { echo "MISMATCH: anchored requirement surface is stale or unverifiable"; exit 1; }
+
+python3 "$RUN/validate_workflow.py" "$RUN" \
+  || { echo "MISMATCH: anchor or embedded ticket validation failed"; exit 1; }
+```
+
+Missing/partial fields, invalid ticket blocks, an unreachable raise, version drift, or either hash
+mismatch is a hard stop and never enters `reworking`. With no `spec_anchor`, report that freshness
+is not mechanically checkable and continue with the full-spec pack.
+
 ## write_scope check
 
 After a subagent finishes a stage's work, compare what it actually touched against the stage's
@@ -52,27 +85,43 @@ git diff --name-only HEAD
 
 # Compare each path against the stage's write_scope patterns (bash glob match).
 # Example for write_scope: ["src/routes/**", "src/services/csv-export/**"]
+VIOLATIONS=$(mktemp) || exit 1
+trap 'rm -f -- "$VIOLATIONS"' EXIT
 while IFS= read -r f; do
   case "$f" in
     src/routes/*|src/services/csv-export/*) ;;   # allowed — one case arm per write_scope glob
-    *) echo "VIOLATION: $f outside write_scope" ;;
+    *) printf 'VIOLATION: %s outside write_scope\n' "$f"
+       printf '%s\n' "$f" >> "$VIOLATIONS" ;;
   esac
-done < <(git diff --name-only HEAD)
+done < <({ git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u)
 ```
 
 If anything printed as a violation, check whether it's a modified *tracked* file or a brand-new
 *untracked* one — `git status --porcelain`'s first column tells you (` M`/`M ` = tracked change,
 `??` = untracked). These need different revert commands; using the wrong one silently no-ops:
 
-```bash
-# Tracked file that was modified — this reverts cleanly:
-git checkout -- <violating-path>
+Snapshot only the paths already recorded in `$VIOLATIONS` into a fresh directory outside the repo,
+verify every copy/patch, report that directory, and then revert the same path. Keeping the snapshot
+outside the repo prevents the evidence itself from becoming the next attempt's scope violation.
+Dirty files discovered while resuming remain user work and follow the existing say-so-first rule.
 
-# Untracked (newly created) file — git checkout errors on these ("did not match any file(s)
-# known to git", exit 1) and leaves the file in place. Confirmed by direct testing: this is the
-# more common violation shape (a stage creating a stray new file outside its scope), so don't
-# rely on `git checkout --` alone. Use:
-rm -f <violating-path>
+```bash
+EVIDENCE=$(mktemp -d "${TMPDIR:-/tmp}/kestra-run-scope-<stage-id>-attempt-<n>.XXXXXX") || exit 1
+printf 'scope-violation snapshot: %s\n' "$EVIDENCE"
+while IFS= read -r f; do
+  DEST="$EVIDENCE/$f"
+  mkdir -p -- "$(dirname -- "$DEST")" || exit 1
+  if [ -e "$f" ] || [ -L "$f" ]; then
+    cp -pPR -- "$f" "$DEST" || exit 1
+  else
+    git diff --binary HEAD -- "$f" > "$DEST.patch" || exit 1
+  fi
+  if git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+    git restore --source=HEAD --staged --worktree -- "$f" || exit 1
+  else
+    rm -f -- "$f" || exit 1
+  fi
+done < "$VIOLATIONS"
 ```
 
 Then treat this attempt as failed (go to the `fixing` accounting in SKILL.md step 6) — don't
@@ -176,6 +225,96 @@ git diff HEAD -- src/ | grep -E '^[+-]' | grep -v '^[+-][+-][+-]' | sort | sha25
 
 Compare this hash against the stage's `seen_diffs` list in `state.json`. Same hash reappearing =
 no progress = escalate to `reworking` immediately, even if `attempt < max_attempts`.
+
+### Declared progress
+
+For a stage with `exit_criteria.progress`, capture the fresh attempt-0 pre-run output and extract
+the named number before the first spawn; seed `progress_history` with `{attempt: 0, value: N}`.
+After each failed attempt, append the value from that attempt's own captured output, or
+`"unmeasured"` when it cannot be extracted. Compare adjacent entries toward the declared target:
+strict improvement resets the count; equal, worse, or unmeasured increments it. When the last two
+comparisons show no progress, enter the existing `reworking` stop before starting another attempt.
+
+This block replaces the ordinary criterion invocation for a progress-bearing stage, so the command
+runs once per round. Substitute only the metric-specific extraction command and numeric target named
+by `exit_criteria.progress`; seed attempt `0` once, then use the real exit code to append only failed
+attempts:
+
+```bash
+PROGRESS_OUTPUT=$(mktemp) || exit 1
+trap 'rm -f -- "$PROGRESS_OUTPUT"' EXIT
+STATE=<run-folder>/state.json; STAGE=<stage-id>
+ATTEMPT=<0-or-current-attempt>; TARGET=<declared-numeric-target>
+if <the stage's exit_criteria.run command> >"$PROGRESS_OUTPUT" 2>&1; then
+  CRITERION_EXIT=0
+else
+  CRITERION_EXIT=$?
+fi
+cat "$PROGRESS_OUTPUT"
+
+if [ "$ATTEMPT" -ne 0 ] && [ "$CRITERION_EXIT" -eq 0 ]; then
+  PROGRESS_DECISION=passed
+else
+  if VALUE=$(<metric-specific extraction command> <"$PROGRESS_OUTPUT"); then :; else VALUE=unmeasured; fi
+  if python3 - "$STATE" "$STAGE" "$ATTEMPT" "$VALUE" "$TARGET" <<'PY'
+import json
+import math
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+stage_id, raw_attempt, raw_value, raw_target = sys.argv[2:]
+attempt = int(raw_attempt)
+state = json.loads(path.read_text())
+stage = dict(state["stages"][stage_id])
+history = list(stage.get("progress_history", []))
+if history and int(history[-1]["attempt"]) >= attempt:
+    raise SystemExit("progress attempt must increase")
+try:
+    parsed_value = float(raw_value)
+    value = parsed_value if math.isfinite(parsed_value) else "unmeasured"
+except ValueError:
+    value = "unmeasured"
+history = [*history, {"attempt": attempt, "value": value}]
+updated_stage = {**stage, "progress_history": history}
+updated = {**state, "stages": {**state["stages"], stage_id: updated_stage}}
+tmp = path.with_name(path.name + ".progress.tmp")
+tmp.write_text(json.dumps(updated, indent=2) + "\n")
+os.replace(tmp, path)
+
+def distance(entry):
+    try:
+        value, target = float(entry["value"]), float(raw_target)
+        return abs(value - target) if math.isfinite(value) and math.isfinite(target) else None
+    except (TypeError, ValueError):
+        return None
+
+def no_move(before, after):
+    old, new = distance(before), distance(after)
+    return old is None or new is None or new >= old
+
+stalled = (len(history) >= 3 and no_move(history[-3], history[-2])
+           and no_move(history[-2], history[-1]))
+raise SystemExit(3 if stalled else 0)
+PY
+  then
+    PROGRESS_DECISION=continue
+  else
+    PROGRESS_RC=$?
+    if [ "$PROGRESS_RC" -eq 3 ]; then
+      PROGRESS_DECISION=reworking
+    else
+      echo "MISMATCH: progress history could not be updated"; exit 1
+    fi
+  fi
+fi
+```
+
+`CRITERION_EXIT` remains the real pass/fail result; a later pass sets `PROGRESS_DECISION=passed`
+without appending, and progress never turns a failed criterion green.
+When `PROGRESS_DECISION=reworking`, take SKILL.md's existing `reworking` transition before starting
+another attempt — this recipe does not create a second transition path.
 
 ### Failure-signature hashing (for `seen_failures`, diagnostic only)
 

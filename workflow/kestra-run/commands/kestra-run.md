@@ -12,15 +12,16 @@ Load `@kestra-run/SKILL.md` and follow it. Then:
 2. Read `state.json`, report the current stage and what's about to happen (spawn an agent
    for that stage's work, then verify it), and confirm once before starting.
 
-3. Run the loop from `SKILL.md`: spawn → mechanically verify (`write_scope` diff,
-   `exit_criteria` exit code, test-hash where relevant) → commit-per-stage → advance.
-   Use the exact command sequences in `references/enforcement.md` for every check — never
-   judge a diff by reading it.
+3. Run the loop from `SKILL.md`. On an anchored batch, require the frozen validator and the
+   raise/current requirement-surface comparison before work; only its proven ticket block gets the
+   slim brief + provision pack with an on-demand spec path. Then spawn → mechanically verify
+   (`write_scope` diff, snapshot violations before revert, real `exit_criteria`, test hash) →
+   commit-per-stage → advance. Use `references/enforcement.md`; never judge a diff by reading it.
 
-4. Stop automatically (and only) at: a `fixing → reworking` escalation (the one stop every
-   workflow has, guaranteed), a `blocked` stage, a test-hash mismatch, or — only if this
-   particular workflow explicitly declares one — a `human_approval` gate. Report clearly which
-   one and why. Otherwise keep looping without asking again.
+4. Stop automatically (and only) at: `fixing → reworking` (including two consecutive failed
+   progress measurements with no movement), `blocked`, a test-hash mismatch, an anchored-surface
+   mismatch (hard stop, never reworking), or an explicitly declared `human_approval` gate. Report
+   which one and why; otherwise keep looping without asking again.
 
 5. If resuming a previous run, just re-read `current_stage` from `state.json` and continue
    — there's no separate resume mode. If the working tree has uncommitted changes from an
