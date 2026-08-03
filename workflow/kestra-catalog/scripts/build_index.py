@@ -241,6 +241,15 @@ STATUS_LABEL = {
 }
 
 
+STATUS_SHORT = {
+    "done": "ผ่านครบ",
+    "in-progress": "กำลังทำ",
+    "blocked": "ค้าง",
+    "legacy": "legacy",
+    "unknown": "อ่านไม่ได้",
+}
+
+
 def collect_runs(runs_dir):
     runs, warnings = [], []
     if not os.path.isdir(runs_dir):
@@ -342,177 +351,370 @@ def split_gwt(text):
 
 
 CSS = """
-:root { color-scheme: light dark; --bg:#fff; --fg:#1a1a1a; --muted:#6b7280;
-  --line:#e5e7eb; --card:#f9fafb; --accent:#2563eb; }
-@media (prefers-color-scheme: dark) { :root { --bg:#111317; --fg:#e6e6e6;
-  --muted:#9ca3af; --line:#2a2f37; --card:#181b20; --accent:#60a5fa; } }
+:root { color-scheme: light dark; --bg:#fff; --fg:#16181d; --muted:#6b7280;
+  --line:#e5e7eb; --card:#f9fafb; --soft:#f3f4f6; --accent:#2563eb;
+  --ok:#16a34a; --warn:#d97706; --bad:#dc2626; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#e6e6e6;
+  --muted:#9ca3af; --line:#272c34; --card:#161a20; --soft:#1b2027;
+  --accent:#60a5fa; } }
 * { box-sizing: border-box; }
-body { margin:0; padding:24px; background:var(--bg); color:var(--fg);
-  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
+body { margin:0; background:var(--bg); color:var(--fg);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
   "Noto Sans Thai","Helvetica Neue",sans-serif; }
-.wrap { max-width: 1000px; margin: 0 auto; }
-h1 { font-size:22px; margin:0 0 4px; }
-.sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
-.controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;
-  position:sticky; top:0; background:var(--bg); padding:10px 0; z-index:2;
-  border-bottom:1px solid var(--line); }
-input,select { font:inherit; padding:7px 10px; border:1px solid var(--line);
-  border-radius:6px; background:var(--card); color:var(--fg); }
-input { flex:1; min-width:220px; }
-.area { margin-bottom:28px; }
-.area > h2 { font-size:17px; margin:0 0 2px; }
-.area-meta { color:var(--muted); font-size:12px; margin-bottom:10px; }
-.run { border:1px solid var(--line); border-radius:8px; margin-bottom:10px;
-  overflow:hidden; }
-.run > summary { cursor:pointer; padding:10px 12px; background:var(--card);
-  display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.run-id { font-weight:600; font-size:14px; }
-.badge { font-size:11px; padding:2px 7px; border-radius:99px;
-  border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
-.badge.done { border-color:#16a34a; color:#16a34a; }
-.badge.in-progress { border-color:#d97706; color:#d97706; }
-.badge.blocked { border-color:#dc2626; color:#dc2626; }
-.spec-link { margin-left:auto; font-size:12px; color:var(--accent); }
-ul.acs { list-style:none; margin:0; padding:4px 12px 12px; }
-ul.acs li { padding:8px 0; border-top:1px solid var(--line); }
-.ac-id { display:block; font-size:11px; color:var(--muted); margin-bottom:4px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
-.clause { display:flex; gap:8px; align-items:baseline; padding:1px 0; }
-.clause.plain { display:block; }
-.kw { flex:0 0 3.4em; font-weight:600; font-size:12px; text-transform:uppercase;
-  letter-spacing:.04em; color:var(--muted); }
-.txt { flex:1; min-width:0; }
-code { background:var(--card); padding:1px 4px; border-radius:4px;
-  font-size:13px; border:1px solid var(--line); }
-.empty { color:var(--muted); padding:20px 0; display:none; }
+code { background:var(--soft); border:1px solid var(--line); border-radius:4px;
+  padding:0 4px; font-size:12.5px; }
+a { color:var(--accent); }
 [hidden] { display:none !important; }
+
+.badge { font-size:11px; padding:1px 7px; border-radius:99px;
+  border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+.badge.done { border-color:var(--ok); color:var(--ok); }
+.badge.in-progress { border-color:var(--warn); color:var(--warn); }
+.badge.blocked { border-color:var(--bad); color:var(--bad); }
+.dot { width:8px; height:8px; border-radius:99px; flex:0 0 auto;
+  background:var(--muted); }
+.dot.done { background:var(--ok); }
+.dot.in-progress { background:var(--warn); }
+.dot.blocked { background:var(--bad); }
+.kw { display:inline-block; min-width:3.4em; font-size:10.5px; font-weight:700;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
+.acid { font:11px ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--muted); }
+
+/* dashboard */
+.dash { padding:22px 24px 40px; max-width:1080px; margin:0 auto; }
+.dash h1 { font-size:21px; margin:0 0 3px; }
+.dash .sub { color:var(--muted); font-size:12.5px; margin:0 0 20px; }
+.dash h2 { font-size:14px; margin:26px 0 9px; display:flex; gap:8px;
+  align-items:center; }
+.tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px; }
+.tile { border:1px solid var(--line); border-radius:10px; padding:13px 15px;
+  background:var(--card); }
+.tile .n { font-size:26px; font-weight:700; line-height:1.1;
+  font-variant-numeric:tabular-nums; }
+.tile .l { font-size:12px; color:var(--muted); margin-top:2px; }
+.tile .bar { height:5px; border-radius:99px; background:var(--soft);
+  margin-top:9px; overflow:hidden; display:flex; }
+.tile .bar i { display:block; height:100%; }
+.matrix { width:100%; border-collapse:collapse; font-size:13px; }
+.matrix th, .matrix td { border:1px solid var(--line); padding:8px 10px;
+  text-align:left; }
+.matrix th { background:var(--card); font-size:11px; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); font-weight:600; }
+.matrix td.num { text-align:center; width:74px; font-variant-numeric:tabular-nums; }
+.matrix tbody tr:hover { background:var(--soft); }
+.heat { display:inline-block; min-width:30px; padding:2px 8px; border-radius:5px;
+  font-weight:600; font-size:12px; }
+.heat.zero { color:var(--muted); opacity:.45; font-weight:400; }
+.heat.done { background:color-mix(in srgb,var(--ok) 24%,transparent); color:var(--ok); }
+.heat.in-progress { background:color-mix(in srgb,var(--warn) 26%,transparent);
+  color:var(--warn); }
+.heat.blocked { background:color-mix(in srgb,var(--bad) 24%,transparent); color:var(--bad); }
+.heat.legacy, .heat.unknown { background:var(--soft); }
+.runrow { display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border:1px solid var(--line); border-radius:8px; margin-bottom:6px;
+  background:var(--card); font-size:13.5px; text-decoration:none;
+  color:inherit; }
+.runrow:hover { border-color:var(--accent); }
+.runrow strong { font-weight:600; }
+.runrow .meta { color:var(--muted); font-size:12.5px; }
+.runrow .spark { margin-left:auto; display:flex; gap:2px; }
+.runrow .spark i { width:11px; height:15px; border-radius:2px;
+  background:color-mix(in srgb,var(--accent) 32%,transparent); }
+.attn { border-left:3px solid var(--warn);
+  background:color-mix(in srgb,var(--warn) 7%,transparent); }
+
+/* explorer */
+.exp { display:grid; grid-template-columns:270px minmax(0,1fr);
+  min-height:100vh; }
+.exp aside { border-right:1px solid var(--line); padding:14px 10px;
+  background:var(--card); }
+.exp aside .back { display:inline-block; font-size:12.5px; margin:0 0 12px 8px; }
+.exp aside input { width:100%; font:inherit; font-size:13px; padding:6px 9px;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg);
+  color:var(--fg); margin-bottom:12px; }
+.tree-area { margin-bottom:10px; }
+.tree-area > .h { font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); padding:6px 8px 4px; display:flex;
+  justify-content:space-between; gap:8px; }
+.tree-run { display:flex; align-items:center; gap:7px; padding:5px 8px;
+  border-radius:6px; font-size:13px; text-decoration:none; color:inherit; }
+.tree-run:hover { background:var(--soft); }
+.tree-run.sel { background:var(--accent); color:#fff; }
+.tree-run.sel .cnt, .tree-run.sel .dot { color:#fff; opacity:.9; }
+.cnt { margin-left:auto; font-size:11px; color:var(--muted);
+  font-variant-numeric:tabular-nums; }
+.exp main { padding:20px 26px 40px; min-width:0; }
+.exp main h2 { margin:0 0 2px; font-size:19px; }
+.crumb { font-size:12px; color:var(--muted); margin-bottom:14px;
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.toolbar { font-size:12.5px; color:var(--muted); margin:14px 0 8px; }
+.case { border:1px solid var(--line); border-radius:8px; margin-bottom:8px;
+  overflow:hidden; }
+.case > header { display:flex; gap:10px; align-items:center; padding:8px 12px;
+  background:var(--card); border-bottom:1px solid var(--line); }
+.gwt { padding:9px 12px; display:grid; grid-template-columns:3.8em minmax(0,1fr);
+  gap:3px 8px; font-size:13.5px; }
+.gwt.plain { display:block; }
+.empty { color:var(--muted); padding:16px 0; }
 """
 
 JS = """
 (function () {
-  var q = document.getElementById('q'),
-      areaSel = document.getElementById('area'),
-      statusSel = document.getElementById('status'),
-      count = document.getElementById('count'),
-      empty = document.getElementById('empty'),
-      areas = [].slice.call(document.querySelectorAll('.area'));
+  var dash = document.getElementById('dashboard'),
+      exp = document.getElementById('explorer'),
+      q = document.getElementById('q'),
+      panels = [].slice.call(document.querySelectorAll('.runpanel')),
+      links = [].slice.call(document.querySelectorAll('.tree-run')),
+      empty = document.getElementById('tree-empty'),
+      current = null;
 
-  function apply() {
-    var term = q.value.trim().toLowerCase(),
-        wantArea = areaSel.value, wantStatus = statusSel.value, shown = 0;
-
-    areas.forEach(function (area) {
-      var areaOk = !wantArea || area.dataset.area === wantArea, anyRun = false;
-
-      [].slice.call(area.querySelectorAll('.run')).forEach(function (run) {
-        var statusOk = !wantStatus || run.dataset.status === wantStatus,
-            anyAc = false;
-
-        [].slice.call(run.querySelectorAll('li')).forEach(function (li) {
-          var hit = !term || li.dataset.search.indexOf(term) !== -1;
-          li.hidden = !hit;
-          if (hit) { anyAc = true; shown++; }
-        });
-
-        var show = areaOk && statusOk && anyAc;
-        run.hidden = !show;
-        if (show) { anyRun = true; if (term) run.open = true; }
-      });
-
-      area.hidden = !anyRun;
+  function show(runId) {
+    current = runId;
+    panels.forEach(function (p) { p.hidden = p.dataset.run !== runId; });
+    links.forEach(function (a) {
+      a.classList.toggle('sel', a.dataset.run === runId);
     });
-
-    count.textContent = shown;
-    empty.style.display = shown ? 'none' : 'block';
+    filter();
   }
 
-  [q, areaSel, statusSel].forEach(function (el) {
-    el.addEventListener('input', apply);
-    el.addEventListener('change', apply);
-  });
+  function filter() {
+    var term = q.value.trim().toLowerCase(), anyRun = false;
+
+    links.forEach(function (a) {
+      var hit = !term || a.dataset.search.indexOf(term) !== -1;
+      a.hidden = !hit;
+      if (hit) { anyRun = true; }
+    });
+    [].slice.call(document.querySelectorAll('.tree-area')).forEach(function (g) {
+      g.hidden = ![].slice.call(g.querySelectorAll('.tree-run'))
+        .some(function (a) { return !a.hidden; });
+    });
+    empty.hidden = anyRun;
+
+    panels.forEach(function (p) {
+      if (p.hidden) { return; }
+      var shown = 0;
+      [].slice.call(p.querySelectorAll('.case')).forEach(function (c) {
+        var hit = !term || c.dataset.search.indexOf(term) !== -1;
+        c.hidden = !hit;
+        if (hit) { shown++; }
+      });
+      p.querySelector('.case-empty').hidden = shown > 0;
+    });
+  }
+
+  function route() {
+    var m = /^#run\\/(.+)$/.exec(location.hash);
+    if (m) {
+      var id = decodeURIComponent(m[1]);
+      if (panels.some(function (p) { return p.dataset.run === id; })) {
+        dash.hidden = true; exp.hidden = false;
+        show(id);
+        return;
+      }
+    }
+    exp.hidden = true; dash.hidden = false;
+  }
+
+  q.addEventListener('input', filter);
+  window.addEventListener('hashchange', route);
+  route();
 })();
 """
 
 
-def render(grouped, runs_dir, out_path):
-    total_acs = sum(len(r["acs"]) for g in grouped for r in g["runs"])
+def _heat(count, status):
+    cls = "zero" if not count else status
+    return '<span class="heat %s">%d</span>' % (cls, count)
+
+
+def _summary(grouped):
+    """Everything the dashboard counts, derived once from the grouped runs."""
+    order = ("done", "in-progress", "blocked", "legacy", "unknown")
+    totals = dict.fromkeys(order, 0)
+    rows, attention = [], []
+
+    for g in grouped:
+        counts = dict.fromkeys(order, 0)
+        for run in g["runs"]:
+            counts[run["status"]] += 1
+            totals[run["status"]] += 1
+        rows.append({
+            "id": g["id"],
+            "title": g["title"],
+            "runs": len(g["runs"]),
+            "acs": sum(len(r["acs"]) for r in g["runs"]),
+            "counts": counts,
+        })
+        if g["id"] == "unassigned":
+            for run in g["runs"]:
+                attention.append((run["id"], "ยังไม่ถูก map เข้า area ไหนใน areas.yml"))
+
+    for g in grouped:
+        for run in g["runs"]:
+            if run["status"] == "blocked":
+                attention.append((run["id"],
+                                  "stage ค้างอยู่ — %d AC ยังไม่ถูกพิสูจน์" % len(run["acs"])))
+    n_legacy = totals["legacy"]
+    if n_legacy:
+        acs = sum(len(r["acs"]) for g in grouped for r in g["runs"]
+                  if r["status"] == "legacy")
+        attention.append(("%d run" % n_legacy,
+                          "legacy — ไม่มี state.json เลยบอกไม่ได้ว่า %d AC นี้ผ่านหรือยัง" % acs))
+
+    return order, totals, rows, attention
+
+
+def _render_dashboard(grouped, all_runs, total_acs, gwt_acs):
+    order, totals, rows, attention = _summary(grouped)
     total_runs = sum(len(g["runs"]) for g in grouped)
-    rel_root = os.path.relpath(runs_dir, os.path.dirname(os.path.abspath(out_path)))
+    parts = ['<section class="dash" id="dashboard">']
+    parts.append("<h1>Test Case Catalog</h1>")
+    parts.append('<p class="sub">acceptance criteria ทุก run · generate จาก '
+                 "<code>build_index.py</code> ห้ามแก้ด้วยมือ "
+                 "แก้ที่ <code>0-spec.md</code> ต้นทางแล้ว generate ใหม่</p>")
+
+    pct = lambda n: (100.0 * n / total_runs) if total_runs else 0
+    parts.append('<div class="tiles">')
+    parts.append(
+        '<div class="tile"><div class="n">%d</div><div class="l">acceptance criteria</div>'
+        '<div class="bar"><i style="width:%.1f%%;background:var(--ok)"></i>'
+        '<i style="width:%.1f%%;background:var(--warn)"></i>'
+        '<i style="width:%.1f%%;background:var(--bad)"></i></div></div>'
+        % (total_acs, pct(totals["done"]), pct(totals["in-progress"]), pct(totals["blocked"]))
+    )
+    parts.append('<div class="tile"><div class="n">%d</div>'
+                 '<div class="l">run · %d area</div></div>' % (total_runs, len(grouped)))
+    share = (100 * gwt_acs // total_acs) if total_acs else 0
+    parts.append(
+        '<div class="tile"><div class="n">%d</div>'
+        '<div class="l">เขียนเป็น Given-When-Then %d%%</div>'
+        '<div class="bar"><i style="width:%d%%;background:var(--accent)"></i></div></div>'
+        % (gwt_acs, share, share)
+    )
+    for key, label in (("legacy", "run legacy — ไม่มี state.json"),
+                       ("blocked", "run ค้าง (blocked)")):
+        colour = "var(--warn)" if key == "legacy" else "var(--bad)"
+        style = ' style="color:%s"' % colour if totals[key] else ""
+        parts.append('<div class="tile"><div class="n"%s>%d</div>'
+                     '<div class="l">%s</div></div>' % (style, totals[key], label))
+    parts.append("</div>")
+
+    parts.append("<h2>ความครอบคลุมต่อ area</h2>")
+    parts.append('<table class="matrix"><thead><tr><th>Area</th><th class="num">run</th>'
+                 '<th class="num">AC</th>')
+    for key in order:
+        parts.append('<th class="num">%s</th>' % html.escape(STATUS_SHORT[key]))
+    parts.append("</tr></thead><tbody>")
+    for row in rows:
+        cls = ' class="attn"' if row["id"] == "unassigned" else ""
+        parts.append("<tr%s><td>%s</td><td class=\"num\">%d</td><td class=\"num\">%d</td>"
+                     % (cls, html.escape(row["title"]), row["runs"], row["acs"]))
+        for key in order:
+            parts.append('<td class="num">%s</td>' % _heat(row["counts"][key], key))
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
+
+    if attention:
+        parts.append('<h2>ต้องดูก่อน <span class="badge in-progress">%d เรื่อง</span></h2>'
+                     % len(attention))
+        for who, why in attention:
+            parts.append('<div class="runrow attn"><strong>%s</strong>'
+                         '<span class="meta">%s</span></div>'
+                         % (html.escape(who), html.escape(why)))
+
+    parts.append("<h2>ทุก run</h2>")
+    for run in all_runs:
+        parts.append(
+            '<a class="runrow" href="#run/%s"><span class="dot %s"></span>'
+            '<strong>%s</strong><span class="badge %s">%s</span>'
+            '<span class="meta">%d AC · %s</span>'
+            '<span class="spark">%s</span></a>'
+            % (html.escape(run["id"]), html.escape(run["status"]), html.escape(run["id"]),
+               html.escape(run["status"]), html.escape(STATUS_LABEL[run["status"]]),
+               len(run["acs"]), html.escape(run["area_title"]),
+               "<i></i>" * min(len(run["acs"]), 12))
+        )
+    parts.append("</section>")
+    return parts
+
+
+def _render_ac(ac):
+    clauses = split_gwt(ac["text"])
+    search = html.escape((ac["id"] + " " + ac["text"]).lower(), quote=True)
+    if clauses:
+        body = "".join('<span class="kw">%s</span><span>%s</span>'
+                       % (html.escape(kw), inline_md(rest)) for kw, rest in clauses)
+        body = '<div class="gwt">%s</div>' % body
+    else:
+        body = '<div class="gwt plain">%s</div>' % inline_md(ac["text"])
+    return ('<article class="case" data-search="%s">'
+            '<header><span class="acid">%s</span></header>%s</article>'
+            % (search, html.escape(ac["local_id"]), body))
+
+
+def _render_explorer(grouped, all_runs, out_path):
+    parts = ['<section class="exp" id="explorer" hidden><aside>']
+    parts.append('<a class="back" href="#">← ภาพรวมทั้งหมด</a>')
+    parts.append('<input id="q" type="search" placeholder="ค้นหา run / AC…">')
+    for g in grouped:
+        parts.append('<div class="tree-area"><div class="h"><span>%s</span><span>%d</span></div>'
+                     % (html.escape(g["title"]),
+                        sum(len(r["acs"]) for r in g["runs"])))
+        for run in g["runs"]:
+            search = html.escape(
+                (run["id"] + " " + " ".join(a["text"] for a in run["acs"])).lower(), quote=True)
+            parts.append(
+                '<a class="tree-run" href="#run/%s" data-run="%s" data-search="%s">'
+                '<span class="dot %s"></span>%s<span class="cnt">%d</span></a>'
+                % (html.escape(run["id"]), html.escape(run["id"]), search,
+                   html.escape(run["status"]), html.escape(run["id"]), len(run["acs"]))
+            )
+        parts.append("</div>")
+    parts.append('<p class="empty" id="tree-empty" hidden>ไม่พบ run ที่ตรงกับคำค้น</p>')
+    parts.append("</aside><main>")
+
+    for run in all_runs:
+        spec_rel = os.path.relpath(run["spec"], os.path.dirname(os.path.abspath(out_path)))
+        n_gwt = sum(1 for ac in run["acs"] if split_gwt(ac["text"]))
+        parts.append('<div class="runpanel" data-run="%s" hidden>' % html.escape(run["id"]))
+        parts.append("<h2>%s</h2>" % html.escape(run["id"]))
+        parts.append('<div class="crumb"><span>%s</span><span class="badge %s">%s</span>'
+                     '<a href="%s">0-spec.md</a></div>'
+                     % (html.escape(run["area_title"]), html.escape(run["status"]),
+                        html.escape(STATUS_LABEL[run["status"]]), html.escape(spec_rel)))
+        parts.append('<p class="toolbar">%d test case · %d เขียนเป็น Given-When-Then</p>'
+                     % (len(run["acs"]), n_gwt))
+        for ac in run["acs"]:
+            parts.append(_render_ac(ac))
+        parts.append('<p class="empty case-empty" hidden>ไม่พบ AC ที่ตรงกับคำค้น</p>')
+        parts.append("</div>")
+
+    parts.append("</main></section>")
+    return parts
+
+
+def render(grouped, runs_dir, out_path):
+    all_runs = []
+    for g in grouped:
+        for run in g["runs"]:
+            run["area_title"] = g["title"]
+            all_runs.append(run)
+    total_acs = sum(len(r["acs"]) for r in all_runs)
+    gwt_acs = sum(1 for r in all_runs for ac in r["acs"] if split_gwt(ac["text"]))
 
     parts = [
         "<!doctype html>",
         '<html lang="th"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1">',
         "<title>Test Case Catalog</title>",
-        "<style>%s</style></head><body><div class='wrap'>" % CSS,
-        "<h1>Test Case Catalog</h1>",
-        '<p class="sub">acceptance criteria ทั้งหมดที่ดึงจาก <code>%s</code> — '
-        "ไฟล์นี้ generate จาก build_index.py ห้ามแก้ด้วยมือ "
-        "แก้ที่ <code>0-spec.md</code> ต้นทางแล้ว generate ใหม่</p>" % html.escape(rel_root),
-        '<div class="controls">',
-        '<input id="q" type="search" placeholder="ค้นหา AC, run, ข้อความ…">',
-        '<select id="area"><option value="">ทุก area</option>',
+        "<style>%s</style></head><body>" % CSS,
     ]
-    for g in grouped:
-        parts.append('<option value="%s">%s</option>' % (html.escape(g["id"]), html.escape(g["title"])))
-    parts.append("</select>")
-
-    parts.append('<select id="status"><option value="">ทุกสถานะ</option>')
-    for key in ("done", "in-progress", "blocked", "legacy", "unknown"):
-        parts.append('<option value="%s">%s</option>' % (key, html.escape(STATUS_LABEL[key])))
-    parts.append("</select></div>")
-
-    parts.append(
-        '<p class="sub"><strong id="count">%d</strong> AC · %d run · %d area</p>'
-        % (total_acs, total_runs, len(grouped))
-    )
-
-    for g in grouped:
-        n_acs = sum(len(r["acs"]) for r in g["runs"])
-        parts.append('<section class="area" data-area="%s">' % html.escape(g["id"]))
-        parts.append("<h2>%s</h2>" % html.escape(g["title"]))
-        parts.append('<p class="area-meta">%d run · %d AC</p>' % (len(g["runs"]), n_acs))
-
-        for run in g["runs"]:
-            status = run["status"]
-            spec_rel = os.path.relpath(run["spec"], os.path.dirname(os.path.abspath(out_path)))
-            parts.append('<details class="run" data-status="%s">' % html.escape(status))
-            parts.append(
-                '<summary><span class="run-id">%s</span>'
-                '<span class="badge %s">%s</span>'
-                '<span class="badge">%d AC</span>'
-                '<a class="spec-link" href="%s">0-spec.md</a></summary>'
-                % (
-                    html.escape(run["id"]),
-                    html.escape(status),
-                    html.escape(STATUS_LABEL[status]),
-                    len(run["acs"]),
-                    html.escape(spec_rel),
-                )
-            )
-            parts.append('<ul class="acs">')
-            for ac in run["acs"]:
-                search = html.escape((ac["id"] + " " + ac["text"]).lower(), quote=True)
-                clauses = split_gwt(ac["text"])
-                if clauses:
-                    body = "".join(
-                        '<div class="clause"><span class="kw">%s</span><span class="txt">%s</span></div>'
-                        % (html.escape(kw), inline_md(rest))
-                        for kw, rest in clauses
-                    )
-                else:
-                    body = '<div class="clause plain">%s</div>' % inline_md(ac["text"])
-                parts.append(
-                    '<li data-search="%s"><span class="ac-id">%s</span>%s</li>'
-                    % (search, html.escape(ac["id"]), body)
-                )
-            parts.append("</ul></details>")
-        parts.append("</section>")
-
-    parts.append('<p class="empty" id="empty">ไม่พบ AC ที่ตรงกับเงื่อนไข</p>')
-    parts.append("<script>%s</script></div></body></html>" % JS)
+    parts += _render_dashboard(grouped, all_runs, total_acs, gwt_acs)
+    parts += _render_explorer(grouped, all_runs, out_path)
+    parts.append("<script>%s</script></body></html>" % JS)
     return "\n".join(parts) + "\n"
-
 
 # --------------------------------------------------------------------------
 

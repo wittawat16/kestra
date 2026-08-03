@@ -128,7 +128,9 @@ to hand-write catalog content the generator already produces.
    that quietly hides its own gaps is worse than none.
 
 6. **Tell the user how to open it.** `open workflows/docs/testcases/index.html` (or the platform
-   equivalent). It's a single self-contained file — no server, no build step, no network.
+   equivalent). It's a single self-contained file — no server, no build step, no network. It opens
+   on the coverage dashboard; clicking a run deep-links into that run's ACs at
+   `index.html#run/<run-id>`.
 
 ---
 

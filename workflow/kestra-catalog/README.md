@@ -23,9 +23,15 @@ WARN: run 'isu-104-nl2-equity-read-failure' is not assigned to an area in areas.
 wrote index.html — 305 AC across 36 run in 4 area (1 unassigned)
 ```
 
-The page groups **area → run → AC**, with the full AC text (not just a link), a client-side search
-box, filters by area and run status, per-area counts, and a link from each run back to its
-`0-spec.md`.
+The page opens on a **coverage dashboard** — totals, a per-area matrix broken down by run status,
+and a "ต้องดูก่อน" list that surfaces the gaps the script would otherwise only print as `WARN`
+(runs missing from `areas.yml`, blocked runs, legacy runs with no `state.json`). Clicking any run
+opens the **explorer**: an area→run tree on the left, that run's full AC text on the right, each
+Given-When-Then split into clauses, with a search box over run ids and AC text and a link back to
+its `0-spec.md`.
+
+Both views live in the same file and switch on the URL hash, so `index.html#run/<run-id>` is a
+shareable deep link and the browser's back button works.
 
 ## The one decision that isn't automatic
 
