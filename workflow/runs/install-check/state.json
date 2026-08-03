@@ -1,12 +1,12 @@
 {
   "feature": "install-check",
-  "current_stage": ["freeze-tests"],
-  "test_hash": null,
+  "current_stage": ["implement-install-check"],
+  "test_hash": "f2648effc5519ff518c82a209e8154714ea1c394d4d97a195893ea9e71ee7498",
   "stages": {
     "spec-review": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "spec-review", "spawn_type": "inline-controller", "attempt": 0 } },
     "generate-tests": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "generate-tests", "spawn_type": "inline-controller-fallback-after-luna-timeout", "attempt": 0 } },
     "test-review": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "test-review", "spawn_type": "inline-controller", "attempt": 0 } },
-    "freeze-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "freeze-tests": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "freeze-tests", "spawn_type": "inline-controller", "attempt": 0 } },
     "implement-install-check": { "status": "pending", "attempt": 0, "seen_diffs": [] },
     "verify": { "status": "pending", "attempt": 0, "seen_diffs": [] },
     "review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
