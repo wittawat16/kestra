@@ -1,0 +1,235 @@
+feature: install-check
+source_spec: workflow/runs/install-check/0-spec.md
+spec_anchor:
+  raise_commit: 56745d4afcca40adf76ed48e3c56f67e291128de
+  surface_hash: 751928ee95ea89b641605ad038217208bc162864e24fbeefe7be7ae76656cd62
+  extractor_version: 1
+# Derivation audit:
+# | Flag/request | Value | Mechanical consequence |
+# | mode | full | Paired source/installed trees plus silently stale behavior require spec/test review |
+# | needs_ui | false | No design stage |
+# | needs_ba | false | No Business Rules gate or stage |
+# | needs_sa | false | No Solution Architecture gate or stage |
+# | needs_devops | false | No deploy-readiness stage |
+# | explicit stage request | none | Use the conservative full-mode stage set below |
+mode: full
+
+tickets:
+  - id: issue-41
+    ref: https://github.com/arkaphat/arkaphat-builder/issues/41
+    body_sha256: f9595889f57876609156af422ccd4ef98ceaef437e0e49892e4eea9512d811bf
+    ac_hash: f968a3a42c2cc4c386de45517872ce782c1e1e170f18766860274becd6024d8d
+    verified_against: 56745d4afcca40adf76ed48e3c56f67e291128de
+    verified_at: "2026-08-03T07:01:44Z"
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review workflow/runs/install-check/0-spec.md before any tests are written. The mechanical
+      layer verifies only path presence and template facts; you must still judge every semantic
+      column. Confirm all eight ACs are testable, each Runtime Invariant halts/refuses/fails rather
+      than logging and continuing, the paired source/install and symlink constraints do not
+      contradict the ACs, and the observational-purity and complete-aggregation guarantees stay
+      truthful under read errors. The Flags section is authoritative: needs_ui, needs_ba, needs_sa,
+      and needs_devops are all false. For any blocking finding with a runnable check, include the
+      command and output; numeric findings must name the quantity and inputs. Write
+      workflow/runs/install-check/spec-verdict.md with first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", then a findings table (severity, one-line claim, file:line);
+      add a short paragraph only when a row cannot carry the needed explanation.
+    write_scope: ["workflow/runs/install-check/spec-verdict.md"]
+    exit_criteria:
+      type: command
+      run: "python3 -B workflow/runs/install-check/validate_spec.py workflow/runs/install-check/0-spec.md . && grep -q '^VERDICT: CLEAR$' workflow/runs/install-check/spec-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      First write workflow/runs/install-check/test-scenarios.md as a one-to-one table from
+      AC-1..AC-8 and every Runtime Invariant/edge case to scenario title and Given/When/Then. Then
+      write tests/test_install_check.py as stdlib unittest black-box tests that invoke only the real
+      ./install.sh CLI in temporary HOME/project/filesystem roots. Cover current copy and canonical
+      symlink installs in both scopes; missing, modified, extra, unreadable, wrong-target, dangling,
+      retired, ignored cache/Finder, and unrelated sibling cases; all invalid flag combinations;
+      before/after source and target fingerprints; existing install/link/update/uninstall/force
+      smoke behavior; English/Thai documentation parity; and measured finale counts. Use real
+      subprocesses and filesystems, never shell helpers, implementation variables, source-text
+      shortcuts, or mocked CLI/filesystem behavior. Cross-check assumptions shared across scenarios
+      and name each pair checked. The verified runner is Python stdlib unittest; no runner plumbing
+      exists yet beyond the new test file. Tests must be collectible and red through assertion
+      failures for the absent --check behavior, never import/syntax errors. Default to no comments;
+      use one concise comment only for a non-obvious constraint, never a run/spec/AC provenance
+      comment or a multi-line restatement.
+    write_scope:
+      - "workflow/runs/install-check/test-scenarios.md"
+      - "tests/test_install_check.py"
+    exit_criteria:
+      type: command
+      run: "test -f workflow/runs/install-check/test-scenarios.md && { python3 -B -m unittest discover -s tests -p 'test_install_check.py' > /tmp/kestra-install-check-red.log 2>&1; rc=$?; test $rc -ne 0 && grep -q '^FAIL:' /tmp/kestra-install-check-red.log && ! grep -q '^ERROR:' /tmp/kestra-install-check-red.log; }"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  - id: test-review
+    depends_on: [generate-tests]
+    brief: >
+      Independently review the generated scenario table and tests against the paired realities in
+      the spec. Produce a risk table covering ordering/preconditions, response realism, type/shape
+      drift, source/copy and source/symlink path parity, accidentally replacing installer-owned
+      guards, and clock/environment nondeterminism; mark every row applicable or n/a with file:line
+      evidence and add repository-specific risks. Confirm the tests use real subprocess/temp
+      filesystem fixtures, exercise both scopes and transports, prove fingerprints are non-vacuous,
+      aggregate after the first finding, and do not infer correctness by reading install.sh. On a
+      re-review, verify prior findings and changed interactions without re-deriving unchanged
+      relations. Write workflow/runs/install-check/test-verdict.md with first line exactly
+      "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", then the findings table and evidence paths.
+    write_scope: ["workflow/runs/install-check/test-verdict.md"]
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/install-check/test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      Make no edits. Re-run the exact red-suite integrity gate and snapshot the approved scenario
+      table and black-box test file as the one frozen baseline. Any defect here routes upward to
+      reworking; never patch a test at the freeze point.
+    write_scope:
+      - "workflow/runs/install-check/test-scenarios.md"
+      - "tests/test_install_check.py"
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "test -f workflow/runs/install-check/test-scenarios.md && { python3 -B -m unittest discover -s tests -p 'test_install_check.py' > /tmp/kestra-install-check-red.log 2>&1; rc=$?; test $rc -ne 0 && grep -q '^FAIL:' /tmp/kestra-install-check-red.log && ! grep -q '^ERROR:' /tmp/kestra-install-check-red.log; }"
+    on_fail:
+      action: reworking
+      reason: "the approved tests no longer fail cleanly for the missing feature at the freeze point"
+
+  - id: implement-install-check
+    depends_on: [freeze-tests]
+    brief: |
+      <!-- ticket:begin issue-41 sha256:f9595889f57876609156af422ccd4ef98ceaef437e0e49892e4eea9512d811bf -->
+      ## Parent
+
+      https://github.com/arkaphat/arkaphat-builder/issues/40
+
+      ## What to build
+
+      Deliver the read-only installer freshness check as one complete vertical slice. A user can invoke
+      the existing installer CLI in global or project scope and learn, without mutation, whether every
+      declared active skill is current, every retired entry is absent, and every symlink still tracks this
+      repository. The slice includes the real black-box test seam, bilingual usage documentation, and the
+      measured finale evidence needed by Wave 5.
+
+      ## Acceptance criteria
+
+      - [ ] AC-1
+      - [ ] AC-2
+      - [ ] AC-3
+      - [ ] AC-4
+      - [ ] AC-5
+      - [ ] AC-6
+      - [ ] AC-7
+      - [ ] AC-8
+
+      ## Blocked by
+
+      - https://github.com/arkaphat/arkaphat-builder/issues/40
+      <!-- ticket:end issue-41 -->
+
+      Folded from tickets/issue-41.md. Do not edit this block: a changed ticket requires a full
+      re-fold so the anchor, AC hash, freeze scopes, and state are recomputed. Source for each AC:
+      AC-1 → US-1 / US-2; AC-2 → US-4 / US-8; AC-3 → US-6 / US-7; AC-4 → US-9;
+      AC-5 → US-1 / US-8; AC-6 → US-10; AC-7 → US-10; AC-8 → US-3 / US-4 / US-8.
+      The ticket's external Blocked-by reference is the already-raised parent spec bound by
+      spec_anchor and reviewed at spec-review; it is not another slice in this named set.
+
+      Implement the complete vertical slice against the frozen tests without touching either frozen
+      path. Modify only install.sh, README.md, README-th.md, and the two new Wave 5 finale files.
+      Argument parsing must reject incompatible flags before any source/target resolution or
+      mutation. Install explicit guards for every Runtime Invariant: before/after observational
+      purity, complete aggregation after findings/read errors, truthful 0/1/2 exits, canonical
+      symlink-target identity, and bounded active/retired ownership. Keep existing mutating modes
+      behaviorally unchanged. The finale runner and README must record the measured scenario and
+      deviation counts from the real suite. An implementation-focused skill, if installed, fits
+      this stage. Default to no comments; use one concise comment only for a genuinely non-obvious
+      constraint, never a run/spec/AC provenance comment or a multi-line restatement.
+    write_scope:
+      - "install.sh"
+      - "README.md"
+      - "README-th.md"
+      - "workflow/evals/2026-08-03-wave5-install-check/run-legs.sh"
+      - "workflow/evals/2026-08-03-wave5-install-check/README.md"
+    exit_criteria:
+      type: command
+      run: "python3 -B -m unittest discover -s tests -p 'test_install_check.py'"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  - id: verify
+    depends_on: [implement-install-check]
+    brief: >
+      Compare the frozen tests now on disk with every row of the AC Coverage Map. If all ACs map to
+      assertions that really run under exit_criteria.run, state that and stop; the real command's
+      exit code is the verification. Only for an AC with no running assertion, exercise that AC
+      manually through ./install.sh and report expected versus observed behavior. Do not edit.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "bash workflow/evals/2026-08-03-wave5-install-check/run-legs.sh"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-install-check
+
+  - id: review
+    depends_on: [implement-install-check]
+    brief: >
+      Review the final diff independently for correctness, edge cases, shell injection/path
+      handling, unsafe quoting, secrets, and regressions in existing installer modes. Passing tests
+      cover anticipated cases; also verify every Runtime Invariant has a real halt/refusal/failure
+      guard, especially no mutation before invalid-usage exit, complete reporting after read errors,
+      canonical symlink comparison, and unrelated-sibling exclusion. Check English/Thai semantic
+      parity and that finale counts are measured rather than asserted. Code-review and
+      security-review skills, if installed, both fit this stage. A blocking runnable finding must
+      include its command/output; numeric findings name the measured quantity and inputs. Write
+      workflow/runs/install-check/review-verdict.md with first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by the findings table and any evidence paths.
+    write_scope: ["workflow/runs/install-check/review-verdict.md"]
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' workflow/runs/install-check/review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-install-check
+
+  - id: done
+    depends_on: [verify, review]
+    brief: >
+      Every upstream gate passed. Write workflow/runs/install-check/completion-summary.md with what
+      shipped, stage commits, test/review/security evidence, and a per-stage table of tokens,
+      wall-time, attempt count, and spawn type. Use "N/A — multi-session resume, not tracked" for
+      spawn type when attempts crossed sessions; omit unavailable metrics rather than guessing.
+    write_scope: ["workflow/runs/install-check/completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "workflow/runs/install-check/completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
