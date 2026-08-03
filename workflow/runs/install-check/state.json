@@ -1,9 +1,9 @@
 {
   "feature": "install-check",
-  "current_stage": ["spec-review"],
+  "current_stage": ["generate-tests"],
   "test_hash": null,
   "stages": {
-    "spec-review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
+    "spec-review": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "spec-review", "spawn_type": "inline-controller", "attempt": 0 } },
     "generate-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
     "test-review": { "status": "pending", "attempt": 0, "seen_diffs": [] },
     "freeze-tests": { "status": "pending", "attempt": 0, "seen_diffs": [] },
