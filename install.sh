@@ -248,9 +248,14 @@ if [ "$CHECK" = "1" ]; then
   if [ -d "$TARGET_DIR" ]; then
     while IFS= read -r path; do
       name="$(basename "$path")"
-      case " ${SKILLS[*]} ${RETIRED_SKILLS[*]} " in
-        *" $name "*) continue ;;
-      esac
+      declared=0
+      for known in "${SKILLS[@]}" "${RETIRED_SKILLS[@]}"; do
+        if [ "$(basename "$known")" = "$name" ]; then
+          declared=1
+          break
+        fi
+      done
+      [ "$declared" = "1" ] && continue
       printf 'ignored: %s (unrelated sibling)\n' "$name"
     done < <(find "$TARGET_DIR" -mindepth 1 -maxdepth 1 -print 2>/dev/null)
   fi
