@@ -16,8 +16,9 @@ nowhere else:
 > Spec-ticket: https://github.com/<owner>/<repo>/issues/<N>
 ```
 
-Recognizer: `^>\s*Spec-ticket:\s*(\S+)\s*$`, searched in the preamble only. A spec is **in-chain**
-iff there is exactly one match whose value matches `https?://\S+`; otherwise standalone.
+Recognizer: `^>\s*Spec-ticket:\s*(\S+)\s*$`, searched in the preamble only. A spec is a
+**URL-backed chain** iff there is exactly one match whose value matches `https?://\S+`. No match
+means either a local-file chain (§3) or standalone; raise-subject discovery distinguishes those two.
 
 Why the URL and not, say, the recorded mode-prediction fact: the fact is an obligation *every*
 Wave-2 spec carries, so as a marker it self-references — a chain spec that forgot the fact would
@@ -34,7 +35,7 @@ Degenerate cases, following `validate_workflow.py`'s partial-anchor precedent:
 
 | What the file has | Verdict |
 |---|---|
-| no `Spec-ticket:` line in the preamble | standalone — the five template checks WARN |
+| no `Spec-ticket:` line in the preamble | local-file chain or standalone — the five template checks WARN |
 | one line, value is a URL | in-chain — the five template checks FAIL on a defect |
 | one line, value missing or a `<placeholder>` | **FAIL** — a partial marker is never treated as absent |
 | two or more lines | **FAIL** — ambiguous by construction |
@@ -94,16 +95,61 @@ without the network.
 Same two facts, same order, no `gh`:
 
 * **Ticket** — `<NN>-<slug>.md` (the ticket body *is* the file).
-* **Vet** — a sibling `<NN>-<slug>.vet` whose first line is the same marker over the ticket file's
-  hash: `VETTED-FOR-KESTRA: $(sha256sum <NN>-<slug>.md | cut -d' ' -f1)`. Newest file wins if more
-  than one exists; the hash must equal the live file's hash.
+* **Vet** — a sibling `<NN>-<slug>.vet` whose first line is the same marker over the normalized
+  ticket bytes: `VETTED-FOR-KESTRA: $(tr -d '\r' < "<NN>-<slug>.md" | sha256sum | cut -d' ' -f1)`.
+  Newest file wins if more than one exists; the hash must equal the live ticket after that same
+  CR-only normalization.
 * **No `> Spec-ticket:` preamble line.** The marker's value must be a URL, and a present-but-not-a-URL
   value is a malformed marker (FAIL), not an absent one — so a file-tracked spec carries no marker,
   `validate_spec.py` reads it as standalone, and the five template checks WARN. The vet still gates
   the pass, and the commit trailers still record the provenance: put the repo-relative ticket path
-  in `Spec-ticket:` in **both commit messages**, which is what the discovery predicate in §2 matches
-  on. Say plainly at handoff that the marker is absent because the tracker is a file.
-* **Materialization** — `tr -d '\r' < <NN>-<slug>.md > "$RUN"/0-spec.md`, so the one declared
+  in `Spec-ticket:` in **both commit messages**. Downstream discovery cannot read that path from the
+  deliberately unmarked spec, so it first applies §2's exactly-one chain-subject predicate without a
+  trailer; the no-stacked-raises rule keeps that result unambiguous. Only when that returns zero does
+  it try the standalone subject. Say plainly at handoff that the marker is absent because the tracker
+  is a file; the trailer remains audit provenance, not a hidden discovery input.
+* **Materialization** — `tr -d '\r' < "<NN>-<slug>.md" > "$RUN"/0-spec.md`, so the one declared
   normalization stays identical to the GitHub path.
+
+Use these exact adjacent commit shapes. Commit 1 also carries the two run-local validator copies
+when step 0 can resolve them; omit the last message line when it cannot, exactly as in the
+URL-backed branch:
+
+```
+spec(<feature-id>): materialize vetted ticket verbatim
+
+Spec-ticket: <repo-relative ticket path>
+Ticket-body-sha256: <full normalized ticket hash>
+Also emits this run's copies of requirement_surface.py and validate_spec.py.
+```
+
+Commit 2 touches only `0-spec.md`. The `.vet` file provides content-bound artifact attribution,
+not a GitHub identity or timestamp, so record only facts it actually contains:
+
+```
+spec(<feature-id>): raise vetted ticket into 0-spec.md
+
+Spec-ticket: <repo-relative ticket path>
+Vetted-by: local vet <repo-relative .vet path> @ sha256 <first-12>
+```
+
+Prove the committed parent against the live ticket using the same CR-only normalization:
+
+```bash
+tr -d '\r' < "<repo-relative-ticket-path>" > /tmp/kestra-spec-ticket-body.md
+git show "$(git rev-parse <raise-sha>^)":<spec-path> | diff -u - /tmp/kestra-spec-ticket-body.md
+```
+
+Because the deliberately unmarked spec does not expose the local path, downstream discovery uses
+the raise subject only. It must still find exactly one commit on the current branch:
+
+```bash
+git log -E \
+  --grep='^spec\(<feature-id>\): raise vetted ticket into 0-spec\.md$' \
+  --format='%H' > /tmp/raise-matches
+test "$(wc -l < /tmp/raise-matches)" -eq 1
+```
+
+Zero or multiple matches are the same hard failures as §2; never choose the newest.
 
 kestra-spec stays read-only here too: it never writes the `.vet` file, and never edits the ticket.

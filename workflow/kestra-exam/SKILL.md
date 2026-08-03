@@ -55,11 +55,12 @@ Read the fact; do not re-derive the mode. If `## Mode Prediction` is absent or c
 such line, stop and say so — that is a spec defect, and inventing the mode here would put an exam on
 a feature nobody sized for one.
 
-**A standalone (unmarked) spec is a first-class input.** No `> Spec-ticket:` preamble line just means
-the raise commit reads `spec(<id>): write 0-spec.md from a hand-written idea` instead of the chain
-subject; `exam_anchor.py` already tries both, in that order (see §Staleness refusal). The pointer
-transport is independent of chaining: a standalone spec on a `github.com` origin still gets a GitHub
-pointer ticket.
+**An unmarked spec is a first-class input.** It can be a local-file-tracked chain raise (which has no
+URL marker by design) or a standalone hand-written spec. `exam_anchor.py` first requires exactly one
+`spec(<id>): raise vetted ticket into 0-spec.md` subject; only when none exists does it try
+`spec(<id>): write 0-spec.md from a hand-written idea` (see §Staleness refusal). The pointer transport
+is independent of chaining: an unmarked spec on a `github.com` origin still gets a GitHub pointer
+ticket.
 
 `kestra-spec`, `kestra-build` and `to-spec` are **suggestions** throughout this file — a machine
 without them simply does not run the exam leg, and no generated `workflow.yaml` breaks.
@@ -83,8 +84,9 @@ one. The exam's only value is being an *independent* derivation; reading the pla
 to save a few minutes. This is also why the exam never reads source files under `src/` before
 writing a check.
 
-The one thing you do read outside the surface is the spec preamble's `> Spec-ticket:` line — to know
-whether the raise commit is the chain subject or the standalone one.
+The one thing you do read outside the surface is the spec preamble's `> Spec-ticket:` line. A URL
+pins the chain-subject predicate with its trailer; without one, discovery tries the exactly-one chain
+subject first (the local-file case) and only then the standalone subject.
 
 ---
 
@@ -108,16 +110,36 @@ exam repo that has grown a remote. **Nothing is created on a hard stop**; verify
 Then, before writing anything:
 
 ```bash
-mkdir -p <exam-dir> && cp $S/exam_harness.py $S/exam_anchor.py <exam-dir>/
-cp <extractor-dir>/requirement_surface.py <exam-dir>/     # first hit of the four candidates
-python3 <exam-dir>/exam_anchor.py "$RUN" <exam-dir> --creatable; echo "creatable exit=$?"
-git init -q <exam-dir>
+CREATABLE=$(python3 -I -B "$S/exam_anchor.py" "$RUN" <exam-dir> --creatable 2>&1); CREATABLE_RC=$?
+printf '%s\n' "$CREATABLE"
+if [ "$CREATABLE_RC" -ne 0 ]; then
+  exit "$CREATABLE_RC"
+elif printf '%s\n' "$CREATABLE" | grep -q 'holds no manifest.md yet'; then
+  mkdir -p <exam-dir> &&
+    cp $S/exam_harness.py $S/exam_anchor.py <exam-dir>/ &&
+    cp <extractor-dir>/requirement_surface.py <exam-dir>/ &&   # first hit of the four candidates
+    git init -q <exam-dir> ||
+    { echo 'FAIL: exam creation did not complete' >&2; exit 1; }
+elif printf '%s\n' "$CREATABLE" | grep -q 'already anchors surface'; then
+  printf '%s\n' 'Existing exam is exact; stop creation without writing.'
+else
+  echo 'FAIL: unrecognized creatable result' >&2
+  exit 1
+fi
 ```
+
+Only `CREATABLE: … holds no manifest.md yet` proceeds to `mkdir`/`cp`. If the source checker says
+the existing exam already anchors the exact triple, stop creation successfully without writing a
+byte; use the existing exam. A different triple exits 1 and routes to §Regeneration. The guard must
+run from `$S` before `mkdir` or `cp` — checking after the copy has already altered evidence is not a
+guard.
 
 Three files are copied in **byte-identically**, not imported from the install: a gate reading this
 exam in six months must not get a different answer because a skill was reinstalled since. `git init`
 goes at the **feature** directory, not the origin-key directory — one feature is one independent
-history, so a regeneration is one small commit and an audit reads one log. Never add a remote.
+history, so a regeneration is one small commit and an audit reads one log. Never add a remote. Every
+exam-dir Python command in this skill uses `-B`, so verification does not leave an unpinned
+`__pycache__`; remove any cache left by an earlier manual invocation before committing.
 
 `--creatable` exit 1 means an exam already exists here anchored to a *different* surface: go to
 §Regeneration. Creation never overwrites another exam's evidence.
@@ -161,8 +183,8 @@ verbatim.
 Completion criterion:
 
 ```bash
-python3 <exam-dir>/exam.py --list;       echo "list exit=$?"        # expect 0
-python3 <exam-dir>/exam.py --audit-seam; echo "audit exit=$?"       # expect 0
+python3 -B <exam-dir>/exam.py --list;       echo "list exit=$?"        # expect 0
+python3 -B <exam-dir>/exam.py --audit-seam; echo "audit exit=$?"       # expect 0
 ```
 
 `--audit-seam` proves the seam the exam drives appears **verbatim** in the External Interface block
@@ -174,8 +196,8 @@ quoted in `manifest.md`. That is why the quote is load-bearing rather than decor
 TMP=$(mktemp -d); CLONE="$TMP/red-proof"
 git clone -q --no-hardlinks <repo-root> "$CLONE"
 git -C "$CLONE" checkout -q <raise_commit>
-python3 <exam-dir>/exam.py --repo "$CLONE" --json > <exam-dir>/red-proof.json
-python3 <exam-dir>/exam.py --repo "$CLONE"        > <exam-dir>/red-proof.log 2>&1
+python3 -B <exam-dir>/exam.py --repo "$CLONE" --json > <exam-dir>/red-proof.json
+python3 -B <exam-dir>/exam.py --repo "$CLONE"        > <exam-dir>/red-proof.log 2>&1
 echo "red-proof exit=$?"; rm -rf "$TMP"
 ```
 
@@ -219,30 +241,7 @@ in `red-proof.log`, so a reviewer sees *why* the evidence is degraded, not merel
 Completion criterion: `summary.unproven` in `red-proof.json` equals the count of `unproven`-flagged
 rows in `manifest.md`.
 
-### 6. Open or edit the one pointer
-
-The pointer is the exam's durable record: one issue titled **exactly** `kestra-exam: <feature-slug>`
-with the label `kestra-exam`, or one `<slug>.pointer` file beside the exam dir. The transport comes
-from `exam_paths.py`, never from judgment.
-
-Discovery is read-only and its predicate is exact title equality — `--search` is only the fetch,
-because a tracker tokenizes titles:
-
-```bash
-gh issue list --repo <chain-repo> --label kestra-exam --state all --limit 100 \
-  --json number,title,url \
-  --jq '[.[]|select(.title=="kestra-exam: <slug>")]'
-```
-
-`0` matches at creation → create it. `0` at a gate or regeneration → hard fail. **`>1` → hard fail,
-never resolved by taking the newer one** (§Hard stops carries the text). A regeneration **edits the
-existing pointer in place** and appends one comment; it never opens a second.
-
-Completion criterion: exactly one pointer exists, its first line is
-`<!-- kestra-exam-pointer v1 -->`, and its `exam_script_sha256` equals
-`sha256sum <exam-dir>/exam.py`.
-
-### 7. Commit inside the exam dir
+### 6. Commit inside the exam dir
 
 ```
 exam(<slug>): create from surface <hash12> @ raise <sha12>
@@ -251,10 +250,42 @@ exam(<slug>): re-anchor to surface <hash12> @ raise <sha12>
 ```
 
 Identity is inherited from global git config. A `git commit` that fails for a missing identity is a
-loud stop — this skill does not configure a user's git identity behind their back.
+loud stop — this skill does not configure a user's git identity behind their back. Record the full
+`git -C <exam-dir> rev-parse HEAD` as `exam_commit` in step 7; that pins the helper/extractor and red
+proof artifacts the gate executes or trusts, not only `exam.py`.
 
 Completion criterion: `git -C <exam-dir> log --oneline | wc -l` increased by exactly 1, and
 `git -C <exam-dir> remote` prints nothing.
+
+### 7. Open or edit the one pointer
+
+The pointer is the exam's durable record: one issue titled **exactly** `kestra-exam: <feature-slug>`
+with the label `kestra-exam`, or one `<slug>.pointer` file beside the exam dir. The transport comes
+from `exam_paths.py`, never from judgment.
+
+Discovery is read-only. Paginate the repository's authoritative issue collection, then apply exact
+title equality and the required-label check locally. Do not pre-filter by label, or an unlabelled
+duplicate disappears from the multiplicity check:
+
+```bash
+POINTER_PAGES=$(gh api --paginate --slurp \
+  'repos/<chain-repo>/issues?state=all&per_page=100') || \
+  { echo 'FAIL: pointer-ticket search did not run' >&2; exit 1; }
+printf '%s\n' "$POINTER_PAGES" | jq '[.[][]
+    | select(.pull_request == null)
+    | select(.title=="kestra-exam: <slug>")
+    | {number,title,url:.html_url,labels:[.labels[].name]}]'
+```
+
+For the exhausted issue collection, `0` exact matches at creation → create it; `0` at a gate or
+regeneration → hard fail; **`>1` → hard fail, never resolved by taking the newer one** (§Hard stops
+carries the text). Exactly one match must carry the `kestra-exam` label or it is malformed and stops.
+A regeneration **edits the existing pointer in place** and appends one comment; it never opens a
+second.
+
+Completion criterion: exactly one pointer exists, its first line is
+`<!-- kestra-exam-pointer v1 -->`, its `exam_commit` equals the exam repo's full `HEAD`, and its
+`exam_script_sha256` equals `sha256sum <exam-dir>/exam.py`.
 
 ---
 
@@ -265,17 +296,19 @@ artifact — it is the `AC` column of `manifest.md`'s `## Checks` table; the `##
 fingerprints are what turn "the surface moved" into "*these* ACs moved".
 
 ```bash
-python3 <skill>/scripts/exam_delta.py "$RUN" <exam-dir>; echo "delta exit=$?"
+python3 -B <skill>/scripts/exam_delta.py "$RUN" <exam-dir>; echo "delta exit=$?"
 ```
 
 The plan's first line is the scope: `delta` (regenerate the named checks) · `full` (the declared seam
-moved, so nothing is delta-able) · `re-anchor` (prose the ACs paraphrase moved; regenerate nothing,
-rewrite the anchor) · `current` (nothing moved).
+or extractor version moved, so nothing is comparable/delta-able) · `re-anchor` (prose the ACs
+paraphrase or a text-identical raise moved; regenerate nothing, rewrite the anchor) · `current`
+(surface, raise and extractor version all unchanged). An unresolved raise is exit 1, never a printed
+no-op plan.
 
 Two rules that hold in every scope: a check carries over **only** on an identical
 `(check id, normalized AC row)`, and a regenerated `must-flip` needs a **fresh** red proof in a new
-disposable clone at the **new** raise commit. The pointer is edited in place, `generation`
-incremented, one comment appended.
+disposable clone at the **new** raise commit. Commit the regenerated exam first, then edit the pointer
+in place with that new `exam_commit`, increment `generation`, and append one comment.
 
 Read [`references/regeneration.md`](references/regeneration.md) when a spec changed after the exam was
 created, or when `exam_delta.py` prints `scope: full`.
@@ -290,7 +323,7 @@ recorded in three places that must agree: `manifest.md` §Anchor (authoritative)
 among the three is itself a refusal — otherwise a tamper that edits one copy reads as fresh.
 
 ```bash
-python3 <exam-dir>/exam_anchor.py "$RUN" <exam-dir>    # 0 fresh · 2 REFUSED · 3 unreadable
+python3 -I -B <exam-dir>/exam_anchor.py "$RUN" <exam-dir>    # 0 fresh · 2 REFUSED · 3 unreadable
 ```
 
 Freshness is recomputed from the **working tree**, never `HEAD`: an uncommitted human edit to
@@ -349,6 +382,7 @@ Closed list. Each stops the pass, creates nothing further, and says which one fi
 | `>1` pointer titled `kestra-exam: <slug>` | `references/gate-procedure.md` §Pointer discipline |
 | `0` pointers at a gate or regeneration | same |
 | stale / partial anchor, or the three copies disagree | §Staleness refusal |
+| any unpinned path in the exam repo, including an ignored untracked path | `exam_anchor.check_exam_commit` |
 | `requirement_surface.py` resolves at none of four paths | `exam_anchor.load_extractor` |
 | an exam already exists here anchored to a different surface | `exam_anchor.assert_creatable` |
 | an unlisted seam kind | `exam_harness` — name it and extend the harness deliberately |
@@ -388,7 +422,8 @@ Done once:
 - `manifest.md` carries all seven sections in order, `## Verdict contract` last
 - The anchor triple is byte-identical in `manifest.md`, the pointer body and `exam.py`, and
   `exam_anchor.py` exits 0
-- Exactly one pointer exists, carries the `v1` marker, and its `exam_script_sha256` matches
+- Exactly one pointer exists, carries the `v1` marker, its `exam_commit` matches the exam repo's
+  full `HEAD`, and its `exam_script_sha256` matches
   `sha256sum exam.py`
 - One commit landed in the exam dir, and `git -C <exam-dir> remote` prints nothing
 

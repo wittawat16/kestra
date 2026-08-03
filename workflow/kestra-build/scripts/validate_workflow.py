@@ -9,6 +9,7 @@ be a general YAML parser.
 
 Usage:
     python3 validate_workflow.py <dir-containing-workflow.yaml-and-state.json>
+    python3 validate_workflow.py <dir> --refold-guard
 
 Exits 0 and prints "PASS" if the stage graph is structurally sound. Exits 1
 and prints every problem found otherwise. This never asks an LLM's opinion —
@@ -16,11 +17,11 @@ every check here is a graph/set operation, on purpose: it's the same
 "mechanical, not judged" standard kestra-run's own enforcement holds itself to,
 just applied before the first stage ever runs instead of after.
 
-THE SPEC ANCHOR — absent is a WARN, partial is a FAIL
+THE SPEC ANCHOR — monolithic absence is a WARN; sliced absence and partial are FAILs
 A chained workflow.yaml carries a top-level `spec_anchor` mapping
 (raise_commit / surface_hash / extractor_version) recording which commit of
-which spec it was folded from. Absent, this workflow is standalone and still
-valid; present, every field is graded and the surface is recomputed for real.
+which spec it was folded from. Absence is valid only for a monolithic standalone
+workflow; a sliced fold requires it. When present, every field is graded and the surface is recomputed for real.
 That recompute needs requirement_surface.py **beside this file** — kestra-build
 emits a byte copy of it into the run folder and commits it, so run this script
 from the run folder (`python3 <run>/validate_workflow.py <run>`) whenever the
@@ -33,8 +34,8 @@ A sliced fold also carries a top-level `tickets:` sequence and one embedded
 ticket block per owning stage brief. Both are *derived* from
 `<run>/tickets/<id>.md`, so this script recomputes them the way the fold did:
 sha256 of each ticket file against the block delimiter's hex and against
-`tickets[].body_sha256`, a whitespace-normalized text compare of the raw
-embedded block against the file, `verified_against` against
+`tickets[].body_sha256`, an exact raw-body compare after removing only the
+generated YAML block-scalar indentation, `verified_against` against
 `spec_anchor.raise_commit`, and each `ac_hash` against the spec's AC Coverage
 Map recomputed now. That is what makes "the fold refuses" an exit code rather
 than an instruction. A monolithic fold carries none of these and nothing in that
@@ -59,13 +60,13 @@ try:
     # this file contains no such thing). That is the point: the
     # hashes this script compares must keep their meaning for the life of the
     # run, which they only do if the extractor is the copy committed with it.
-    # _ws / _BULLET / _CHECKBOX come along for the ticket-AC normalization: the
+    # _scan / _units and their transforms come along for ticket-AC normalization: the
     # sliced ACs must be normalized by *the same code* that built the AC Coverage
     # Map rows they are matched against (ticket-fold.md §2 step 1 names these three
     # by name). A second copy of those transforms here would be a second
     # vocabulary that can drift while both sides still look populated.
     from requirement_surface import (EXTRACTOR_VERSION, extract_surface, SurfaceError,
-                                     _ws, _BULLET, _CHECKBOX)
+                                     _ws, _BULLET, _CHECKBOX, _scan, _units, _HEADING)
 except ImportError:  # copied without its sibling — degrade loudly, never silently
     EXTRACTOR_VERSION = None
 
@@ -266,12 +267,9 @@ def fnmatch_overlap(pattern_a, pattern_b):
 # ---------------------------------------------------------------------------
 # The spec anchor triple
 #
-# ABSENT = WARN, PARTIAL = FAIL. That split is the whole design: a workflow
-# generated from a standalone or hand-written spec has nothing to anchor to and
-# must keep passing, but a workflow that *claims* an anchor is claiming a
-# mechanically checkable fact, and half a claim is worse than none — it reads
-# green while proving nothing. Same rule validate_spec.py applies to the chain
-# marker, deliberately mirrored so the two ends of the chain say one thing.
+# ABSENT = WARN only for monolithic/standalone; a sliced fold without an anchor
+# FAILs. PARTIAL = FAIL everywhere. A workflow that claims an anchor is claiming
+# a mechanically checkable fact, and half a claim is worse than none.
 # ---------------------------------------------------------------------------
 
 ANCHOR_KEYS = ("raise_commit", "surface_hash", "extractor_version")
@@ -301,16 +299,21 @@ def resolve_spec_path(source_spec, target):
     return None
 
 
-def check_spec_anchor(workflow, target):
+def check_spec_anchor(workflow, target, required=False):
     """(problems, warnings) for spec_anchor — presence, shape, comparability,
     and a real recompute of the surface it claims."""
     problems, warnings = [], []
 
     if "spec_anchor" not in workflow or workflow.get("spec_anchor") is None:
-        warnings.append(
-            "no spec_anchor — this workflow is not anchored to a raise commit "
-            "(standalone/hand-written spec); staleness cannot be checked mechanically"
-        )
+        message = ("sliced fold has no spec_anchor — verified_against and ac_hash cannot be "
+                   "tied to the vetted raise; re-fold from F0")
+        if required:
+            problems.append(message)
+        else:
+            warnings.append(
+                "no spec_anchor — this workflow is not anchored to a raise commit "
+                "(standalone/hand-written spec); staleness cannot be checked mechanically"
+            )
         return problems, warnings
 
     anchor = workflow.get("spec_anchor")
@@ -330,8 +333,7 @@ def check_spec_anchor(workflow, target):
         values[key] = "" if raw is None else str(raw).strip()
         if not values[key]:
             problems.append(
-                f"spec_anchor is partial — '{key}' is missing; a partial anchor is a FAIL "
-                f"(an absent anchor is a WARN)"
+                f"spec_anchor is partial — '{key}' is missing; a partial anchor is a FAIL"
             )
 
     if values["raise_commit"] and not _SHA1_HEX.match(values["raise_commit"]):
@@ -435,7 +437,6 @@ TICKET_KEYS = ("id", "body_sha256", "ac_hash", "verified_against", "verified_at"
 _BLOCK = re.compile(
     r"<!-- ticket:begin (\S+) sha256:([0-9a-f]{64}) -->(.*?)<!-- ticket:end \1 -->", re.S)
 _BEGIN = re.compile(r"<!-- ticket:begin (\S+) sha256:([0-9a-f]{64}) -->")
-_STAGE_ID = re.compile(r"^\s*-\s+id:\s*(\S+)\s*$", re.M)
 _ISO_Z = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # Narrow on purpose: a wider strip eats legitimate parentheses out of a requirement.
 _SOURCE_LABEL = re.compile(r"\s*\(Source:\s*[^()]*\)\s*$")
@@ -459,15 +460,21 @@ def _normalize_ac(line):
 
 
 def _ticket_ac_lines(text):
-    """Non-blank body lines of a ticket's '## Acceptance criteria' section."""
-    out, on = [], False
-    for line in text.splitlines():
-        if line.startswith("## "):
-            on = line[3:].strip().lower() == "acceptance criteria"
-            continue
-        if on and line.strip():
-            out.append(line)
-    return out
+    """Logical units from a ticket's `## Acceptance criteria` section.
+
+    `_units` joins wrapped bullet continuations exactly as it does for the spec
+    surface, so presentation wrapping cannot manufacture a ticket/spec mismatch.
+    """
+    body, on = [], False
+    for line, in_fence in _scan(text):
+        heading = None if in_fence else _HEADING.match(line)
+        if heading and len(heading.group(1)) <= 2:
+            if on:
+                break
+            on = _ws(heading.group(2)).lower() == "acceptance criteria"
+        elif on:
+            body.append((line, in_fence))
+    return [unit for unit in _units(body) if unit]
 
 
 def _load_surface(workflow, target, problems, warnings):
@@ -545,7 +552,12 @@ def check_ticket_fold(workflow, raw, target):
         if surface is None:
             continue
         matched = []
-        for n, line in enumerate(_ticket_ac_lines(path.read_text()), 1):
+        try:
+            ticket_lines = _ticket_ac_lines(path.read_text())
+        except SurfaceError as e:
+            problems.append(f"tickets/{tid}.md cannot be normalized honestly: {e}")
+            continue
+        for n, line in enumerate(ticket_lines, 1):
             text, explicit = _normalize_ac(line)
             if text not in rows:
                 problems.append(
@@ -621,20 +633,42 @@ def check_ticket_fold(workflow, raw, target):
         if tid not in derived:
             problems.append(f"tickets[] entry '{tid}' has no tickets/{tid}.md")
 
-    # --- the embedded blocks, read from the RAW text (the parsed brief is lossy)
-    stage_at = [(m.start(), m.group(1)) for m in _STAGE_ID.finditer(raw)]
-
-    def owning_stage(offset):
-        owner = "<before the first stage>"
-        for pos, sid in stage_at:
-            if pos < offset:
-                owner = sid
-        return owner
+    # --- the embedded blocks, read from RAW text for byte fidelity. Ownership
+    # comes from raw spans inside the top-level `stages:` sequence, then is
+    # confirmed against that parsed stage's brief. Ticket-map `- id:` rows and
+    # unrelated top-level evidence therefore cannot impersonate a stage.
+    stage_rows = [stage for stage in (workflow.get("stages") or [])
+                  if isinstance(stage, dict) and stage.get("id")]
+    by_stage_id = {str(stage["id"]): stage for stage in stage_rows}
+    stage_header = re.search(r"^stages:\s*$", raw, re.MULTILINE)
+    stage_spans = []
+    if stage_header:
+        section_start = stage_header.end()
+        next_top = re.search(r"^[A-Za-z_][A-Za-z0-9_-]*:\s*.*$",
+                             raw[section_start:], re.MULTILINE)
+        section_end = (section_start + next_top.start()) if next_top else len(raw)
+        items = list(re.finditer(r"^ {2}- id:\s*(\S+)\s*$",
+                                 raw[section_start:section_end], re.MULTILINE))
+        for i, item in enumerate(items):
+            start = section_start + item.start()
+            end = (section_start + items[i + 1].start()
+                   if i + 1 < len(items) else section_end)
+            stage_spans.append((start, end, item.group(1)))
 
     per_stage = {}
     for m in blocks:
         tid, hex_, body = m.group(1), m.group(2), m.group(3)
-        stage = owning_stage(m.start())
+        span_owners = [sid for start, end, sid in stage_spans
+                       if start < m.start() < end]
+        begin = f"<!-- ticket:begin {tid} sha256:{hex_} -->"
+        end = f"<!-- ticket:end {tid} -->"
+        owners = [sid for sid in span_owners
+                  if begin in str(by_stage_id.get(sid, {}).get("brief") or "")
+                  and end in str(by_stage_id.get(sid, {}).get("brief") or "")]
+        if len(owners) != 1:
+            problems.append(f"ticket '{tid}' block is not inside exactly one stage brief "
+                            f"(owners: {owners or 'none'})")
+        stage = owners[0] if len(owners) == 1 else "<outside-stage-brief>"
         per_stage.setdefault(stage, []).append(tid)
         path = ticket_dir / f"{tid}.md"
         if not path.exists():
@@ -645,7 +679,13 @@ def check_ticket_fold(workflow, raw, target):
         if hex_ != on_disk:
             problems.append(f"ticket '{tid}' body changed since the fold (file {_short(on_disk)} ≠ "
                             f"brief {_short(hex_)}) — re-fold, never hand-edit the brief")
-        if " ".join(body.split()) != " ".join(path.read_text().split()):
+        line_start = raw.rfind("\n", 0, m.start()) + 1
+        indent = raw[line_start:m.start()]
+        source_lines = path.read_text().splitlines()
+        expected_body = "\n".join(
+            [""] + [(indent + line) if line else "" for line in source_lines]
+            + [indent])
+        if body != expected_body:
             problems.append(f"stage '{stage}' embedded ticket block does not match "
                             f"tickets/{tid}.md — the brief was hand-edited; re-fold")
         for seq in (" #", "---"):
@@ -671,7 +711,9 @@ def validate(workflow, state, target=None, raw=""):
     warnings = []
     target = target or Path(".")
 
-    anchor_problems, anchor_warnings = check_spec_anchor(workflow, target)
+    sliced = ("tickets" in workflow or (target / "tickets").is_dir()
+              or bool(_BEGIN.search(raw)))
+    anchor_problems, anchor_warnings = check_spec_anchor(workflow, target, required=sliced)
     problems.extend(anchor_problems)
     warnings.extend(anchor_warnings)
 
@@ -927,20 +969,16 @@ def validate(workflow, state, target=None, raw=""):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("usage: python3 validate_workflow.py <dir-containing-workflow.yaml-and-state.json>")
+    if (len(sys.argv) not in (2, 3)
+            or (len(sys.argv) == 3 and sys.argv[2] != "--refold-guard")):
+        print("usage: python3 validate_workflow.py "
+              "<dir-containing-workflow.yaml-and-state.json> [--refold-guard]")
         sys.exit(2)
 
+    refold_guard = len(sys.argv) == 3
     target = Path(sys.argv[1])
     wf_path = target / "workflow.yaml"
     state_path = target / "state.json"
-
-    if not wf_path.exists():
-        print(f"FAIL: {wf_path} not found")
-        sys.exit(1)
-
-    raw = wf_path.read_text()
-    workflow = parse_yaml(raw)
     state = None
     if state_path.exists():
         try:
@@ -948,8 +986,52 @@ def main():
         except json.JSONDecodeError as e:
             print(f"FAIL: state.json is not valid JSON: {e}")
             sys.exit(1)
+        if not isinstance(state, dict):
+            if refold_guard:
+                print("FAIL: refusing to re-fold — state.json root is not an object")
+            else:
+                print("FAIL: state.json root is not an object")
+            sys.exit(1)
     else:
         print(f"WARN: {state_path} not found — skipping state.json alignment checks")
+
+    if refold_guard:
+        stages = {} if state is None else state.get("stages")
+        if state is not None and (not isinstance(stages, dict) or not stages):
+            print("FAIL: refusing to re-fold — state.json.stages is not a "
+                  "non-empty object")
+            sys.exit(1)
+        if state is not None:
+            if not wf_path.exists():
+                print(f"FAIL: refusing to re-fold — {wf_path} not found")
+                sys.exit(1)
+            guarded_workflow = parse_yaml(wf_path.read_text())
+            workflow_ids = {str(stage.get("id")) for stage in
+                            (guarded_workflow.get("stages") or [])
+                            if isinstance(stage, dict) and stage.get("id")}
+            state_ids = {str(sid) for sid in stages}
+            if workflow_ids != state_ids:
+                print("FAIL: refusing to re-fold — workflow/state stage ids differ "
+                      f"(workflow={sorted(workflow_ids)}, state={sorted(state_ids)})")
+                sys.exit(1)
+        live = sorted(str(sid) for sid, row in stages.items()
+                      if not isinstance(row, dict) or row.get("status") != "pending")
+        if live:
+            print("FAIL: refusing to re-fold — stages [" + ", ".join(live)
+                  + "] are past 'pending'. A ticket changed mid-run; let kestra-run "
+                    "escalate to reworking, or confirm a destructive reset to the "
+                    "pre-run commit before re-folding. kestra-build does not reconcile "
+                    "a live run with a moved ticket.")
+            sys.exit(1)
+        print("PASS — re-fold guard: every existing stage is pending.")
+        sys.exit(0)
+
+    if not wf_path.exists():
+        print(f"FAIL: {wf_path} not found")
+        sys.exit(1)
+
+    raw = wf_path.read_text()
+    workflow = parse_yaml(raw)
 
     problems, warnings = validate(workflow, state, target, raw)
 

@@ -129,6 +129,11 @@ they never read as the numbered Process steps further down. Exact commands, rege
 refusal texts: [`references/ticket-fold.md`](references/ticket-fold.md) — open it now if you are
 folding a set, it is the file this section points at for every detail it deliberately doesn't repeat.
 
+**Before F0, guard an existing run before overwriting anything.** If `state.json` exists, its frozen
+tooling must exist too; run `python3 "$RUN"/validate_workflow.py "$RUN" --refold-guard`. Any
+non-`pending` stage refuses the fold. A first fold has no `state.json` and skips this command; an
+existing state without the run's validator is unreadable, not permission to continue.
+
 **F0. Materialize the slices, then resolve the raise commit.** Copy every slice into
 `<run>/tickets/<id>.md` with `tr -d '\r'` and nothing else — the same one declared normalization
 `kestra-spec` step 0b uses, so "verbatim" means the same thing at both ends of the chain. This is the
@@ -201,8 +206,8 @@ brief's own footer too, so the rule travels with the artifact into every spawn.
 `pending`, stop and print the refusal in `ticket-fold.md` §4 — the honest paths are letting
 `kestra-run` escalate to `reworking`, or a destructive reset to the pre-run commit. Overwriting
 `state.json` mid-run destroys the resume checkpoints and orphans the commits that were the rollback
-points, so this is a `reworking`-class event, not a regeneration: escalate upward, never patch
-sideways.
+points, so this is a `reworking`-class event, not a regeneration: enforce it before F0 with the
+run's `validate_workflow.py --refold-guard`, escalate upward, never patch sideways.
 
 **Print the tracker-side line; never post it.** One line per slice in the closing report —
 `Verified-against: <sha…> · ac_hash: <hex…> · extractor: v<N> · fold: <ISO-8601>` — for a human to

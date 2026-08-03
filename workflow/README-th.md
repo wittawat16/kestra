@@ -56,24 +56,29 @@ design notes (ถ้า `needs_ui: true`), การตัดสินใจด�
 
 ### สองโหมด input ตัดสินแบบ mechanical
 
-เป็นโหมด **in-chain** ก็ต่อเมื่อคำสั่งที่เรียกใช้ระบุ ticket บน tracker มาด้วย (เป็น URL หรือ `#N`
-บวกชื่อ repo) นอกนั้นคือ **standalone** มันจะไม่ไปไล่หา ticket ที่ไม่มีใครระบุมาเด็ดขาด — การที่ไม่มี
-ticket ถูกระบุ*คือ*สัญญาณของ standalone และการเดาเอาเองคือช่องทางที่ intent ซึ่งยังไม่ถูก vet จะหลุดเข้ามา
+เป็นโหมด **in-chain** ก็ต่อเมื่อคำสั่งที่เรียกใช้ระบุ ticket บน tracker มาด้วย (เป็น URL, `#N`
+บวกชื่อ repo หรือไฟล์ tracker local ชื่อ `<NN>-<slug>.md`) นอกนั้นคือ **standalone** มันจะไม่ไปไล่หา
+ticket ที่ไม่มีใครระบุมาเด็ดขาด — การที่ไม่มี ticket ถูกระบุ*คือ*สัญญาณของ standalone และการเดาเอาเอง
+คือช่องทางที่ intent ซึ่งยังไม่ถูก vet จะหลุดเข้ามา
 
 | | In-chain | Standalone |
 |---|---|---|
 | intent มาจาก | ticket ที่ระบุ ซึ่งคน vet แล้ว | ไอเดียที่เขียนเองหรือผลจาก `/grilling` บวกการซักถามใน session นี้ |
 | vetted gate | บังคับ — ไม่มี vet ไม่ทำงาน | ไม่มี |
 | จำนวนคอมมิต | สอง: ตัว ticket แบบ verbatim แล้วค่อย raise | หนึ่ง: การ raise |
-| บรรทัด `> Spec-ticket:` / `> Vetted:` ใน preamble | เขียน | ไม่เขียนเด็ดขาด |
+| บรรทัด `> Spec-ticket:` / `> Vetted:` ใน preamble | เขียนเฉพาะ tracker แบบ URL; local-file chain ไม่มี marker | ไม่เขียนเด็ดขาด |
 | `needs_ba` ที่ ticket เงียบเรื่อง intent | เด้งกลับต้นทาง (bounce) | ถามคนตรงนั้นเลย แล้วอ้างอิงคำตอบเป็น `Q<n>` |
-| validator ตอนจบรอบ | การเช็ค template ห้าข้อเป็น `FAIL` | ห้าข้อเดียวกันขึ้น `WARN` |
+| validator ตอนจบรอบ | แบบ URL เป็น `FAIL` ห้าข้อ; แบบ local-file เป็น `WARN` เพราะตั้งใจไม่มี marker | ห้าข้อเดียวกันขึ้น `WARN` |
 
 **standalone เป็นเส้นทางชั้นหนึ่ง ไม่ใช่เส้นทางที่ด้อยกว่า** vetted gate มีอยู่เพราะในโหมด in-chain
 ไม่มีใครเฝ้าดูจังหวะที่ intent ถูกคิดขึ้นมาเอง ส่วน standalone มีมนุษย์อยู่ในลูปโดยธรรมชาติ — เขาเป็น
 คนเรียกใช้เอง ใน session นี้ และเป็นคนตอบคำถามเอง พฤติกรรมเดียวกัน แต่หลักประกันคนละแบบ standalone
 ยังเก็บการซักถามไว้ครบ: คำขอหยาบๆ ("เพิ่ม CSV export") ยังต้องผ่านการซักถามสั้นๆ เรื่องขอบเขต
 error state และจุดคลุมเครือก่อนจะเขียนอะไรลงไป
+
+ไฟล์ tracker local ที่ระบุชื่อยังเป็น in-chain: sibling `.vet` คือ content-hash gate และยังต้องมี
+สองคอมมิตติดกัน เพียงแต่ไม่เขียน preamble marker ซึ่งรับ URL เท่านั้น ดังนั้น conditional validator
+ห้าข้อจึงเป็น `WARN`; นี่คือข้อจำกัดของ transport ไม่ใช่สิทธิ์ให้ข้ามการ vet
 
 ### vetted gate และการ raise แบบสองคอมมิต (in-chain)
 
@@ -146,7 +151,7 @@ raise ก็จะถูกสร้างบน surface ที่ยังไ�
 mode-prediction fact บรรทัดเดียวเป๊ะ, ต้องมีหัวข้อ `## Exit Criteria` พร้อมบรรทัด stop condition
 กับ `progress:` fragment และต้องผ่าน delimiter precondition มี marker ⇒ `FAIL`,
 ไม่มี ⇒ `WARN` เพราะ spec ที่มี marker คือ spec ที่ skill ของ repo นี้เองสร้างจาก ticket ที่ vet แล้ว
-template ของมันจึงเป็นสัญญา ส่วน spec ที่ไม่มี marker คือ spec ที่เขียนมือ เป็น standalone หรือมาจาก
+template ของมันจึงเป็นสัญญา ส่วน spec ที่ไม่มี marker อาจเป็น local-file chain, spec ที่เขียนมือ, standalone หรือมาจาก
 ที่อื่น การขาดหัวข้อเดียวกันจึงไม่ได้พิสูจน์อะไร — และการเช็คเดิมทุกข้อที่มีอยู่ก่อนแล้วทำงานเหมือนกัน
 ทั้งสองโหมด ถ้าหาสำเนาสคริปต์ไม่เจอเลยสักที่ มันจะพิมพ์ `WARN` หนึ่งอัน ตรวจ checklist ด้วยตัวเอง
 แล้วทำต่อ เพราะ `kestra-spec` ต้องไม่ hard-depend กับการที่ `kestra-build` ถูกติดตั้งไว้ แต่ต้องคัดลอก

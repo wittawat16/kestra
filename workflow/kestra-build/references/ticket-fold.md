@@ -94,6 +94,16 @@ copies would look populated.
 A fixed, numbered sequence at the top of every fold, first fold and re-fold alike. Run it in order;
 each step's output is what the next one is allowed to assume.
 
+Before F0 can overwrite `tickets/*.md`, guard any existing run state with the validator frozen into
+that run:
+
+```bash
+test ! -e "$RUN/state.json" || python3 "$RUN/validate_workflow.py" "$RUN" --refold-guard
+```
+
+First fold has no `state.json` and proceeds. Existing state with a missing validator, malformed
+`stages`, or any status other than `pending` is a hard stop; do not materialize even one slice first.
+
 ### F0 — resolve the raise commit
 
 Use [`../../kestra-spec/references/chain-provenance.md`](../../kestra-spec/references/chain-provenance.md)
@@ -216,7 +226,7 @@ Truth is `tickets/<id>.md`, committed with the workflow. It is recorded twice: i
 | Point | What it compares | On difference |
 |---|---|---|
 | Fold start | re-materialize each slice with §1's pipeline vs. the recorded `body_sha256` | the ticket moved upstream ⇒ re-fold, which is what is already running (the fold is idempotent when nothing moved) |
-| `validate_workflow.py`, every run | `sha256(tickets/<id>.md)` vs. the delimiter hex vs. `tickets[].body_sha256`, plus a whitespace-normalized text compare of the raw embedded block against the file | FAIL, naming which of the three disagrees |
+| `validate_workflow.py`, every run | `sha256(tickets/<id>.md)` vs. the delimiter hex vs. `tickets[].body_sha256`, plus an exact raw-body compare after removing only generated block-scalar indentation | FAIL, naming which of the three disagrees |
 | `kestra-run` pre-spawn | the same fields, before pasting a brief into a spawn | its own concern; the fold's obligation is only that the fields exist and are exact |
 
 Two recorded copies plus one file is what closes all four hand-edit routes, which is why the
@@ -239,7 +249,12 @@ overwrites `workflow.yaml`, `tickets/*.md`, the emitted scripts, and `state.json
 
 `state.json` holds live run state, so overwriting it after stages have passed destroys the resume
 checkpoints and orphans the commits that were the rollback points. So kestra-build **refuses** to
-re-fold when any stage in the existing `state.json` is not `pending`:
+re-fold when any stage in the existing `state.json` is not `pending`. This is the executable
+pre-F0 check, using the validator committed with the existing run:
+
+```bash
+python3 "$RUN"/validate_workflow.py "$RUN" --refold-guard
+```
 
 ```
 FAIL: refusing to re-fold — stages [implement-cancel, verify-cancel] are past 'pending'. A ticket

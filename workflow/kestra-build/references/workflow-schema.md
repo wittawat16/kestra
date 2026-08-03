@@ -78,10 +78,10 @@ and is immutable for the run's life; `state.json` is mutable run state the orche
 every commit. Provenance the orchestrator must never rewrite belongs in the immutable file. See
 `state-schema.md`, which records the same decision from the other side so nobody adds a second copy.
 
-**Validator posture — absent is a WARN, partial is a FAIL.** `spec_anchor` missing entirely is a
-WARN (a standalone or hand-written spec is a legitimate shape, story 24); `spec_anchor` present with
-any of its three keys missing, empty, or the wrong shape is a FAIL, because a partial anchor reads as
-provenance while proving nothing. The same split applies to a `tickets[]` entry missing any of its
+**Validator posture — monolithic absence is a WARN; sliced absence and partial are FAILs.** A
+monolithic workflow from a standalone or hand-written spec may omit `spec_anchor` (story 24). A
+sliced fold may not: its ticket map must bind to the vetted raise. Any present anchor with a missing,
+empty, or malformed key is a FAIL because partial provenance proves nothing. The same split applies to a `tickets[]` entry missing any of its
 five hash/marker fields, and to a `ticket:begin` delimiter with no matching `ticket:end`. This is the
 precedent `validate_spec.py` and `chain-provenance.md` already cite as "validate_workflow.py's
 partial anchor triple."

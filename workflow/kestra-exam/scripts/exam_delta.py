@@ -21,8 +21,9 @@ WHY THIS FILE EXISTS
 
 THREE SCOPES, DIFFERENT BLAST RADIUS
     delta      AC rows changed/added/removed ⇒ regenerate exactly their checks.
-    full       `## External Interface` moved ⇒ the seam itself moved, and every
-               check is driven through it. Not delta-able; the plan says so.
+    full       `## External Interface` or extractor version moved ⇒ the seam
+               changed or the hashes are incomparable. Re-derive every check
+               whose AC still exists; delete checks for removed ACs.
     re-anchor  Functional Requirements / Edge Cases / Runtime Invariants (or the
                Coverage Map's row *order*) moved with no AC row and no External
                Interface change ⇒ regenerate nothing, rewrite the anchor. Those
@@ -30,6 +31,7 @@ THREE SCOPES, DIFFERENT BLAST RADIUS
                a rewording is the tax this scope exists to refuse. Never silent:
                the regeneration comment records that FR/EC/RI moved without an AC
                row, so a human can confirm the Coverage Map still paraphrases them.
+               A text-identical re-raise also re-anchors without regenerating.
     current    nothing moved — no regeneration and no re-anchor.
 
 CARRY-OVER
@@ -40,7 +42,7 @@ CARRY-OVER
     timestamp shows the evidence predates this generation.
 
 Usage:
-    python3 exam_delta.py <run-dir> <exam-dir>
+    python3 -B exam_delta.py <run-dir> <exam-dir>
 
 Exit 0 on any successful analysis (read the `scope:` line for the outcome) ·
 1 on a usage or read error.
@@ -129,6 +131,11 @@ def plan(run_dir, exam_dir):
         raise Unreadable(f"{manifest} has no '## Delta map' fingerprints — the "
                          "exam predates delta regeneration; regenerate in full")
     amap = ac_to_checks(manifest)
+    recorded = read_manifest_anchor(manifest)
+    now_hash, now_ver = compute_now(exam_dir, run_dir, repo_root)
+    new_raise = discover_raise(repo_root, exam_dir.name, run_dir)
+    version_moved = str(recorded.get("extractor_version", "")) != str(now_ver)
+    raise_moved = str(recorded.get("raise_commit", "")) != new_raise
 
     changed = sorted(a for a in now_acs if a in old_acs
                      and now_acs[a] != old_acs[a])
@@ -145,42 +152,50 @@ def plan(run_dir, exam_dir):
     gone = [c for a in removed for c in amap.get(a, [])]
     new_acs = [a for a in added if not amap.get(a)]
 
-    if ei_moved:
+    if version_moved:
         scope = "full"
-        regen, delete, carry = sorted(set(all_checks)), [], []
+        delete = sorted(set(gone))
+        regen = sorted(set(all_checks) - set(delete))
+        carry = []
+    elif ei_moved:
+        scope = "full"
+        delete = sorted(set(gone))
+        regen = sorted(set(all_checks) - set(delete))
+        carry = []
     elif changed or added or removed:
         scope = "delta"
         regen = sorted(set(hit))
         delete = sorted(set(gone))
         carry = sorted(set(all_checks) - set(regen) - set(delete))
-    elif other_moved:
+    elif other_moved or raise_moved:
         scope, regen, delete = "re-anchor", [], []
         carry = sorted(set(all_checks))
     else:
         scope, regen, delete = "current", [], []
         carry = sorted(set(all_checks))
 
-    recorded = read_manifest_anchor(manifest)
-    now_hash, now_ver = compute_now(exam_dir, run_dir, repo_root)
-    try:
-        new_raise = discover_raise(repo_root, exam_dir.name, run_dir)
-    except Refused as e:
-        new_raise = f"UNRESOLVED ({e.args[0].splitlines()[0]})"
-
     why = ", ".join([f"{a} changed" for a in changed]
                     + [f"{a} added" for a in added]
                     + [f"{a} removed" for a in removed]
                     + (["External Interface moved"] if ei_moved else [])
                     + ([f"{n} moved" for n in other_moved] if not
-                       (changed or added or removed or ei_moved) else [])) or "nothing moved"
+                       (changed or added or removed or ei_moved) else [])
+                    + (["extractor version moved"] if version_moved else [])
+                    + (["raise commit moved"] if raise_moved else [])) or "nothing moved"
 
     lines = [f"scope: {scope}", f"why:        {why}"]
     if scope == "full":
-        lines.append("note:       the declared seam moved — every check is "
-                     "driven through it, so nothing is delta-able")
+        lines.append(
+            "note:       extractor version moved — hashes are not comparable; "
+            "re-derive every check" if version_moved else
+            "note:       the declared seam moved — every check is driven through "
+            "it, so nothing is delta-able")
     if scope == "re-anchor":
-        lines.append("note:       re-anchored only; FR/EC/RI moved without an "
-                     "AC row — verify the Coverage Map still paraphrases them")
+        lines.append(
+            "note:       text-identical re-raise — refresh the anchor and pointer "
+            "without regenerating checks" if raise_moved and not other_moved else
+            "note:       re-anchored only; FR/EC/RI moved without an AC row — "
+            "verify the Coverage Map still paraphrases them")
     lines += [f"regenerate: {' '.join(regen) or '-'}",
               f"new-ac:     {' '.join(new_acs) or '-'}   "
               "(ACs with no check row yet — author one each)",

@@ -56,12 +56,10 @@ outcome.** `0` means a hit, i.e. a leak. `≥2` means the check itself failed (e
 — a gate failure, never "clean".
 
 ```sh
-EX=". ':(exclude).claude/skills/kestra-exam/*' ':(exclude)workflow/kestra-exam/*'"
-
 # S1 — worktree. TWO commands, both must be clean (see §3 — `--untracked`
 # implies --exclude-standard and skips tracked-but-excluded paths):
-git grep -q --untracked 'kestra/exams' -- $EX ; [ $? -eq 1 ]
-git grep -q             'kestra/exams' -- $EX ; [ $? -eq 1 ]
+git grep -q --untracked 'kestra/exams' -- . ':(exclude).claude/skills/kestra-exam/*' ':(exclude)workflow/kestra-exam/*' ; [ $? -eq 1 ]
+git grep -q             'kestra/exams' -- . ':(exclude).claude/skills/kestra-exam/*' ':(exclude)workflow/kestra-exam/*' ; [ $? -eq 1 ]
 
 # S2 — commit messages (git grep cannot see them). NO exemption, by decision.
 test -z "$(git log --all --grep='kestra/exams' --oneline)"
@@ -69,7 +67,7 @@ test -z "$(git log --all --grep='kestra/exams' --oneline)"
 # S3 — history blobs, guarded. MUST run under `sh -c`.
 sh -c 'revs=$(git rev-list --all)
        [ -n "$revs" ] || { echo "FAIL: no commits — the blob sweep did not run"; exit 9; }
-       git grep -q "kestra/exams" $revs -- '"$EX"'; [ $? -eq 1 ]'
+       git grep -q "kestra/exams" $revs -- . ":(exclude).claude/skills/kestra-exam/*" ":(exclude)workflow/kestra-exam/*"; [ $? -eq 1 ]'
 
 # S4 — chain tracker only, pointer issue exempted by number
 gh issue list --repo <chain-repo> --state all --limit 200 --search 'kestra/exams' \
@@ -123,8 +121,8 @@ false clean over a committed leak**, while S3 — which walks history blobs, not
 ignored. **S1 is therefore two commands, not one, and both must be clean:**
 
 ```sh
-git grep -q --untracked 'kestra/exams' -- $EX ; [ $? -eq 1 ]   # worktree incl. untracked, excludes applied
-git grep -q             'kestra/exams' -- $EX ; [ $? -eq 1 ]   # tracked files, exclude rules not applied
+git grep -q --untracked 'kestra/exams' -- . ':(exclude).claude/skills/kestra-exam/*' ':(exclude)workflow/kestra-exam/*' ; [ $? -eq 1 ]
+git grep -q             'kestra/exams' -- . ':(exclude).claude/skills/kestra-exam/*' ':(exclude)workflow/kestra-exam/*' ; [ $? -eq 1 ]
 ```
 
 `--untracked --no-exclude-standard` reaches the same files, but drags `node_modules` and every other
@@ -148,15 +146,23 @@ One pointer record per exam, edited in place. **`>1` match is never resolved by 
 
 ### GitHub transport
 
-One issue, label `kestra-exam`, title **exactly** `kestra-exam: <feature-slug>`. Discovery is read-only,
-and `--search` is only the fetch — the tracker tokenizes titles, so exact title equality is the
-predicate:
+One issue, label `kestra-exam`, title **exactly** `kestra-exam: <feature-slug>`. Discovery is
+read-only. Paginate the repository's authoritative issue collection, then apply exact title equality
+and the required-label check locally. Do not pre-filter by label: that could hide an unlabeled
+duplicate.
 
 ```bash
-gh issue list --repo <chain-repo> --label kestra-exam --state all --limit 100 \
-  --json number,title,url \
-  --jq '[.[]|select(.title=="kestra-exam: <slug>")]'
+POINTER_PAGES=$(gh api --paginate --slurp \
+  'repos/<chain-repo>/issues?state=all&per_page=100') || \
+  { echo 'FAIL: pointer-ticket search did not run' >&2; exit 1; }
+printf '%s\n' "$POINTER_PAGES" | jq '[.[][]
+    | select(.pull_request == null)
+    | select(.title=="kestra-exam: <slug>")
+    | {number,title,url:.html_url,labels:[.labels[].name]}]'
 ```
+
+Apply the `0`/`1`/`>1` rule to the resulting array; the one-match case additionally requires `labels`
+to contain `kestra-exam`, or the pointer is malformed and must be labelled by hand before continuing.
 
 * **`0` at creation** → create it.
 * **`0` at a gate or regeneration** → hard fail: *"no pointer ticket titled 'kestra-exam: `<slug>`' on
@@ -180,6 +186,7 @@ Same posture as the raise-commit convention's ">1 is never resolved by taking th
 ```
 <!-- kestra-exam-pointer v1 -->
 exam_dir: /Users/<user>/.kestra/exams/<origin-key>/<slug>/
+exam_commit: <40hex>
 exam_script_sha256: <64hex>
 manifest_sha256: <64hex>
 raise_commit: <40hex>
@@ -250,19 +257,28 @@ deliberately.
 
 ## 5. Hash-vs-pointer comparison at the gate
 
+Run the anchor in isolated/no-bytecode mode and every exam invocation with `-B`. The explicit ignored
+path check is load-bearing: ordinary porcelain omits ignored files, but a local ignored Python module
+can still shadow a committed helper. Any old generated `__pycache__` must be removed before the exam
+commit; a gate never exempts it.
+
 ```bash
 E=<exam-dir>
+test "$(git -C "$E" rev-parse HEAD)" = "<pointer exam_commit>"
+test -z "$(git -C "$E" status --porcelain --untracked-files=all | grep -vx ' M manifest.md')"
+test -z "$(git -C "$E" ls-files --others --ignored --exclude-standard)"
 sha256sum "$E/exam.py"                                     # vs the pointer's exam_script_sha256
 awk '{ print } /^--- verdict \(appended by the gate runner/ { exit }' "$E/manifest.md" \
   | sha256sum                                              # vs the pointer's manifest_sha256 (see below)
 gh issue view <N> --repo <R> --json body --jq .body > /tmp/pointer.txt   # GitHub transport
-python3 "$E/exam_anchor.py" "$RUN" "$E" --pointer-body /tmp/pointer.txt
+python3 -I -B "$E/exam_anchor.py" "$RUN" "$E" --pointer-body /tmp/pointer.txt
 ```
 
 Every mismatch is a refusal, and the refusal is loud about which artifact moved:
 
 | Mismatch | Reading |
 |---|---|
+| `exam_commit` ≠ exam repo `HEAD`, anything except an unstaged `manifest.md` verdict append is dirty, or an ignored untracked path exists | a committed helper/evidence artifact moved or an unpinned file can affect the gate |
 | `exam_script_sha256` ≠ `sha256sum exam.py` | the exam was edited after it was recorded — the checks are not the ones that were red-proofed |
 | `manifest_sha256` ≠ the manifest's pre-verdict region hash (defined below) | the evidence table was edited after recording |
 | anchor triple disagrees across manifest / pointer / `exam.py` | a tamper that edited one copy, or an interrupted regeneration |
@@ -305,8 +321,9 @@ indistinguishable from tampering.
 ## 6. The gate's own stopping rule
 
 A gate run is complete when: the four sweeps each reported their clean outcome (S1's two passes and S3
-exit `1`, S2 empty, S4 length `0`); exactly one pointer resolved by exact title and its `v1` body parsed; the two hashes and
-the anchor triple all matched; `exam.py --json` ran against the delivered tree; and the verdict block was
+exit `1`, S2 empty, S4 length `0`); exactly one pointer resolved by exact title and its `v1` body parsed;
+`exam_commit` matched `HEAD`, no unpinned worktree path was dirty, the two hashes and the anchor triple
+all matched; `python3 -B exam.py --json` ran against the delivered tree; and the verdict block was
 appended to `## Verdict contract` — **with the `evidence: degraded` clause whenever `U > 0`**, since a
 `PASS` missing that clause is itself a gate failure.
 

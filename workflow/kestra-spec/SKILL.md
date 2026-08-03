@@ -38,18 +38,19 @@ skill can't switch that session's model on its own.
 
 ## Input — two modes, decided mechanically
 
-**In-chain** iff the invocation names a tracker ticket: a URL, or `#N` plus the repo. **Standalone**
-otherwise. Never search the tracker for a ticket nobody named — no named ticket *is* the standalone
-signal, and guessing one is how unvetted intent gets in.
+**In-chain** iff the invocation names a tracker ticket: a URL, `#N` plus the repo, or a named local
+tracker file shaped `<NN>-<slug>.md`. **Standalone** otherwise. Never search the tracker for a ticket
+nobody named — no named ticket *is* the standalone signal, and guessing one is how unvetted intent
+gets in.
 
 | | In-chain | Standalone |
 |---|---|---|
 | Intent comes from | the named ticket, human-vetted (step 0) | a hand-written idea or `/grilling` output, plus this session's clarifying pass |
 | Vetted gate | required — no vet, no work | none |
 | Commits | two: verbatim, then the raise | one: the raise |
-| `> Spec-ticket:` / `> Vetted:` preamble lines | written | never written |
+| `> Spec-ticket:` / `> Vetted:` preamble lines | URL-backed only; a local-file chain stays unmarked | never written |
 | `needs_ba` silence on intent | bounce upstream | ask the human, here and now, cite the answer `Q<n>` |
-| End-of-pass validator (step 8) | the five template checks are FAILs | the same five print WARN — the documented standalone contract |
+| End-of-pass validator (step 8) | URL-backed: five FAILs; local-file: WARN because it is deliberately unmarked | the same five print WARN — the documented standalone contract |
 
 **Standalone is a first-class path, not a degraded one.** The vetted gate exists because in-chain
 nobody is watching the moment intent is invented; standalone has the human in the loop by
@@ -68,7 +69,18 @@ when the input already arrived pre-sharpened. Every fact it settles is cited `Q<
 
 Standalone skips this whole step.
 
-**a. The vet.** kestra-spec is **read-only on the tracker** — it never comments, labels, edits or
+**Local-file tracker branch.** When the named ticket is `<NN>-<slug>.md`, load
+[`references/chain-provenance.md`](references/chain-provenance.md) §3 and use its sibling `.vet`
+hash gate and `tr -d '\r'` materialization instead of the GitHub commands below. Missing/stale vet is
+the same gate bounce; it never downgrades the file to standalone. Commit the verbatim body and then
+the raise as the same two adjacent commits, with the repo-relative path in both commit messages'
+`Spec-ticket:` trailer. The reference gives the exact two commit messages, local vet attribution,
+verbatim proof and subject-only discovery command; do not substitute GitHub identity or timestamps
+that the `.vet` artifact does not contain. Do **not** write a spec preamble marker: that marker
+accepts URLs only, so the five conditional checks WARN for this deliberately unmarked chain. The
+rest of step 0 is the URL-backed branch.
+
+**a. The URL-backed vet.** kestra-spec is **read-only on the tracker** — it never comments, labels, edits or
 closes, so it cannot approve its own input. The vetted signal is a comment on the ticket whose first
 line is `VETTED-FOR-KESTRA: <sha256 of the ticket body at vet time>`; newest such comment wins. Read
 it, and compute the live body hash with the same pipeline the materialization uses:
@@ -101,7 +113,7 @@ the vet is caught, and a thin ticket can't launder itself through a citable URL.
 token can post that comment, so this does not prove a human typed it. What it does buy: kestra-spec
 never writes it, the approval names exact text, and the artifact is visible, attributed and dated.
 
-**b. The verbatim commit (commit 1).** Write the ticket body to the spec path unmodified, and emit
+**b. The URL-backed verbatim commit (commit 1).** Write the ticket body to the spec path unmodified, and emit
 the run's own copies of the two scripts step 8 runs (copy-per-run: a check that reads this run in
 six months must not change its answer because a skill was reinstalled since):
 
@@ -284,7 +296,7 @@ marker.
 
 Completion criterion: both lines print `exit=0`, with no `FAIL:` in the output. A FAIL → fix the
 spec and re-run. Never commit the raise over a FAIL, and never edit the validator to make a spec
-pass. In-chain the five template checks (Source column, External Interface, mode-prediction fact,
+pass. For a URL-backed chain the five template checks (Source column, External Interface, mode-prediction fact,
 Exit Criteria, delimiter precondition) are FAILs; standalone they print as WARNs — that is the standalone contract,
 not a defect to chase. `kestra-build` overwrites both copies with its own at generation time; a
 genuine skill-version difference shows up there as a git diff instead of hiding.
@@ -295,8 +307,8 @@ genuine skill-version difference shows up there as a git diff instead of hiding.
 carrying `0-spec.md` and this run's two script copies. No `Spec-ticket:` line, no vet claim, no
 verbatim commit. Done; go to Handoff.
 
-**In-chain:** commit 2 touches exactly one path, `0-spec.md`, so "the raise is one git diff" is
-literally true:
+**URL-backed chain:** commit 2 touches exactly one path, `0-spec.md`, so "the raise is one git diff"
+is literally true:
 
 ```
 spec(<feature-id>): raise vetted ticket into 0-spec.md
@@ -315,6 +327,12 @@ git show "$(git rev-parse <raise-sha>^)":<spec-path> | diff -u - /tmp/kestra-spe
 Completion criterion: `diff` exits 0 — byte-identical after the one declared normalization. It
 prints what diverged for free; the durable offline record is commit 1's `Ticket-body-sha256`
 (`git show <c1>:<spec-path> | sha256sum`) for when the tracker is unreachable.
+
+**Local-file chain:** use §3 of
+[`references/chain-provenance.md`](references/chain-provenance.md) for commit 2 and the same
+committed-parent proof, reading the ticket with `tr -d '\r' < <ticket>` instead of `gh`. The local
+commit records the `.vet` path and hash as artifact attribution; it never invents a login or
+`createdAt`. Completion is still `diff` exit 0.
 
 A non-empty diff is a **hard stop, no handoff**, with exactly two honest fixes: (a) re-materialize —
 `git reset --hard <c1>^` (destructive; confirm with the user first) and re-run the pass; or (b) if
@@ -374,8 +392,8 @@ decorative prefix is pure overhead for a subagent grepping section names.
 # [<feature-id>] Spec — <feature title>
 
 > Status: READY_FOR_BUILD | BLOCKED_ON_INTENT | Created: YYYY-MM-DD | Next: kestra-build
-> Spec-ticket: <full ticket URL>  *(chain only — omit when standalone; the URL and nothing else on the line)*
-> Vetted: <login> @ <ISO-8601> · vet sha256 <first-12>  *(chain only)*
+> Spec-ticket: <full ticket URL>  *(URL-backed chain only — omit for local-file chain and standalone; the URL and nothing else on the line)*
+> Vetted: <login> @ <ISO-8601> · vet sha256 <first-12>  *(URL-backed chain only — omit for local-file chain and standalone)*
 > Provenance key: `US-n` = user story · `ID§x` = ticket Implementation Decisions subsection · `TD`/`FN`/`OOS`/`PS` = Testing Decisions / Further Notes / Out of Scope / Problem Statement · `IDEA§x` / `Q<n>` = idea heading / this session's clarifying answer (standalone) · `⚠ inferred` = originated by this pass, nothing upstream behind it · `verified:<probe>` = confirmed by running code in step 4
 > Delimiter precondition: every `## ` at column 0 outside a code fence is a template section heading; no line inside a requirement-surface section body begins with `## `; subsections use `### `; every code fence is closed.
 

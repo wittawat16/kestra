@@ -346,6 +346,209 @@ class SpecMarkerFences(unittest.TestCase):
         self.assertIn("FAIL: no 'AC Coverage Map' section found", out)
 
 
+CONTRACT_SPEC = f"""# [demo] Spec — Demo
+
+{{marker}}
+
+## External Interface
+
+* Primary: `python3 demo.py`.
+
+## Functional Requirements
+
+* [ ] AC-1.
+
+## AC Coverage Map
+
+| AC | Source | Covered by (files/steps) |
+|----|--------|--------------------------|
+| AC-1 | US-1 | `demo.py` |
+
+## Exit Criteria
+
+**Stop condition:** all checks pass — **or** two consecutive attempt rounds pass without the
+relevant progress number below moving, at which point stop and summon the human rather than attempt
+a third.
+
+* progress: passing checks — must reach 5, from a baseline of 0.
+
+## Mode Prediction
+
+* **kestra-build mode:** `full` — integration crosses three modules.
+"""
+
+
+class SpecConditionalObligations(unittest.TestCase):
+    """Marked specs hard-gate the complete template facts; unmarked specs warn."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+
+    def spec(self, text):
+        path = self.root / "0-spec.md"
+        path.write_text(text)
+        return run(VALIDATE_SPEC, path, self.root)
+
+    def test_complete_marked_contract_passes(self):
+        code, out = self.spec(CONTRACT_SPEC.format(marker=MARKER))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("FAIL", out)
+
+    def test_marked_mode_without_reason_fails(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            " — integration crosses three modules.", "")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: the mode-prediction line records no reason", out)
+
+    def test_unmarked_mode_without_reason_warns(self):
+        text = CONTRACT_SPEC.format(marker="").replace(
+            " — integration crosses three modules.", "")
+        code, out = self.spec(text)
+        self.assertEqual(code, 0, out)
+        self.assertIn("WARN: the mode-prediction line records no reason", out)
+
+    def test_marked_stop_without_no_progress_clause_fails(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            " — **or** two consecutive attempt rounds pass without the\n"
+            "relevant progress number below moving, at which point stop and summon the human "
+            "rather than attempt\n"
+            "a third.", "")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: '## Exit Criteria' stop condition is missing", out)
+
+    def test_marked_malformed_progress_fragment_fails(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            "* progress: passing checks — must reach 5, from a baseline of 0.",
+            "* progress: checks look better.")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: '## Exit Criteria' has 1 incomplete progress fragment", out)
+
+    def test_unmarked_malformed_exit_criteria_warns(self):
+        text = CONTRACT_SPEC.format(marker="").replace(
+            "* progress: passing checks — must reach 5, from a baseline of 0.",
+            "* progress: checks look better.")
+        code, out = self.spec(text)
+        self.assertEqual(code, 0, out)
+        self.assertIn("WARN: '## Exit Criteria' has 1 incomplete progress fragment", out)
+
+    def test_marked_wrapped_progress_fragment_passes(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            "* progress: passing checks — must reach 5, from a baseline of 0.",
+            "* progress: passing checks — must reach 5,\n  from a baseline of 0.")
+        code, out = self.spec(text)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("FAIL", out)
+
+    def test_marked_non_numeric_progress_fails(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            "passing checks — must reach 5, from a baseline of 0.",
+            "test state — must reach green, from a baseline of red.")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: '## Exit Criteria' has 1 non-numeric progress fragment", out)
+
+    def test_unmarked_non_numeric_progress_warns(self):
+        text = CONTRACT_SPEC.format(marker="").replace(
+            "passing checks — must reach 5, from a baseline of 0.",
+            "test state — must reach green, from a baseline of red.")
+        code, out = self.spec(text)
+        self.assertEqual(code, 0, out)
+        self.assertIn("WARN: '## Exit Criteria' has 1 non-numeric progress fragment", out)
+
+    def test_fenced_mode_example_does_not_satisfy_marked_contract(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            "* **kestra-build mode:** `full` — integration crosses three modules.",
+            "```\n* **kestra-build mode:** `full` — example only.\n```")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: no recorded mode-prediction fact", out)
+
+    def test_fenced_exit_example_does_not_satisfy_marked_contract(self):
+        block = ("**Stop condition:** all checks pass — **or** two consecutive attempt rounds pass "
+                 "without the\nrelevant progress number below moving, at which point stop and "
+                 "summon the human rather than attempt\na third.\n\n"
+                 "* progress: passing checks — must reach 5, from a baseline of 0.")
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(block, f"```\n{block}\n```")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: '## Exit Criteria' stop condition is missing", out)
+
+    def test_fenced_source_table_does_not_satisfy_marked_contract(self):
+        table = ("| AC | Source | Covered by (files/steps) |\n"
+                 "|----|--------|--------------------------|\n"
+                 "| AC-1 | US-1 | `demo.py` |")
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(table, f"```\n{table}\n```")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: no 'Source' column", out)
+
+    def test_fenced_external_interface_does_not_satisfy_marked_contract(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            "* Primary: `python3 demo.py`.",
+            "```\n* Primary: `python3 demo.py`.\n```")
+        code, out = self.spec(text)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: '## External Interface' is empty", out)
+
+    def assert_placeholder_is_conditional(self, old, placeholder, message):
+        for marker, level, code in ((MARKER, "FAIL", 1), ("", "WARN", 0)):
+            with self.subTest(marker=bool(marker), placeholder=placeholder):
+                text = CONTRACT_SPEC.format(marker=marker).replace(old, placeholder)
+                actual, out = self.spec(text)
+                self.assertEqual(actual, code, out)
+                self.assertIn(f"{level}: {message}", out)
+
+    def test_external_interface_scaffold_is_not_content(self):
+        self.assert_placeholder_is_conditional(
+            "* Primary: `python3 demo.py`.",
+            "*(the seam the tests may drive — and only this seam.)*",
+            "'## External Interface' still carries its template scaffold")
+
+    def test_external_helper_may_remain_beside_real_content(self):
+        text = CONTRACT_SPEC.format(marker=MARKER).replace(
+            "* Primary: `python3 demo.py`.",
+            "*(the seam the tests may drive — and only this seam.)*\n"
+            "* Primary: `python3 demo.py`.")
+        code, out = self.spec(text)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("template scaffold", out)
+
+    def test_source_scaffold_is_not_provenance(self):
+        self.assert_placeholder_is_conditional(
+            "| AC-1 | US-1 | `demo.py` |",
+            "| AC-1 | [US-n / ID§x / TD / FN / OOS / PS / IDEA§x / Q<n> / ⚠ inferred] | `demo.py` |",
+            "1 AC Coverage Map row(s) still carry the template Source scaffold")
+
+    def test_mode_reason_scaffold_is_not_a_reason(self):
+        self.assert_placeholder_is_conditional(
+            "integration crosses three modules.",
+            "[the reason that decided it]",
+            "the mode-prediction line still carries its template reason scaffold")
+
+    def test_stop_scaffold_is_not_a_completion_clause(self):
+        self.assert_placeholder_is_conditional(
+            "all checks pass",
+            "[completion clause]",
+            "'## Exit Criteria' stop condition still carries its template completion scaffold")
+
+    def test_progress_scaffold_is_not_a_moving_number(self):
+        self.assert_placeholder_is_conditional(
+            "passing checks",
+            "[the number that must move]",
+            "'## Exit Criteria' has 1 progress fragment(s) with the template metric scaffold")
+
+    def test_single_shot_scaffold_is_not_a_check(self):
+        self.assert_placeholder_is_conditional(
+            "* progress: passing checks — must reach 5, from a baseline of 0.",
+            "* Single-shot pass/fail, no progress number: "
+            "[the checks that deliberately carry none].",
+            "'## Exit Criteria' single-shot bullet still carries its template scaffold")
+
+
 class SpecExtensionlessPaths(unittest.TestCase):
     """`Makefile` is a path claim, not prose — shape decides, not the extension."""
 
@@ -428,7 +631,8 @@ class SlicedFolder(RunFolder):
     hand-edit routes use, so a test and a leg of the eval mean the same thing."""
 
     def __init__(self, spec=SPEC, body=TICKET_BODY, anchor=True, with_extractor=True):
-        super().__init__(valid_anchor() if anchor else None, spec=spec,
+        fold_anchor = valid_anchor(surface_hash=surface_hash(spec))
+        super().__init__(fold_anchor if anchor else None, spec=spec,
                          with_extractor=with_extractor)
         self.body = body
         (self.dir / "tickets").mkdir()
@@ -437,13 +641,13 @@ class SlicedFolder(RunFolder):
         head = f"feature: demo\nsource_spec: 0-spec.md\n"
         if anchor:
             head += "spec_anchor:\n"
-            for key, value in valid_anchor().items():
+            for key, value in fold_anchor.items():
                 head += f"  {key}: {value}\n"
         head += ("mode: full\n\ntickets:\n"
                  f"  - id: {TICKET_ID}\n"
                  f"    ref: tickets/{TICKET_ID}.md\n"
                  f"    body_sha256: {sha_text(body)}\n"
-                 f"    ac_hash: {ac_hash()}\n"
+                 f"    ac_hash: {ac_hash(spec=spec)}\n"
                  f"    verified_against: {RAISE_COMMIT}\n"
                  f'    verified_at: "2026-08-02T09:14:03Z"\n')
         stages = STAGES.replace(
@@ -484,9 +688,103 @@ class TicketFoldMatrix(unittest.TestCase):
         self.assertIn("PASS —", out)
         self.assertNotIn("FAIL", out)
 
+    def test_sliced_fold_without_spec_anchor_fails(self):
+        folder = SlicedFolder(anchor=False)
+        self.addCleanup(folder.close)
+        code, out = folder.validate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL: sliced fold has no spec_anchor", out)
+
+    def test_wrapped_ticket_ac_normalizes_as_one_logical_unit(self):
+        spec = SPEC.replace("| AC-1 | US-1 |", "| AC-1 works across lines | US-1 |")
+        body = TICKET_BODY.replace("- [ ] AC-1", "- [ ] AC-1 works\n  across lines")
+        folder = SlicedFolder(spec=spec, body=body)
+        self.addCleanup(folder.close)
+        folder.edit_workflow(
+            f"ac_hash: {ac_hash(spec=spec)}",
+            f"ac_hash: {ac_hash(ac_ids=('AC-1 works across lines',), spec=spec)}")
+        code, out = folder.validate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("PASS —", out)
+        self.assertNotIn("FAIL", out)
+
+    def test_refold_guard_refuses_live_state_before_overwrite(self):
+        state_path = self.folder.dir / "state.json"
+        state = json.loads(state_path.read_text())
+        state["stages"]["implement"]["status"] = "passed"
+        state_path.write_text(json.dumps(state))
+        proc = subprocess.run(
+            [sys.executable, str(self.folder.dir / "validate_workflow.py"),
+             str(self.folder.dir), "--refold-guard"],
+            capture_output=True, text=True, cwd=str(self.folder.elsewhere))
+        out = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 1, out)
+        self.assertIn("FAIL: refusing to re-fold — stages [implement] are past 'pending'", out)
+
+    def test_refold_guard_accepts_initial_pending_state(self):
+        proc = subprocess.run(
+            [sys.executable, str(self.folder.dir / "validate_workflow.py"),
+             str(self.folder.dir), "--refold-guard"],
+            capture_output=True, text=True, cwd=str(self.folder.elsewhere))
+        out = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 0, out)
+        self.assertIn("PASS — re-fold guard: every existing stage is pending", out)
+
+    def test_refold_guard_rejects_non_object_state_without_traceback(self):
+        (self.folder.dir / "state.json").write_text("[]")
+        proc = subprocess.run(
+            [sys.executable, str(self.folder.dir / "validate_workflow.py"),
+             str(self.folder.dir), "--refold-guard"],
+            capture_output=True, text=True, cwd=str(self.folder.elsewhere))
+        out = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 1, out)
+        self.assertIn("FAIL: refusing to re-fold — state.json root is not an object", out)
+        self.assertNotIn("Traceback", out)
+
+    def test_refold_guard_rejects_missing_or_malformed_stages(self):
+        for state in ({}, {"stages": None}, {"stages": []}, {"stages": {}}):
+            with self.subTest(state=state):
+                (self.folder.dir / "state.json").write_text(json.dumps(state))
+                proc = subprocess.run(
+                    [sys.executable, str(self.folder.dir / "validate_workflow.py"),
+                     str(self.folder.dir), "--refold-guard"],
+                    capture_output=True, text=True, cwd=str(self.folder.elsewhere))
+                out = proc.stdout + proc.stderr
+                self.assertEqual(proc.returncode, 1, out)
+                self.assertIn("FAIL: refusing to re-fold — state.json.stages is not a "
+                              "non-empty object", out)
+                self.assertNotIn("Traceback", out)
+
+    def test_refold_guard_requires_exact_workflow_state_stage_ids(self):
+        state_path = self.folder.dir / "state.json"
+        original = json.loads(state_path.read_text())
+        cases = []
+        missing = json.loads(json.dumps(original))
+        del missing["stages"]["implement"]
+        cases.append(missing)
+        extra = json.loads(json.dumps(original))
+        extra["stages"]["ghost"] = {"status": "pending"}
+        cases.append(extra)
+        for state in cases:
+            with self.subTest(stage_ids=sorted(state["stages"])):
+                state_path.write_text(json.dumps(state))
+                proc = subprocess.run(
+                    [sys.executable, str(self.folder.dir / "validate_workflow.py"),
+                     str(self.folder.dir), "--refold-guard"],
+                    capture_output=True, text=True, cwd=str(self.folder.elsewhere))
+                out = proc.stdout + proc.stderr
+                self.assertEqual(proc.returncode, 1, out)
+                self.assertIn("FAIL: refusing to re-fold — workflow/state stage ids differ", out)
+
     # --- the four hand-edit routes of ticket-fold.md §4, each with its own message
     def test_route_a_brief_only_edit(self):
         self.folder.edit_workflow("Write the demo module.", "Write the demo module!")
+        self.assertFail("embedded ticket block does not match tickets/demo-1.md — the brief was "
+                        "hand-edited; re-fold")
+
+    def test_route_a_brief_only_rewrap_is_not_verbatim(self):
+        self.folder.edit_workflow("Write the demo module.",
+                                  "Write the demo\n      module.")
         self.assertFail("embedded ticket block does not match tickets/demo-1.md — the brief was "
                         "hand-edited; re-fold")
 
@@ -570,6 +868,26 @@ class TicketFoldMatrix(unittest.TestCase):
     def test_ticket_embedded_in_no_brief_fails(self):
         self.folder.edit_workflow("<!-- ticket:begin", "<!-- was-a-ticket:begin")
         self.assertFail(f"ticket '{TICKET_ID}' is embedded in no stage brief")
+
+    def test_ticket_block_relocated_outside_stage_brief_fails(self):
+        block = embedded_block(TICKET_BODY)
+        self.folder.edit_workflow(block, "")
+        workflow = self.folder.dir / "workflow.yaml"
+        workflow.write_text(workflow.read_text() + "\nevidence: |\n"
+                            + embedded_block(TICKET_BODY, indent="  ") + "\n")
+        self.assertFail(f"ticket '{TICKET_ID}' block is not inside exactly one stage brief")
+
+    def test_same_ticket_may_appear_once_in_two_stage_briefs(self):
+        self.folder.edit_workflow(
+            "  - id: freeze-tests\n    depends_on: [write-tests]\n",
+            "  - id: freeze-tests\n    brief: |\n"
+            + embedded_block(TICKET_BODY)
+            + "\n\n      Verify the same ticket against the frozen tests.\n"
+            "    depends_on: [write-tests]\n")
+        code, out = self.folder.validate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("PASS —", out)
+        self.assertNotIn("FAIL", out)
 
     def test_unclosed_delimiter_is_a_partial_delimiter(self):
         self.folder.edit_workflow(f"<!-- ticket:end {TICKET_ID} -->", "")

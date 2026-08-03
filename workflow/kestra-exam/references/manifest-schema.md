@@ -33,8 +33,10 @@ The title line, and nothing else in the section.
 bearing.
 
 **Why the manifest hashes `exam.py` and not itself:** a self-hash is a self-certification. The pointer
-holds both hashes (`exam_script_sha256` and `manifest_sha256`), so the pair is closed across two
-artifacts and neither one certifies itself.
+holds both hashes (`exam_script_sha256` and `manifest_sha256`) plus `exam_commit`, which pins every
+committed helper/extractor/red-proof artifact. The gate also refuses worktree changes other than the
+manifest's unstaged verdict append, so neither artifact certifies itself and an edited helper cannot
+change the answer behind two still-matching hashes.
 
 ## 3. `## Read rule`
 

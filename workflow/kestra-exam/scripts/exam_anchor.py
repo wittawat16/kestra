@@ -31,8 +31,8 @@ WHAT DOES NOT MOVE THE ANCHOR
     the single owner of the boundary and this file never restates the list.
 
 Usage:
-    python3 exam_anchor.py <run-dir> <exam-dir> [--pointer-body <file>]
-    python3 exam_anchor.py <run-dir> <exam-dir> --creatable
+    python3 -I -B exam_anchor.py <run-dir> <exam-dir> [--pointer-body <file>]
+    python3 -I -B exam_anchor.py <run-dir> <exam-dir> --creatable
 
 Exit 0 fresh (or creatable) · 1 create-time hard stop · 2 REFUSED · 3 unreadable.
 `--pointer-body` is required whenever no `<slug>.pointer` sits beside the exam
@@ -184,7 +184,9 @@ def _ere(s):
 def _git(args, cwd):
     p = subprocess.run(["git", "-C", str(cwd)] + args, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, universal_newlines=True)
-    return p.returncode, p.stdout.strip(), p.stderr.strip()
+    # Porcelain status owns its two leading columns. Removing only record-ending
+    # newlines keeps ` M manifest.md` distinguishable from `M  manifest.md`.
+    return p.returncode, p.stdout.rstrip("\r\n"), p.stderr.rstrip("\r\n")
 
 
 def spec_ticket(spec_path):
@@ -241,6 +243,37 @@ def raise_reachable(repo_root, sha):
     return code == 0
 
 
+def check_exam_commit(exam_dir, pointer):
+    """Pin every committed exam artifact, not only exam.py and manifest.md.
+
+    Verdict appends deliberately leave manifest.md unstaged and dirty; every
+    other index/worktree change (including a helper edit or ignored untracked
+    import shadow) is a refusal.
+    """
+    recorded = str(pointer.get("exam_commit") or "").strip()
+    if not _HEX40.match(recorded):
+        raise Refused("pointer exam_commit is missing or not a full 40-hex commit SHA")
+    code, head, err = _git(["rev-parse", "HEAD"], exam_dir)
+    if code != 0:
+        raise Refused(f"exam commit cannot be resolved in {exam_dir}: {err}")
+    if head != recorded:
+        raise Refused(f"exam HEAD {head[:12]} != pointer exam_commit {recorded[:12]}")
+    code, status, err = _git(["status", "--porcelain", "--untracked-files=all"], exam_dir)
+    if code != 0:
+        raise Refused(f"exam worktree status cannot be read in {exam_dir}: {err}")
+    dirty = [line for line in status.splitlines() if line != " M manifest.md"]
+    if dirty:
+        raise Refused("exam worktree has unpinned changes outside the unstaged verdict "
+                      f"append: {dirty}")
+    code, ignored, err = _git(
+        ["ls-files", "--others", "--ignored", "--exclude-standard"], exam_dir)
+    if code != 0:
+        raise Refused(f"exam ignored-path status cannot be read in {exam_dir}: {err}")
+    if ignored:
+        raise Refused("exam worktree has ignored unpinned paths that can shadow committed "
+                      f"Python modules: {ignored.splitlines()}")
+
+
 # --------------------------------------------------------------------------
 # comparing
 # --------------------------------------------------------------------------
@@ -281,7 +314,9 @@ def compare(run_dir, exam_dir, pointer_text=None):
                 "--pointer-body was given. On the GitHub transport, fetch the "
                 "ticket body first — a skipped pointer comparison is not a pass.")
         pointer_text = local.read_text()
-    pointer = _norm(read_pointer_anchor(pointer_text))
+    pointer_fields = read_pointer_anchor(pointer_text)
+    check_exam_commit(exam_dir, pointer_fields)
+    pointer = _norm(pointer_fields)
 
     recorded = dict(manifest)
     bad = [k for k, rx in (("raise_commit", _HEX40), ("surface_hash", _HEX64))
@@ -332,15 +367,20 @@ def assert_creatable(run_dir, exam_dir):
     repo_root = Path(top) if code == 0 else Path(run_dir)
     recorded = _norm(read_manifest_anchor(exam_dir / "manifest.md"))
     now_hash, now_ver = compute_now(exam_dir, run_dir, repo_root)
-    if recorded["surface_hash"] == now_hash:
+    discovered = discover_raise(repo_root, exam_dir.name, run_dir)
+    if (recorded["surface_hash"] == now_hash
+            and recorded["raise_commit"] == discovered
+            and recorded["extractor_version"] == str(now_ver)):
         return 0, (f"CREATABLE: {exam_dir} already anchors surface "
                    f"{now_hash[:12]} — re-running creation is idempotent.")
     raise Refused(
         f"FAIL: {exam_dir} already holds an exam anchored to surface "
         f"{recorded['surface_hash'][:12]} @ raise "
-        f"{recorded['raise_commit'][:12]}, and the current surface is "
-        f"{now_hash[:12]}. Creation never overwrites another exam's evidence: "
-        "run the delta regeneration instead (`python3 exam_delta.py "
+        f"{recorded['raise_commit'][:12]} · extractor "
+        f"v{recorded['extractor_version']}, while the current anchor is "
+        f"{now_hash[:12]} @ raise {discovered[:12]} · extractor v{now_ver}. "
+        "Creation never overwrites another exam's evidence: "
+        "run the delta regeneration instead (`python3 -B exam_delta.py "
         f"{run_dir} {exam_dir}`), which edits the pointer in place and keeps "
         "the exam's git history.")
 

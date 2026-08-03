@@ -158,9 +158,22 @@ def transport(key, force_local=False):
         ["gh", "repo", "view", chain_repo, "--json", "hasIssuesEnabled",
          "--jq", ".hasIssuesEnabled"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-    if view.returncode == 0 and view.stdout.strip() == "true":
+    if view.returncode != 0:
+        raise PathError(
+            f"FAIL: cannot determine the pointer transport for {chain_repo}: "
+            f"`gh repo view` exited {view.returncode}. Refusing to downgrade to "
+            "a local pointer silently; retry the lookup or pass "
+            "`--local-pointer` deliberately.")
+    issues_enabled = view.stdout.strip()
+    if issues_enabled == "true":
         return "github", chain_repo
-    return "local", chain_repo
+    if issues_enabled == "false":
+        return "local", chain_repo
+    raise PathError(
+        f"FAIL: cannot determine the pointer transport for {chain_repo}: "
+        f"`gh repo view` returned {issues_enabled!r}, not true or false. "
+        "Refusing to downgrade to a local pointer silently; retry the lookup "
+        "or pass `--local-pointer` deliberately.")
 
 
 def derive(repo_root, run_dir, force_local=False, with_transport=True):

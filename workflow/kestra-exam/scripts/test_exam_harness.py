@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic tests for exam_harness.py — and for exam_paths.origin_key.
+"""Deterministic tests for the exam harness and its fail-closed provenance helpers.
 
 These stay in the skill; they are never emitted into an exam dir (the same
 convention test_requirement_surface.py follows).
@@ -13,16 +13,21 @@ Run:  python3 test_exam_harness.py
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import exam_harness as H          # noqa: E402
+import exam_anchor as A           # noqa: E402
+import exam_delta as D            # noqa: E402
 import exam_paths as P            # noqa: E402
 
 PY = sys.executable
@@ -91,7 +96,7 @@ def _fixture(tmp, smoke_exit="0"):
 
 
 def _run(tmp, *args, opt=False):
-    argv = [PY] + (["-O"] if opt else []) + ["exam.py"] + list(args)
+    argv = [PY, "-B"] + (["-O"] if opt else []) + ["exam.py"] + list(args)
     p = subprocess.run(argv, cwd=str(tmp), stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, universal_newlines=True)
     return p.returncode, p.stdout, p.stderr
@@ -219,6 +224,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertTrue(out.splitlines()[2].startswith("C-0 "), out)
         self.assertIn("unexaminable 1", out)
+        self.assertFalse((self.dir / "__pycache__").exists())
 
     def test_json_shape(self):
         code, out, _ = _run(self.dir, "--json")
@@ -386,6 +392,227 @@ class TestOriginKey(unittest.TestCase):
                          "order-refund")
         with self.assertRaises(P.PathError):
             P.feature_slug("/x/workflows/runs/Order_Refund")
+
+
+class TestPointerTransport(unittest.TestCase):
+    def test_github_lookup_failure_is_a_hard_stop(self):
+        responses = [SimpleNamespace(returncode=0),
+                     SimpleNamespace(returncode=1, stdout="",
+                                     stderr="lookup failed")]
+        with patch.object(P.subprocess, "run", side_effect=responses):
+            with self.assertRaises(P.PathError) as cm:
+                P.transport("github.com__owner__repo")
+        self.assertIn("pointer transport", str(cm.exception))
+
+    def test_explicit_issues_disabled_uses_local_transport(self):
+        responses = [SimpleNamespace(returncode=0),
+                     SimpleNamespace(returncode=0, stdout="false\n", stderr="")]
+        with patch.object(P.subprocess, "run", side_effect=responses):
+            self.assertEqual(P.transport("github.com__owner__repo"),
+                             ("local", "owner/repo"))
+
+
+class TestCreatableAnchor(unittest.TestCase):
+    def _paths(self):
+        root = Path(tempfile.mkdtemp())
+        run_dir, exam_dir = root / "feature", root / "exam"
+        run_dir.mkdir()
+        exam_dir.mkdir()
+        (exam_dir / "manifest.md").write_text("present")
+        return root, run_dir, exam_dir
+
+    def test_same_surface_with_moved_raise_or_version_is_refused(self):
+        root, run_dir, exam_dir = self._paths()
+        recorded = {"raise_commit": "1" * 40,
+                    "surface_hash": "a" * 64,
+                    "extractor_version": "1"}
+        with patch.object(A, "_git", return_value=(0, str(root), "")), \
+                patch.object(A, "read_manifest_anchor", return_value=recorded), \
+                patch.object(A, "compute_now", return_value=("a" * 64, 2)), \
+                patch.object(A, "discover_raise", return_value="2" * 40):
+            with self.assertRaises(A.Refused):
+                A.assert_creatable(run_dir, exam_dir)
+
+    def test_exact_anchor_triple_is_idempotent(self):
+        root, run_dir, exam_dir = self._paths()
+        recorded = {"raise_commit": "1" * 40,
+                    "surface_hash": "a" * 64,
+                    "extractor_version": "1"}
+        with patch.object(A, "_git", return_value=(0, str(root), "")), \
+                patch.object(A, "read_manifest_anchor", return_value=recorded), \
+                patch.object(A, "compute_now", return_value=("a" * 64, 1)), \
+                patch.object(A, "discover_raise", return_value="1" * 40):
+            code, message = A.assert_creatable(run_dir, exam_dir)
+        self.assertEqual(code, 0)
+        self.assertIn("idempotent", message)
+
+
+class TestExamCommitPin(unittest.TestCase):
+    SHA = "3" * 40
+
+    def check(self, status="", ignored=""):
+        with patch.object(A, "_git", side_effect=[
+                (0, self.SHA, ""), (0, status, ""), (0, ignored, "")]):
+            A.check_exam_commit("/tmp/exam", {"exam_commit": self.SHA})
+
+    def test_clean_pinned_commit_passes(self):
+        self.check()
+
+    def test_only_unstaged_manifest_verdict_append_may_be_dirty(self):
+        self.check(" M manifest.md")
+
+    def test_helper_tamper_is_refused(self):
+        with self.assertRaises(A.Refused) as cm:
+            self.check(" M exam_harness.py")
+        self.assertIn("exam worktree has unpinned changes", str(cm.exception))
+
+    def test_ignored_untracked_module_is_refused(self):
+        with self.assertRaises(A.Refused) as cm:
+            self.check(ignored="subprocess.py")
+        self.assertIn("ignored unpinned paths", str(cm.exception))
+
+    def test_missing_exam_commit_is_refused(self):
+        with self.assertRaises(A.Refused):
+            A.check_exam_commit("/tmp/exam", {})
+
+    def test_real_git_allows_only_an_unstaged_manifest_append(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+        (root / "manifest.md").write_text("# Manifest\n")
+        (root / "exam.py").write_text("print('exam')\n")
+        subprocess.run(["git", "-C", str(root), "add", "manifest.md", "exam.py"], check=True)
+        subprocess.run([
+            "git", "-C", str(root), "-c", "user.name=Kestra Test",
+            "-c", "user.email=kestra@example.invalid", "commit", "-qm", "fixture"
+        ], check=True)
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
+            text=True, capture_output=True).stdout.strip()
+        (root / "manifest.md").write_text("# Manifest\n\nPASS\n")
+        A.check_exam_commit(root, {"exam_commit": head})
+
+    def test_real_git_refuses_an_ignored_untracked_module(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+        (root / "manifest.md").write_text("# Manifest\n")
+        subprocess.run(["git", "-C", str(root), "add", "manifest.md"], check=True)
+        subprocess.run([
+            "git", "-C", str(root), "-c", "user.name=Kestra Test",
+            "-c", "user.email=kestra@example.invalid", "commit", "-qm", "fixture"
+        ], check=True)
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
+            text=True, capture_output=True).stdout.strip()
+        (root / ".git" / "info" / "exclude").write_text("subprocess.py\n")
+        (root / "subprocess.py").write_text("# ignored import shadow\n")
+        with self.assertRaises(A.Refused):
+            A.check_exam_commit(root, {"exam_commit": head})
+
+
+class TestDocumentedRecipes(unittest.TestCase):
+    def test_s1_never_uses_a_scalar_pathspec(self):
+        gate = (HERE.parent / "references" / "gate-procedure.md").read_text()
+        self.assertNotIn("$EX", gate)
+
+    def test_pointer_discovery_is_targeted_and_paginated(self):
+        for path in (HERE.parent / "SKILL.md",
+                     HERE.parent / "references" / "gate-procedure.md"):
+            with self.subTest(path=path.name):
+                text = path.read_text()
+                self.assertIn("POINTER_PAGES=$(gh api --paginate --slurp", text)
+                self.assertIn("repos/<chain-repo>/issues?state=all&per_page=100", text)
+                self.assertIn("pointer-ticket search did not run", text)
+                self.assertIn("$POINTER_PAGES\" | jq '[.[][]", text)
+                self.assertNotIn("search/issues", text)
+                self.assertNotIn("--label kestra-exam --state all --limit 100", text)
+
+    def test_creation_recipe_propagates_copy_and_init_failure(self):
+        skill = (HERE.parent / "SKILL.md").read_text()
+        self.assertIn("cp $S/exam_harness.py $S/exam_anchor.py <exam-dir>/ &&", skill)
+        self.assertIn("cp <extractor-dir>/requirement_surface.py <exam-dir>/ &&", skill)
+        self.assertIn("FAIL: exam creation did not complete", skill)
+
+    def test_all_regeneration_recipes_disable_bytecode(self):
+        texts = {
+            "skill": (HERE.parent / "SKILL.md").read_text(),
+            "regeneration": (HERE.parent / "references" / "regeneration.md").read_text(),
+            "delta": (HERE / "exam_delta.py").read_text(),
+            "anchor": (HERE / "exam_anchor.py").read_text(),
+        }
+        for name, text in texts.items():
+            with self.subTest(name=name):
+                self.assertNotIn("python3 exam_delta.py", text)
+                self.assertNotIn("python3 <skill>/scripts/exam_delta.py", text)
+        self.assertNotIn("python3 exam.py --only", texts["regeneration"])
+
+
+class TestDeltaAnchorMovement(unittest.TestCase):
+    def plan(self, now_version=1, new_raise="2" * 40,
+             now_sections=None, old_sections=None, now_acs=None, old_acs=None,
+             amap=None):
+        root = Path(tempfile.mkdtemp())
+        run_dir, exam_dir = root / "run", root / "exam"
+        run_dir.mkdir()
+        exam_dir.mkdir()
+        (exam_dir / "manifest.md").write_text("present")
+        recorded = {"raise_commit": "1" * 40,
+                    "surface_hash": "a" * 64,
+                    "extractor_version": "1", "generation": "1"}
+        now_sections = now_sections or {"Functional Requirements": "same"}
+        old_sections = old_sections or {"Functional Requirements": "same"}
+        now_acs = now_acs or {"AC-1": "same"}
+        old_acs = old_acs or {"AC-1": "same"}
+        amap = amap or {"AC-1": ["C-1"]}
+        patches = (
+            patch.object(D, "_git", return_value=(0, str(root), "")),
+            patch.object(D, "current_fingerprints",
+                         return_value=(now_sections, now_acs)),
+            patch.object(D, "recorded_fingerprints",
+                         return_value=(old_sections, old_acs)),
+            patch.object(D, "ac_to_checks", return_value=amap),
+            patch.object(D, "read_manifest_anchor", return_value=recorded),
+            patch.object(D, "compute_now", return_value=("a" * 64, now_version)),
+            patch.object(D, "discover_raise",
+                         side_effect=new_raise if isinstance(new_raise, Exception) else None,
+                         return_value=None if isinstance(new_raise, Exception) else new_raise),
+        )
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            return D.plan(run_dir, exam_dir)
+
+    def test_raise_only_movement_reanchors(self):
+        self.assertIn("scope: re-anchor", self.plan())
+
+    def test_extractor_version_movement_forces_full_rederive(self):
+        self.assertIn("scope: full", self.plan(now_version=2, new_raise="1" * 40))
+
+    def test_full_seam_regeneration_deletes_removed_ac_checks(self):
+        out = self.plan(
+            new_raise="1" * 40,
+            old_sections={"External Interface": "old"},
+            now_sections={"External Interface": "new"},
+            old_acs={"AC-1": "same", "AC-2": "gone"},
+            now_acs={"AC-1": "same"},
+            amap={"AC-1": ["C-1"], "AC-2": ["C-2"]})
+        self.assertIn("scope: full", out)
+        self.assertIn("regenerate: C-1", out)
+        self.assertIn("delete:     C-2", out)
+        self.assertNotIn("regenerate: C-1 C-2", out)
+
+    def test_full_version_regeneration_deletes_removed_ac_checks(self):
+        out = self.plan(
+            now_version=2, new_raise="1" * 40,
+            old_acs={"AC-1": "same", "AC-2": "gone"},
+            now_acs={"AC-1": "same"},
+            amap={"AC-1": ["C-1"], "AC-2": ["C-2"]})
+        self.assertIn("scope: full", out)
+        self.assertIn("regenerate: C-1", out)
+        self.assertIn("delete:     C-2", out)
+
+    def test_unresolved_raise_is_a_hard_stop(self):
+        with self.assertRaises(D.Refused):
+            self.plan(new_raise=D.Refused("raise is ambiguous"))
 
 
 if __name__ == "__main__":

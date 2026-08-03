@@ -87,6 +87,24 @@ MODE = re.compile(r"^\s*[-*]?\s*\**\s*kestra-build mode:?\**\s*[`*]*\s*(full|lit
                   re.IGNORECASE | re.MULTILINE)
 PROSE_PRECONDITION = re.compile(r"^>\s*Delimiter precondition:", re.MULTILINE)
 
+# Exact tokens emitted by kestra-spec's canonical scaffold. These checks are
+# intentionally literal: they catch an untouched template without trying to
+# grade prose or infer whether a differently worded answer is good enough.
+EXTERNAL_SCAFFOLD_LINES = {
+    "*(the seam the tests may drive — and only this seam.)*",
+    "* **Primary ([new|existing]):** [the seam, named concretely enough to call]",
+    "* `[operation / route / entry point]` — [inputs] → [status or return shape] → [side effect]",
+    "* **Secondary (existing, reused not extended):** [seam] — [what it covers; why it isn't extended]",
+    "* **Deliberately absent seams:** [what tests may not drive — so nothing invents one]",
+    "* **Not an interface:** [private/unexported — internal by intent]",
+    "* No export is added solely to make something testable.",
+}
+SOURCE_SCAFFOLD = "[US-n / ID§x / TD / FN / OOS / PS / IDEA§x / Q<n> / ⚠ inferred]"
+MODE_REASON_SCAFFOLD = "[the reason that decided it]"
+STOP_SCAFFOLD = "[completion clause]"
+PROGRESS_SCAFFOLD = "[the number that must move]"
+SINGLE_SHOT_SCAFFOLD = "[the checks that deliberately carry none]"
+
 # The canonical H2 names the kestra-spec template emits. NOT the requirement
 # surface (that stays single-owner in requirement_surface.py) — this is the
 # set of headings a '## ' line is allowed to be, so a bare '## ' inside a
@@ -185,9 +203,12 @@ def scanned(text):
 
 
 def template_section(text, name):
-    """Body of the '## <name>' section, matched the way the surface matches
-    headings — canonically and fence-aware. get_section's substring match
-    would accept '## External Interfaces', which the extractor drops."""
+    """Unfenced body of the canonical `## <name>` section.
+
+    Fenced examples are not semantic content and cannot satisfy a template
+    obligation. `get_section`'s substring match would also accept
+    `## External Interfaces`, which the extractor drops.
+    """
     lines = scanned(text)
     if lines is None:
         return get_section(text, name)
@@ -199,7 +220,7 @@ def template_section(text, name):
             if found:
                 break
             found = canonical_heading(m.group(2)) == want
-        elif found:
+        elif found and not in_fence:
             body.append(line)
     return "\n".join(body) if found else None
 
@@ -360,6 +381,11 @@ def check_source_column(text, chained):
     if empty:
         report(chained, f"{empty} AC Coverage Map row(s) have an empty 'Source' cell — "
                         "a green column that lies")
+    scaffold = sum(1 for cells in parse_table_rows(section)
+                   if at < len(cells) and cells[at] == SOURCE_SCAFFOLD)
+    if scaffold:
+        report(chained, f"{scaffold} AC Coverage Map row(s) still carry the template "
+                        "Source scaffold")
 
 
 def check_external_interface(text, chained):
@@ -370,11 +396,14 @@ def check_external_interface(text, chained):
                         "this section declares; without it the exam guesses (permanent "
                         "false-fail risk)")
         return
-    body = [l for l in section.splitlines()
+    body = [l.strip() for l in section.splitlines()
             if l.strip() and not HEADING.match(l)]
+    semantic = [line for line in body if line not in EXTERNAL_SCAFFOLD_LINES]
     if not body:
         report(chained, "'## External Interface' is empty — name the seam tests may drive, "
                         "the seams deliberately absent, and what is not an interface")
+    elif not semantic:
+        report(chained, "'## External Interface' still carries its template scaffold")
 
 
 def check_mode_prediction(text, chained):
@@ -390,7 +419,9 @@ def check_mode_prediction(text, chained):
         return
     tail = section[matches[0].end():].split("\n", 1)[0]
     if not tail.strip("`*—- \t"):  # grading the prose is not this script's job
-        warn("the mode-prediction line records no reason for the mode")
+        report(chained, "the mode-prediction line records no reason for the mode")
+    elif MODE_REASON_SCAFFOLD in tail:
+        report(chained, "the mode-prediction line still carries its template reason scaffold")
 
 
 def check_exit_criteria(text, chained):
@@ -403,14 +434,64 @@ def check_exit_criteria(text, chained):
                         "fragments onto the owning stages; without them clause 2 of the "
                         "stop condition can never fire")
         return
-    if not re.search(r"\*\*Stop condition:\*\*", section):
-        report(chained, "'## Exit Criteria' has no '**Stop condition:**' head line")
-    if not (re.search(r"^\s*[-*]\s*progress:", section, re.MULTILINE)
-            or re.search(r"single-shot", section, re.IGNORECASE)):
+    stop = re.search(
+        r"\*\*Stop condition:\*\*\s*\S.+?\s+(?:—|-)\s+\*\*or\*\*\s+"
+        r"two consecutive attempt rounds pass without the\s+relevant progress "
+        r"number below moving,\s+at which point stop and summon the human rather "
+        r"than attempt\s+a third\.",
+        section, re.IGNORECASE | re.DOTALL)
+    if not stop:
+        report(chained, "'## Exit Criteria' stop condition is missing the complete "
+                        "two-clause no-progress stop")
+    elif STOP_SCAFFOLD in stop.group(0):
+        report(chained, "'## Exit Criteria' stop condition still carries its template "
+                        "completion scaffold")
+
+    progress = []
+    lines = section.splitlines()
+    for i, line in enumerate(lines):
+        match = re.match(r"^\s*[-*]\s*progress:\s*(.*?)\s*$", line,
+                         re.IGNORECASE)
+        if not match:
+            continue
+        parts = [match.group(1)]
+        for continuation in lines[i + 1:]:
+            stripped = continuation.strip()
+            if (not stripped or re.match(r"^[-*]\s+", stripped)
+                    or re.match(r"^#{1,6}\s+", stripped)):
+                break
+            parts.append(stripped)
+        progress.append(" ".join(parts))
+    complete_progress = re.compile(
+        r"^\S.*?\s+(?:—|-)\s+must reach\s+(?P<target>\S.*?),\s*"
+        r"from a baseline of\s+(?P<baseline>\S.*)$",
+        re.IGNORECASE)
+    parsed = [(fragment, complete_progress.match(fragment)) for fragment in progress]
+    incomplete = [fragment for fragment, match in parsed if not match]
+    if incomplete:
+        report(chained, f"'## Exit Criteria' has {len(incomplete)} incomplete progress "
+                        "fragment(s) — each must name the moving number, target and baseline")
+    number = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\d+(?:\.\d+)?|\.\d+)")
+    non_numeric = [fragment for fragment, match in parsed if match and not (
+        number.search(match.group("target")) and number.search(match.group("baseline")))]
+    if non_numeric:
+        report(chained, f"'## Exit Criteria' has {len(non_numeric)} non-numeric progress "
+                        "fragment(s) — target and baseline must each carry a number")
+    scaffold_progress = [fragment for fragment in progress
+                         if PROGRESS_SCAFFOLD in fragment]
+    if scaffold_progress:
+        report(chained, f"'## Exit Criteria' has {len(scaffold_progress)} progress "
+                        "fragment(s) with the template metric scaffold")
+
+    single_shot = re.search(
+        r"^\s*[-*]\s*single-shot pass/fail,\s*no progress number:\s*\S",
+        section, re.IGNORECASE | re.MULTILINE)
+    if single_shot and SINGLE_SHOT_SCAFFOLD in section:
+        report(chained, "'## Exit Criteria' single-shot bullet still carries its "
+                        "template scaffold")
+    if not progress and not single_shot:
         report(chained, "'## Exit Criteria' carries no 'progress:' fragment and no "
                         "closing single-shot bullet — every check is one or the other")
-    # Whether a fragment names a number rather than a state is prose judgment —
-    # not this script's job, same rule as the mode-prediction reason.
 
 
 def check_delimiter_precondition(text, chained):

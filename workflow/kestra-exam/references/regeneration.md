@@ -27,7 +27,7 @@ non-events, guaranteed by the extractor's own pinned tests rather than by a rule
 ## 2. The plan
 
 ```bash
-python3 <skill>/scripts/exam_delta.py <run-dir> <exam-dir>
+python3 -B <skill>/scripts/exam_delta.py <run-dir> <exam-dir>
 ```
 
 Exit `0` on any successful analysis — **read the `scope:` line for the outcome**, not the exit code;
@@ -60,12 +60,13 @@ smaller.
 
 ### `full` — the `## External Interface` fingerprint moved
 
-The declared seam itself moved, and every check is driven through it. Regenerate **everything**. This is
-not delta-able and the plan says so rather than pretending: a check written against the old seam either
-fails to reach the new one (an infrastructure red that proves nothing) or reaches it accidentally, which
-is worse.
+The declared seam itself moved, and every surviving check is driven through it. Regenerate **every
+check whose AC still exists**, and delete checks for ACs removed in the same spec edit. This is not
+delta-able and the plan says so rather than pretending: a surviving check written against the old seam
+either fails to reach the new one (an infrastructure red that proves nothing) or reaches it accidentally,
+which is worse. A removed AC cannot be regenerated into the new one-row-per-current-AC manifest.
 
-Re-run `exam.py --audit-seam` after rewriting `SEAM` **and** the manifest's quoted External Interface
+Re-run `python3 -B exam.py --audit-seam` after rewriting `SEAM` **and** the manifest's quoted External Interface
 block; a `full` regeneration that updates the seam but not the quote leaves the audit passing against
 stale text.
 
@@ -103,7 +104,7 @@ regenerated.
 * A carried-over row keeps its **original** red-proof timestamp. That is honest and visible — the
   timestamp itself shows the evidence predates this generation, which is strictly better than restamping
   it with a date on which nothing was measured.
-* The delta red proof is invoked as `python3 exam.py --only C-3 C-7 --repo <clone>`, and **C-0 runs
+* The delta red proof is invoked as `python3 -B exam.py --only C-3 C-7 --repo <clone>`, and **C-0 runs
   regardless of `--only`**, because a delta red proof with no smoke is void by exactly the same rule as
   a full one.
 
@@ -145,4 +146,5 @@ exam(<slug>): re-anchor to surface <hash12> @ raise <sha12>
   something this skill configures on a user's behalf.
 
 Completion criterion for a regeneration: `git -C <exam-dir> log --oneline | wc -l` increased by exactly
-1, `exam_anchor.py` exits 0, and `exam_delta.py` re-run now prints `scope: current`.
+1, the pointer's `exam_commit` was refreshed to that new full `HEAD` before the gate,
+`exam_anchor.py` exits 0, and `exam_delta.py` re-run now prints `scope: current`.

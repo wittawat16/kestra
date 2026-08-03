@@ -43,12 +43,12 @@ BARE `assert` IS BANNED IN AN exam.py
     here: this harness refuses to run at all when `__debug__` is False.
 
 Usage (from an exam dir):
-    python3 exam.py                    # human table, C-0 first
-    python3 exam.py --json             # the machine contract, one object
-    python3 exam.py --only C-3 C-7     # delta subset; C-0 always runs too
-    python3 exam.py --list             # declared checks; touches no seam
-    python3 exam.py --audit-seam       # SEAM target vs manifest.md's quoted EI block
-    python3 exam.py --repo <path>      # run against a disposable clone
+    python3 -B exam.py                    # human table, C-0 first
+    python3 -B exam.py --json             # the machine contract, one object
+    python3 -B exam.py --only C-3 C-7     # delta subset; C-0 always runs too
+    python3 -B exam.py --list             # declared checks; touches no seam
+    python3 -B exam.py --audit-seam       # SEAM target vs manifest.md's quoted EI block
+    python3 -B exam.py --repo <path>      # run against a disposable clone
 
 Exit codes — four, because "the harness is broken" and "the feature fails" are
 different answers and one non-zero collapses them:

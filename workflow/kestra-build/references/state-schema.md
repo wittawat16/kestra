@@ -34,7 +34,9 @@ second copy here for convenience — two copies of a hash is two answers to "did
 
 `state.json` does gate one fold-time decision, read-only: kestra-build refuses to **re-fold** a run
 folder in which any stage's `status` is past `pending`, because overwriting this file mid-run destroys
-the resume checkpoints and orphans the commits that were the rollback points (`ticket-fold.md` §4).
+the resume checkpoints and orphans the commits that were the rollback points. Before F0 overwrites
+anything, the run's frozen validator enforces this with
+`python3 <run>/validate_workflow.py <run> --refold-guard` (`ticket-fold.md` §4).
 
 ## Per-stage state
 

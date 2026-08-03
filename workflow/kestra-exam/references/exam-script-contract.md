@@ -148,12 +148,12 @@ infrastructure. That is correct on both counts: the seam did answer, and the voi
 
 | Invocation | Does |
 |---|---|
-| `python3 exam.py` | human table, C-0 first |
-| `python3 exam.py --json` | one JSON object — the machine contract |
-| `python3 exam.py --only C-3 C-7` | that subset **plus C-0**; an undeclared id exits 3 |
-| `python3 exam.py --list` | id / ac / class / provenance / title, and the seam target; **touches no seam** |
-| `python3 exam.py --audit-seam` | the seam target must appear verbatim in `manifest.md`'s quoted EI block |
-| `python3 exam.py --repo <path>` | drive a disposable clone instead of the default root |
+| `python3 -B exam.py` | human table, C-0 first |
+| `python3 -B exam.py --json` | one JSON object — the machine contract |
+| `python3 -B exam.py --only C-3 C-7` | that subset **plus C-0**; an undeclared id exits 3 |
+| `python3 -B exam.py --list` | id / ac / class / provenance / title, and the seam target; **touches no seam** |
+| `python3 -B exam.py --audit-seam` | the seam target must appear verbatim in `manifest.md`'s quoted EI block |
+| `python3 -B exam.py --repo <path>` | drive a disposable clone instead of the default root |
 
 Four exit codes, because "the harness is broken" and "the feature fails" are different answers and one
 non-zero collapses them:

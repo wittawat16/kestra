@@ -56,24 +56,28 @@ and `kestra-build`'s stage agents don't have to guess at gaps left by a handoff.
 
 ### Two input modes, decided mechanically
 
-**In-chain** iff the invocation names a tracker ticket (a URL, or `#N` plus the repo).
-**Standalone** otherwise. It never goes looking for a ticket nobody named — no named ticket *is*
-the standalone signal, and guessing one is how unvetted intent gets in.
+**In-chain** iff the invocation names a tracker ticket (a URL, `#N` plus the repo, or a named local
+tracker file `<NN>-<slug>.md`). **Standalone** otherwise. It never goes looking for a ticket nobody
+named — no named ticket *is* the standalone signal, and guessing one is how unvetted intent gets in.
 
 | | In-chain | Standalone |
 |---|---|---|
 | Intent comes from | the named ticket, human-vetted | a hand-written idea or `/grilling` output, plus this session's clarifying pass |
 | Vetted gate | required — no vet, no work | none |
 | Commits | two: the ticket verbatim, then the raise | one: the raise |
-| `> Spec-ticket:` / `> Vetted:` preamble lines | written | never written |
+| `> Spec-ticket:` / `> Vetted:` preamble lines | URL-backed only; local-file chains stay unmarked | never written |
 | `needs_ba` silence on intent | bounces upstream | asked here and now, answer cited `Q<n>` |
-| End-of-pass validator | the five template checks are `FAIL` | the same five print `WARN` |
+| End-of-pass validator | URL-backed: five `FAIL`s; local-file: `WARN` because deliberately unmarked | the same five print `WARN` |
 
 **Standalone is a first-class path, not a degraded one.** The vetted gate exists because in-chain
 nobody is watching the moment intent gets invented; standalone has the human in the loop by
 construction — they invoked it, in this session, and they answer the questions. Same behavior,
 different guarantee. Standalone keeps the whole clarifying pass: a rough ask ("add CSV export")
 still gets a short scope/error-state/ambiguity interview before anything is written.
+
+A named local tracker file remains in-chain: its sibling `.vet` supplies the content-hash gate and
+it still produces the two adjacent commits. It omits the URL-only preamble marker, so its five
+conditional validator checks WARN; that is a transport limitation, not permission to skip vetting.
 
 ### The vetted gate, and the two-commit raise (in-chain)
 
@@ -147,8 +151,8 @@ Coverage Map, a `## External Interface` section with real content, exactly one r
 mode-prediction fact, a `## Exit Criteria` section with its stop head and `progress:` fragments,
 and the delimiter precondition. Marker present ⇒ `FAIL`; absent ⇒ `WARN`.
 A marked spec is one this repo's own skill produced from a vetted ticket, so its template is a
-contract; an unmarked spec is hand-written, standalone or foreign, and the same missing section
-proves nothing — every pre-existing check behaves identically in both modes. If no copy of the
+contract; an unmarked spec is local-file-tracked, hand-written, standalone or foreign, and the same
+missing section alone proves nothing — every pre-existing check behaves identically in both modes. If no copy of the
 scripts can be found at all, it prints one `WARN`, self-applies the checklist and continues:
 `kestra-spec` must not hard-depend on `kestra-build` being installed. Copy **both scripts or
 neither**, though: with `validate_spec.py` present but `requirement_surface.py` missing, the
