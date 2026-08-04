@@ -40,7 +40,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # under the target skills dir — Claude Code discovers skills one level deep,
 # so the group folder is repo-organization only, not part of the install layout.
 SKILLS=(
-  workflow/kestra-spec workflow/kestra-build workflow/kestra-run workflow/kestra-catalog
+  workflow/kestra-spec workflow/kestra-build workflow/kestra-run
   productivity/givename
   meta/meta-designer meta/meta-dev meta/meta-qa meta/meta-test-review
   meta/meta-review meta/meta-security meta/meta-devops meta/meta-debug
@@ -48,9 +48,11 @@ SKILLS=(
 )
 
 # Retired: meta-pm, meta-ba, meta-sa, meta-architect — workflow/kestra-spec does all four inline
-# in one pass. Removed from ~/.claude/skills on --update so a stale installed copy can't keep
-# triggering after the source is gone.
-RETIRED_SKILLS=(meta-pm meta-ba meta-sa meta-architect)
+# in one pass. Also kestra-catalog: a cross-run index only pays off at a run count this repo has
+# not reached, and per-run acceptance-tests.csv is now a better input than the markdown it parsed.
+# Removed from ~/.claude/skills on --update so a stale installed copy can't keep triggering after
+# the source is gone.
+RETIRED_SKILLS=(meta-pm meta-ba meta-sa meta-architect kestra-catalog)
 
 MODE="copy"          # copy | link
 SCOPE="global"        # global | project
