@@ -1,0 +1,42 @@
+Test Case ID,Source Ref,Module/Feature,Test Case Title,Preconditions,Test Steps,Test Data,Expected Result,Priority,Test Type,Automation
+TC-001,AC-1,Spec Coverage Check,Full coverage prints no coverage finding,"A temp folder holding a spec with ids AC-1, AC-2, BR-1 and an acceptance-tests.csv whose rows reference all three","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code (echo $?)","Spec ids: AC-1, AC-2, BR-1; CSV Source Refs: AC-1, AC-2, BR-1","No printed line contains 'AC-', 'BR-', or the word coverage; exit code is 0",High,Functional,Auto
+TC-002,"AC-2, EC-1",Spec Coverage Check,Missing CSV warns once and does not fail,"A temp folder holding only 0-spec.md, no acceptance-tests.csv","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Count lines starting with WARN that name acceptance-tests.csv
+3. Read the exit code","Spec ids: AC-1; CSV: absent","Exactly one WARN line names acceptance-tests.csv as not found; no FAIL line is printed; exit code is 0",High,Functional,Auto
+TC-003,AC-3,Spec Coverage Check,Spec id with no row fails and names the id,"A temp folder whose spec declares AC-1 and AC-2 and whose CSV references only AC-1","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","Spec ids: AC-1, AC-2; CSV Source Refs: AC-1","A line starting with FAIL: contains the string AC-2 and does not contain AC-1; exit code is 1",High,Functional,Auto
+TC-004,AC-4,Spec Coverage Check,Source Ref naming no spec id fails and names the row,"A temp folder whose spec declares AC-1 only, and whose CSV has row TC-900 with Source Ref AC-7","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","Spec ids: AC-1; CSV row: TC-900 / AC-7","A line starting with FAIL: contains both AC-7 and TC-900; exit code is 1",High,Functional,Auto
+TC-005,"AC-5, EC-2",Spec Coverage Check,Spec carrying no ids skips both directions,"A temp folder whose spec text contains no AC-, BR-, EC-, or DS- token, with a populated CSV present","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","Spec ids: none; CSV rows: 2","A WARN line states the spec carries no ids; no FAIL line mentions coverage; exit code is 0",High,Functional,Auto
+TC-006,"AC-6, EC-5",Spec Coverage Check,Unbalanced CSV quoting warns instead of crashing,"A temp folder whose acceptance-tests.csv contains a row with an opening double-quote and no closing one","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp> 2>err.txt
+2. Read stdout and the contents of err.txt
+3. Read the exit code","CSV row: \"TC-001,AC-1,unterminated","A WARN line carries the parser error text; err.txt contains no line starting with 'Traceback'; exit code is 0",High,Functional,Auto
+TC-007,"AC-6, EC-5",Spec Coverage Check,Non-UTF-8 CSV bytes warn instead of crashing,"A temp folder whose acceptance-tests.csv contains the raw byte 0xFF","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp> 2>err.txt
+2. Read stdout and the contents of err.txt
+3. Read the exit code","CSV byte at offset 0: 0xFF","A WARN line names a decoding error; err.txt contains no line starting with 'Traceback'; exit code is 0",Medium,Functional,Auto
+TC-008,AC-7,Regression,Existing spec output is unchanged apart from the new warn,"The repo's own workflow/runs/order-cancellation-refund/0-spec.md, unmodified, with no CSV beside it; the pre-change output captured to before.txt","1. Run the current script and save output to before.txt (do this before applying the change)
+2. Apply the change
+3. Run: python3 validate_spec.py workflow/runs/order-cancellation-refund/0-spec.md . > after.txt
+4. Run: diff before.txt after.txt
+5. Read the exit code of the script run","Spec: workflow/runs/order-cancellation-refund/0-spec.md","diff reports exactly one added line, and that line is the EC-1 WARN naming acceptance-tests.csv; the script's exit code is 0",High,Functional,Auto
+TC-009,"AC-8, EC-6",Spec Coverage Check,Duplicate Test Case ID warns,"A temp folder whose CSV has two rows both carrying Test Case ID TC-004, each with a Source Ref that exists in the spec","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","CSV rows: TC-004 (AC-1), TC-004 (AC-2)","A WARN line names TC-004 as duplicated; no FAIL line is printed; exit code is 0",Medium,Functional,Auto
+TC-010,"AC-9, EC-4",Spec Coverage Check,CSV without a Source Ref column warns and skips the reverse check,"A temp folder whose CSV header is 'Test Case ID,Ref,Title' with one data row","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","CSV header: Test Case ID,Ref,Title","A WARN line lists the three headers actually found; no FAIL line names a Source Ref; exit code is 0",Medium,Functional,Auto
+TC-011,"AC-10, EC-7",Spec Coverage Check,One cell naming two ids covers both,"A temp folder whose spec declares AC-1 and AC-2, and whose CSV has a single row with Source Ref cell 'AC-1, AC-2'","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","Spec ids: AC-1, AC-2; CSV Source Ref cell: \"AC-1, AC-2\"","No FAIL line names AC-1 or AC-2; exit code is 0",Medium,Functional,Auto
+TC-012,EC-3,Spec Coverage Check,Header-only CSV warns distinctly from a missing file,"A temp folder whose acceptance-tests.csv contains the header row and nothing else","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","CSV: header row only, 0 data rows","A WARN line states the file has no data rows, and its wording differs from the file-not-found WARN of TC-002; exit code is 0",Medium,Functional,Auto
+TC-013,EC-8,Spec Coverage Check,An id mentioned only in prose counts as defined,"A temp folder whose spec declares AC-1 as a bullet and mentions AC-9 only inside a Risks paragraph, with a CSV row referencing AC-9","1. Run: python3 validate_spec.py <tmp>/0-spec.md <tmp>
+2. Read the printed output
+3. Read the exit code","Spec: AC-1 defined, AC-9 in prose only; CSV Source Refs: AC-1, AC-9","No FAIL line names AC-9; exit code is 0 (documents the known limit rather than asserting it is desirable)",Low,Functional,Auto

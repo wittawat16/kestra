@@ -7,7 +7,9 @@ description: >
   inline business-rule clarification, inline UI/design notes, inline solution-
   architecture decisions, runtime invariants and external-dependency reality
   constraints, a codebase survey with verified file paths, and an execution-verified
-  self-check — all in one pass, one output file. Use this whenever the user wants a
+  self-check — all in one pass. Outputs two files: 0-spec.md, and an
+  acceptance-tests.csv table a non-engineer can execute and sign off before any test
+  code exists. Use this whenever the user wants a
   spec that kestra-build can consume without an agent having to guess or interpret
   gaps: "write the spec for kestra-build", "turn this idea into 0-spec.md", "make a
   spec kestra-build can use directly", "sharpen this into a build-ready spec", or
@@ -18,10 +20,12 @@ description: >
 
 # kestra-spec — One-Pass, Build-Ready Spec for kestra-build
 
-**Role:** Turn a sharpened idea into the single `0-spec.md` that `kestra-build` reads to derive a
-`workflow.yaml` — one pass, one file, covering PM (spec-sharpening), BA (business rules), design
+**Role:** Turn a sharpened idea into the `0-spec.md` that `kestra-build` reads to derive a
+`workflow.yaml` — one pass, covering PM (spec-sharpening), BA (business rules), design
 notes, and SA (architecture decisions) inline plus a verified codebase survey, so no `kestra-build`
-stage agent has to guess. Separate: [`meta-designer`](../../meta/meta-designer/SKILL.md), which
+stage agent has to guess. Plus a second file, `acceptance-tests.csv`: the same acceptance criteria
+rendered as steps a person with no access to the code can execute and sign off. Separate:
+[`meta-designer`](../../meta/meta-designer/SKILL.md), which
 produces an actual openable artifact (HTML mockup/wireframe) that this skill's Design Notes feed
 into, not compete with.
 
@@ -45,7 +49,7 @@ the input already arrived pre-sharpened.
 
 ---
 
-## Process — one continuous pass, one sitting, one output file
+## Process — one continuous pass, one sitting, two output files
 
 ### 1. Sharpen into testable acceptance criteria (PM pass)
 
@@ -62,6 +66,12 @@ And the order status becomes "cancelled"
 ```
 Matters most where `needs_ba: true` — forces every branch into its own visible line instead of
 hiding inside prose. Skip it for pure data-shape/perf ACs.
+
+**Give every AC and every edge case a stable id** — `AC-1`, `AC-2`…, `EC-1`, `EC-2`… (business
+rules already get `BR-n` in step 3; design states get `DS-n` under `needs_ui`). Step 7's table and
+`kestra-build`'s `generate-tests` both reference these ids, and "the third bullet under Acceptance
+Criteria" is not a reference that survives one edit to the list. Ids are append-only: a deleted AC
+leaves its number retired rather than renumbering the ones after it.
 
 ### 2. Set the flags — mechanically
 
@@ -143,16 +153,83 @@ Keep this list in sync with `kestra-build`'s spec-review brief — change one, c
 Fix what this turns up. Anything unresolved → **Open Items** — an honest open item passes
 `spec-review`, a contradiction doesn't.
 
-### 7. Write `0-spec.md`
+### 7. Render the acceptance criteria as a table a non-engineer can execute
 
-One file. Every section step 3 produced content for gets folded in under its own heading below —
-no separate `ba.md`/`design.md`/`sa.md`/`1-plan.md`.
+Same content, different reader. `0-spec.md` is written for the stage agents; this table is written
+for whoever has to *approve* what will be tested — a QA lead, a product owner, a client — before
+any test code exists and while a change is still cheap.
+
+Why here and not later: `kestra-build` can generate a `design-tests` stage that stops mid-run for
+the same approval, but that adds a human stop to a pipeline whose default is zero, and it sits
+downstream of a freeze where a rejected row costs a `reworking` bounce. Doing it here folds the
+approval into the moment a human already reads the spec, and leaves the generated workflow fully
+automatic.
+
+* **One row per scenario, every row carrying the id it came from** — `AC-n`, `BR-n`, `EC-n`,
+  `DS-n`. Every id enumerated in the spec appears in at least one row; a row whose id resolves to
+  nothing is scope you invented, not a bonus test.
+* **Split an AC that hides more than one outcome.** "Refunded, inventory released, all in one
+  atomic operation" needs the happy-path row *and* a row that fails when the operation is only
+  half-applied — one row per AC would let a half-working implementation pass, which is the exact
+  false positive the table exists to catch.
+* **The Expected Result bar:** could a person with no access to the code disagree with the tester
+  about whether it passed? If yes, rewrite it. "Moves smoothly" fails; "within 500ms", "403
+  Forbidden shown", "row disappears from the list" pass. This is step 6 item 3 applied to a reader
+  who can't fall back on reading the implementation — an AC that survives here is testable in a
+  stronger sense than one that only survives the spec's own review.
+* **Test Data holds literal values**, never "valid input".
+* **A row nobody intends to automate is marked `Manual` with a reason** — an unmarked row and a
+  deliberately-manual one are indistinguishable otherwise.
+* **Runtime Invariants get a row only where the violation is observable from outside.** One
+  detected by an internal assertion has no black-box row; say so rather than inventing one.
+
+An id you cannot write a row for is a finding, not a rounding error: either the AC isn't testable
+(fix it in step 1) or it's genuinely internal (say which, in **Open Items**).
+
+**Run the two-direction check before you call the table done — don't eyeball it.** Step 6 item 5's
+standard applies here too, and this is the one claim in the whole skill you can settle with a
+command:
+
+```bash
+python3 - <<'PY'
+import re, csv
+from pathlib import Path
+d = Path("<run-folder>")
+ids = set(re.findall(r"\b(?:AC|BR|EC|DS)-\d+\b", (d / "0-spec.md").read_text()))
+refs = set()
+for row in csv.DictReader((d / "acceptance-tests.csv").open(newline="")):
+    refs |= set(re.findall(r"\b(?:AC|BR|EC|DS)-\d+\b", row["Source Ref"] or ""))
+print("uncovered:", sorted(ids - refs), "| unresolved:", sorted(refs - ids))
+PY
+```
+
+Both lists empty, or every remaining entry explained in **Open Items** — nothing else counts as
+done. Measured on this skill's own first real run: the check found six ids whose rows existed but
+whose `Source Ref` named only the AC and not the edge case it also covered — invisible to reading,
+obvious to the command. Use `csv.DictReader`, never `cut -d,` or `split(",")`: a quoted cell
+containing a comma silently truncates under both, and a coverage gate that always passes is worse
+than no gate.
+
+**Never write a concrete id number in prose that isn't a real reference — use the placeholder form
+`AC-<n>` instead.** A sentence describing a *fixture* ("a spec with ids AC-1, AC-2, BR-1") is
+indistinguishable from a definition to the check above: the same run reported a business-rule id
+that existed nowhere but inside one AC's own example text, on a spec with `needs_ba: false`.
+**Backticks do not help** — the regex sees inside code spans, so quoting a phantom id leaves it just
+as visible; only changing the digits to `<n>` removes it. Confirmed by re-running the check after
+wrapping one in backticks: still reported. The cost of the convention is nothing; the cost of
+skipping it is a phantom id that gets either a fabricated test row or an Open Item explaining a
+non-problem.
+
+### 8. Write both files
+
+`0-spec.md` — every section step 3 produced content for folded in under its own heading below, no
+separate `ba.md`/`design.md`/`sa.md`/`1-plan.md`. Plus `acceptance-tests.csv` from step 7.
 
 ---
 
-## Output: `0-spec.md`
+## Output: `0-spec.md` + `acceptance-tests.csv`
 
-Default: `<repo>/workflows/runs/<feature-id>/0-spec.md` (next to `kestra-build`'s output). Ask if the
+Default: `<repo>/workflows/runs/<feature-id>/` (next to `kestra-build`'s output). Ask if the
 repo uses a different convention.
 
 **Written for `kestra-build`'s stage-derivation pass and every generated stage's spawned subagent,
@@ -183,8 +260,8 @@ decorative prefix is pure overhead for a subagent grepping section names.
 * [ ] [behavioral requirement — Given-When-Then where it clarifies a scenario, else a bullet fragment]
 
 ## Edge Cases & Error States
-* **[edge case]:** [how it's handled]
-* **[failure mode]:** [expected behaviour]
+* **EC-1 — [edge case]:** [how it's handled]
+* **EC-2 — [failure mode]:** [expected behaviour]
 
 ## Runtime Invariants
 *(must hold every time this runs — a violation halts, refuses, or alerts; never proceeds silently.)*
@@ -251,12 +328,12 @@ Omit a subsection only when genuinely not applicable, and say so.)*
 * [new packages / schema changes / migrations — or "none"]
 
 ## Acceptance Criteria
-* [ ] [testable, measurable — includes design ACs; Given-When-Then for behavioral ACs]
+* [ ] **AC-1:** [testable, measurable — includes design ACs; Given-When-Then for behavioral ACs]
 
 ## AC Coverage Map
-| AC | Covered by (files/steps) |
-|----|--------------------------|
-| [ac text] | [file(s) / step] |
+| AC | Covered by (files/steps) | Test rows |
+|----|--------------------------|-----------|
+| AC-1 | [file(s) / step] | TC-001, TC-002 |
 
 ## Risks & Watch-outs
 * [shared files, race conditions, migrations needing care — or "none"]
@@ -274,6 +351,32 @@ Omit a subsection only when genuinely not applicable, and say so.)*
 * [anything genuinely unresolvable — or "none"]
 ```
 
+### `acceptance-tests.csv`
+
+Header, exactly — column order is load-bearing, `kestra-build`'s `generate-tests` reads it
+positionally:
+
+```
+Test Case ID,Source Ref,Module/Feature,Test Case Title,Preconditions,Test Steps,Test Data,Expected Result,Priority,Test Type,Automation
+```
+
+| Column | Rule |
+|---|---|
+| Test Case ID | `TC-NNN`, append-only — never renumber an existing row |
+| Source Ref | a real id from the spec: `AC-3`, `BR-1`, `EC-2`, `DS-1` |
+| Test Case Title | what is being proven, action-shaped — not "test the cancel button" |
+| Preconditions | exact state to set up, with concrete records/ids |
+| Test Steps | numbered, executable by someone who has never seen the feature |
+| Test Data | literal values |
+| Expected Result | observable and decidable without reading the code |
+| Priority | High (core) / Medium (supporting) / Low |
+| Test Type | Functional / Security / Performance / Usability |
+| Automation | `Auto`, or `Manual — [reason]` |
+
+Execution results never come back into this file — it's the approved contract. They belong in a
+separate `acceptance-results.csv` (`Test Case ID,Actual Result,Status,Tester Name,Execution
+Date,Comments`), written at run time, joined on Test Case ID.
+
 ---
 
 ## Stopping rule
@@ -288,10 +391,26 @@ Done once:
   "does not guarantee"
 - **Step 6 ran, including item 5** — every checkable claim was actually run or read against real
   code, not just cross-checked on paper
+- Every AC, BR, edge case, and design state carries an id, and every id appears in at least one
+  row of `acceptance-tests.csv` — or is named in **Open Items** as observable-from-inside-only
+- Every `Source Ref` in the table resolves to an id that exists in `0-spec.md`
+- **Step 7's two-direction check was actually run**, output pasted — not asserted from reading
 - No silent gaps — unresolved → **Open Items**
 
 Non-empty **Open Items** → say so plainly at handoff.
 
 ## Handoff
 
-→ `kestra-build`, which reads this `0-spec.md` directly and can skip straight to deriving stages.
+→ **A human, first.** `acceptance-tests.csv` is the artifact they sign off — this is the approval
+point that keeps the generated workflow free of a mid-run `human_approval` stop. Say plainly that
+approving it freezes what will be tested, and that a change after `kestra-build` runs costs a
+`reworking` bounce rather than an edit.
+
+→ Then `kestra-build`, which reads `0-spec.md` directly and can skip straight to deriving stages.
+Its `generate-tests` brief translates each approved row 1:1 into test code with the Test Case ID
+embedded in the test name, so coverage stays checkable by grep — and it generates **no**
+`design-tests` stage, since the approval already happened here.
+
+**If the spec changes after approval** — `spec-review` rewording an AC, a new edge case — the table
+is stale the moment an id it references changes meaning. Regenerate the affected rows and get them
+re-approved rather than letting the two drift; the ids are what make the drift detectable at all.

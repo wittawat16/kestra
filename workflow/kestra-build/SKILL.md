@@ -90,6 +90,15 @@ kestra-build needs a spec with testable acceptance criteria. If the user hands y
   into a short numbered AC list and show it back for a quick confirm before deriving stages — don't
   silently invent ACs the user didn't say.
 
+**`acceptance-tests.csv` next to the spec — check for it before deriving stages.** `kestra-spec`
+emits one: every AC/BR/edge-case/design-state rendered as a row a non-engineer can execute, already
+approved by a human at spec handoff. Two consequences, both mechanical. **Generate no `design-tests`
+stage** — the approval that stage exists to collect already happened, upstream and cheaper, and
+adding it back means stopping a run to re-approve what someone signed. And `generate-tests` writes
+no scenario table of its own; the approved table *is* the table, so its brief translates rows rather
+than inventing scenarios (see step 3's `generate-tests` bullets). No such file → nothing changes,
+follow the default guidance below.
+
 **When a spec arrives without the sections this file expects.** Not every spec comes from
 `kestra-spec` — a perfectly good `0-spec.md` from another tool, or one written before a section
 existed, may carry acceptance criteria and flags but no **Runtime Invariants** and no **Reality
@@ -327,8 +336,26 @@ implementation-specific instructions (what a script-only stage's brief should sa
      discover it from a confusing halt. Its `on_fail` is `reworking`, not `fixing`: if the tests no longer
      pass their own checks at the moment of freezing, something is wrong upstream and quietly
      patching them here would bypass whatever review already approved them.
-   - **Default: have `generate-tests` write its own scenario table as a first artifact in the same
-     spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1 traceable), *before* writing
+   - **When `acceptance-tests.csv` sits next to the spec, `generate-tests` translates it instead of
+     planning its own scenarios.** Say so in the brief, in these terms: one approved row → one
+     scenario, the row's Given/When/Then wording preserved, and the row's `Test Case ID` embedded in
+     the test name (`it("[TC-004] then exactly $90 is refunded")`). No scenario the table doesn't
+     list; no row silently dropped. Rows whose `Automation` column reads `Manual — …` are skipped
+     deliberately and named in the stage's report, not treated as missing. Add the coverage check to
+     the stage's own `exit_criteria` so it's mechanical rather than trusted — every `Test Case ID` in
+     the CSV must appear in the test sources:
+     ```
+     cut -d, -f1 <run-folder>/acceptance-tests.csv | tail -n +2 | \
+       while read id; do grep -rq "\[$id\]" <test-path>/ || exit 1; done
+     ```
+     Verify that command runs standalone at step 7's dry-run like any other `exit_criteria.run` —
+     the CSV's quoting can break a naive `cut` on a row whose first field is quoted, and a coverage
+     gate that always passes is worse than none. The CSV joins `generate-tests`'s `write_scope` (a
+     rejected row gets fixed together with its test) but stays **out** of `freeze-tests`'s, unless
+     the user wants the approved table itself hash-frozen — ask rather than assuming; freezing it
+     turns a wording fix into a `reworking` bounce.
+   - **Default, when no such table exists: have `generate-tests` write its own scenario table as a
+     first artifact in the same spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1 traceable), *before* writing
      test code — not as a separate `design-tests` stage. Be honest about what a separate stage with
      `exit_criteria.type: artifact_exists` actually buys: nobody reviews that table (nothing gates
      on more than its existence, and `kestra-run`'s default HITL posture auto-advances through an
@@ -340,10 +367,13 @@ implementation-specific instructions (what a script-only stage's brief should sa
      extra spawn cost, and `on_fail.target: generate-tests` can legally edit both the table and the
      tests together since they're the same stage's `write_scope`.
    - **Only split into a real, separate `design-tests` stage in two cases**, both narrow: (1) the
-     user explicitly asks to approve the scenario list before any test code exists — then give it
-     `exit_criteria.type: human_approval` on the table, never `artifact_exists`, so the split
+     user explicitly asks to approve the scenario list before any test code exists **and no
+     `acceptance-tests.csv` came with the spec** — then give it `exit_criteria.type: human_approval`
+     on the table, never `artifact_exists`, so the split
      actually buys the assurance its name implies rather than recreating the same
-     assurance-without-a-mechanism gap one level up; or (2) the spec is genuinely too large for one
+     assurance-without-a-mechanism gap one level up. With the CSV present this case is already
+     satisfied upstream; generating the stage anyway asks a human to approve the same scenarios
+     twice, the second time mid-run where rejecting one is far more expensive. Or (2) the spec is genuinely too large for one
      spawn to write the full scenario table plus all test code — context-size decomposition, the one
      benefit user opt-in alone can't reach, since the user won't know to ask for it. Flag this case
      explicitly in the mode/stage audit line ("spec too large for one spawn to write table plus all
