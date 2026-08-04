@@ -1,0 +1,21 @@
+VERDICT: CHANGES_REQUESTED
+
+Scope: TKT-9 / AC-4 — provider-failure path in `src/reversals/service.js`.
+
+| Sev | Finding | file:line |
+|---|---|---|
+| Blocking | `catch` collapses *every* provider error into "did not go through". The spec states the provider does **not** guarantee that a timeout means the reversal did not happen; EC-1 requires an ambiguous outcome to park in `pending_verification` keyed by the idempotency key for the reconciler, with no downstream effect and no retry. | service.js:6-9 |
+| Blocking | `retryable: true` on an unknown-outcome failure directly violates the invariant "A `pending_verification` reversal is never retried by any path" — this is the double-refund path. Retryable may only be returned for a definitive provider *decline*. | service.js:8 |
+| Blocking | No idempotency-key uniqueness check before the external call. Invariant "No order is reversed twice for the same idempotency key" requires the guard *before* any external call; AC-6/EC-6 require returning the existing record and refusing a reused key with different parameters. | service.js:2-5 |
+| Blocking | `computeAmount(order, scope)` derives the amount from local order state. FR and BR-2 require the amount to come from the provider's own record of prior reversals; the invariant additionally requires asserting `amount ≤ provider_balance` on a value read in the same request, immediately before the call. Neither exists. AC-5/EC-2 (refuse before any external call) is therefore unreachable. | service.js:3 |
+| Blocking | AC-4's "left exactly as it was" is only true on the provider-failure path by accident of ordering. There is no saga and no compensation: once `provider.reverse` succeeds, a throw from `tax.reverse` leaves money moved with the order untouched — the opposite of AC-7/EC-4, which requires the whole reversal refused with the order unchanged (state `compensating`). | service.js:10-15 |
+| Blocking | `ledger.write` failure propagates as a plain throw. EC-10 and the money/ledger invariant require the `ledger_pending` marker plus a page-severity alert, never a rollback and never a silent drop. No legs-sum-to-zero assertion before commit either (AC-10). | service.js:13 |
+| Blocking | `loyalty.clawback` is awaited inline and unguarded, so a loyalty outage aborts the function after money, tax, stock and ledger have all landed, leaving the order stuck short of `reversed`. EC-5/AC-8 require the reversal to proceed with the adjustment queued as a compensating job. | service.js:14 |
+| Major | `inventory.release(order.reservationId)` releases one order-level reservation regardless of scope. FR requires release only for unshipped lines, with delivered lines moving to `awaiting_return`; the dependency also treats a double release as an error, and nothing here guards replay. | service.js:12 |
+| Major | Status jumps straight from implicit `requested` to `reversed`, bypassing the declared machine (`validated` → `money_pending` → `money_done` → `tax_done`). The invariant requires a guard on every transition, refusing and alerting rather than forcing the target state. Dual-approval codes (AC-20/AC-21) can never park in `awaiting_approval`. | service.js:16 |
+| Major | No notification is emitted; FR requires exactly one customer notification per reversal, and the matrix requires a finance notification when `pending_verification` is entered. | service.js:1-17 |
+| Minor | The comment asserts "nothing was applied", which is the exact claim the provider's contract refuses to make. A wrong comment here is worse than none — it will be read as licence to retry. | service.js:7 |
+
+Not assessed (out of this slice, but the enclosing service will need them): FX/multi-currency refusal (AC-26/27), fraud-hold deferral (AC-23), flag-read-at-saga-start (AC-28), marketplace-seller legs (AC-17/18), gift-card tender ordering (AC-15/16).
+
+Suggested minimum for AC-4 to pass honestly: distinguish decline from timeout at the client boundary, park timeouts in `pending_verification` with no retry and a finance notification, return the retry-able error only for declines, and add the pre-call idempotency and provider-balance guards so "left exactly as it was" is enforced rather than incidental.

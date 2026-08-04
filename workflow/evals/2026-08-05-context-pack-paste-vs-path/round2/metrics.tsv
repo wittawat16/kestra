@@ -1,0 +1,13 @@
+run	self_report	how	tool_uses	tokens	duration_ms
+A-implement-3	yes	whole-file	2	133462	33274
+A-implement-1	yes	none	2	133534	37124
+A-implement-2	yes	whole-file	3	133558	37143
+B-implement-1	yes	whole-file	4	133741	41943
+B-implement-2	yes	whole-file	4	133848	42597
+B-implement-3	yes	whole-file	4	133719	38432
+A-review-1	yes	whole-file	2	134487	43519
+A-review-2	yes	none	3	134695	50628
+A-review-3	yes	none	2	134596	46060
+B-review-2	yes	partial	4	126847	47738
+B-review-3	yes	whole-file	4	135065	51360
+B-review-1	yes	whole-file	4	135114	54718
