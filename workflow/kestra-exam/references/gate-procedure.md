@@ -12,6 +12,11 @@ recipe, its exit semantics, and — importantly — the statement that **all of 
 prevention**. That framing and its residual list are cited here **by reference and not paraphrased**,
 because a paraphrase of an honest-limits list is how the limits get softened.
 
+**The six sections:** 1. which tracker hosts what · 2. the four sweeps · 3. the exemption boundary,
+exactly two classes · 4. pointer discipline (GitHub transport, the fixed body block, regeneration
+edits in place, local-file transport) · 5. hash-vs-pointer comparison at the gate (including what
+`manifest_sha256` does and does not cover) · 6. the gate's own stopping rule.
+
 ---
 
 ## 1. Which tracker hosts what

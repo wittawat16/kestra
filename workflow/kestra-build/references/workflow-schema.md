@@ -3,6 +3,15 @@
 One file per feature. Read `design-principles.md` before filling in `on_fail` / `freeze_after` —
 the fields only make sense in light of *why* they exist.
 
+**What's in here**, so one field doesn't cost you 700 lines:
+
+- **Top-level** — `feature`, `source_spec`, `mode`, and `spec_anchor` + `tickets` (the anchor triple
+  and the ticket map, for a sliced fold only)
+- **Per-stage fields** — `model` · `effort` · `brief` · `exit_criteria` · the verdict artifact ·
+  `on_fail` · `branches`
+- **Worked example** — csv-export, complete and copyable; the longest section by far
+- **The `design` stage** — not in the worked example, since csv-export has no UI
+
 ## Top-level
 
 ```yaml

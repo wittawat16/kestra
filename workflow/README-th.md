@@ -538,6 +538,7 @@ match ได้มากกว่าหนึ่งอันคือ hard fail 
 | [`kestra-exam/references/manifest-schema.md`](kestra-exam/references/manifest-schema.md) | เจ็ดหัวข้อของ `manifest.md` ตามลำดับตายตัว, ทุกคอลัมน์, ชุดคำ Red-proof แบบปิด, สูตร fingerprint และ verdict contract แบบ verbatim |
 | [`kestra-exam/references/gate-procedure.md`](kestra-exam/references/gate-procedure.md) | gate ก่อนส่งมอบ — sweep ต่างๆ กับขอบเขตการยกเว้น, วินัยเรื่อง pointer และการเทียบ hash กับ pointer; การสร้างตัว runner เองอยู่นอกขอบเขต |
 | [`kestra-exam/references/regeneration.md`](kestra-exam/references/regeneration.md) | อะไรขยับเมื่อ spec ขยับ — delta map, fingerprint, scope สี่แบบ, การ carry over และ commit subject ของ exam dir |
+| [`kestra-run/scripts/stage_transition.py`](kestra-run/scripts/stage_transition.py) | การตัดสิน fixing/reworking/escalation ในรูปฟังก์ชันบริสุทธิ์ — เป็น executable spec ของขั้น 1/3/5/6 ใน kestra-run ที่เทสต์ได้ครบทุกกรณีโดยไม่ต้อง spawn อะไรเลย หลักการเดียวกับที่ `validate_workflow.py` มาแทนการเพ่งดู workflow ที่ generate ออกมา รองรับ stage เดียว ไม่ครอบการรวมความล้มเหลวของ stage พี่น้องโดยเจตนา **ไม่มีใคร import มัน และชุดเทสต์ของมันหายไปแล้ว** — การกู้เทสต์คืนเป็นช่องว่างที่ยังเปิดอยู่ ใส่ไว้ที่นี่เพื่อให้ไฟล์นี้หาเจอได้เป็นอย่างน้อย |
 
 ## สิ่งที่ตั้งใจ "ไม่ทำ"
 

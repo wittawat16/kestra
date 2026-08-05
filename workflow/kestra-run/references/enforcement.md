@@ -4,6 +4,16 @@ Every check here must be a real command you actually run, with the real output p
 act on it. This file exists so you don't improvise slightly-wrong versions of these from memory —
 the whole design depends on these being precise.
 
+**What's in here**, in the order a stage needs it:
+
+- **Building the context pack** — before a spawn
+- **Anchored surface check** — once per batch, before spawning
+- **`write_scope` check** — the diff, and snapshotting a violation before reverting it
+- **Test-hash** — computing the freeze and checking it
+- **Semantic-diff hashing** — `seen_diffs` no-progress detection, then declared progress, then
+  failure-signature hashing (`seen_failures`, diagnostic only)
+- **Commit-per-stage**, then **Rollback**
+
 ## Building the context pack (before a spawn)
 
 The pack SKILL.md's step 2 requires is assembled from commands you already have to run anyway.
