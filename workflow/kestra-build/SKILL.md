@@ -465,60 +465,14 @@ per-spec.
      written before design.md exists, while `generate-tests` is simultaneously forbidden from
      inventing rows the plan lacks — a coverage gap with no legal path to close it.
    - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
-     The obvious version of this stage checks that the spec file exists, is non-empty, and contains
-     an acceptance-criteria heading. That passes for any spec-shaped document, including one that's
-     confidently wrong, which makes it a stage that costs a step and buys nothing. Consider where
-     this stage sits: it runs before a single test exists, so a defect it catches costs one edit to
-     one document, while the same defect caught after the freeze costs a `reworking` bounce, and
-     caught after release costs whatever the release costs. Nothing else in the file has that ratio.
-     Give it real content to check: that the spec's **Runtime Invariants** each name what actually
-     happens on violation (and that none of them resolve to "log it and carry on," which is the
-     absence of an invariant described in the vocabulary of having one); that its **Reality
-     Constraints** are either filled in or explicitly marked not-applicable with a reason —
-     especially what each external dependency does *not* guarantee, since an empty answer there is
-     the seed of a test double that is never wrong in testing and never right in production; and
-     that these don't contradict the acceptance criteria or each other (an AC asserting an exact
-     result while a dependency is documented as not guaranteeing completeness is a contradiction
-     someone has to resolve now, not during implementation). Keep the enforcement mechanical the
-     same way `review` does it: the brief asks for the analysis and a written verdict artifact, and
-     `exit_criteria` greps that artifact for the verdict line. This is the same list `kestra-spec`'s
-     own step-6 self-check runs before handing the spec over — deliberately, so a spec produced by
-     that skill arrives having already cleared it and this stage costs one cheap pass instead of a
-     bounce; keep the two lists in sync if you change either. When the spec lacked these sections
-     and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
-     rather than assuming a human already blessed it.
-
-     **Chain a mechanical pre-check ahead of the verdict grep.** This stage's `exit_criteria` runs the
-     run folder's **own** copy of `validate_spec.py`, emitted by step F5 above (the single owner of
-     that `cp`, which emits all three scripts on every fold) alongside `workflow.yaml`/`state.json` —
-     same convention as `harness/` and `evidence/` — so the frozen
-     `exit_criteria` field carries no dependency on the `kestra-build` skill being installed on
-     whatever machine later executes the workflow. Set `exit_criteria.run` to
-     `python3 <run-folder>/validate_spec.py <source_spec> <repo-root> && grep -q '^VERDICT: CLEAR$' spec-verdict.md`.
-     The script only FAILs (non-zero exit) on facts that are both format-independent and fixable
-     within spec-review's own `write_scope` (the spec file itself) — a Files-to-Touch row marked
-     `edit`/`exists` whose path is absent; everything else (missing sections, empty columns, an
-     unparseable table) prints as `WARN` and never fails, so a foreign-format spec or `kestra-build`'s
-     own inferred-sections path still passes the mechanical layer. Because `kestra-run`'s context
-     pack already runs `exit_criteria.run` before every spawn (see its step 2), a `FAIL` line lands
-     in the reviewer's hands before it burns a single turn discovering the same thing itself. State
-     the delineation explicitly in the brief — **do not** reuse `test-review`'s "the mechanical checks
-     already ran, don't re-derive them" sentence verbatim, because the two stages' mechanical and
-     judgment layers don't split the same way: `test-review`'s script and its subagent check disjoint
-     things, while `validate_spec.py` and this stage's subagent read the *same* columns at different
-     depths. Say instead: "the mechanical layer verified presence/existence only — the semantic
-     content of every column is still yours to judge: no on-violation resolving to log-and-continue,
-     no contradiction between invariants/edge-cases/ACs, every AC testable, every checkable claim
-     actually run." A reviewer told the checks "already ran" in the borrowed phrasing can rationally
-     skip that semantic read, which is exactly the false-CLEAR-over-a-real-defect failure this whole
-     stage exists to prevent. Give it the same `on_fail` shape as `review`
-     too: `action: fixing`, `max_attempts: 2`, `escalate_at: 2`, `write_scope` covering `source_spec`
-     itself (there's no separate stage to `target` the way `review` targets an `implement-*` stage),
-     falling through to `reworking` only once that's exhausted or the same diff repeats — see
-     `references/design-principles.md`'s "Default HITL posture" for why a brief this substantive
-     shouldn't skip straight to the one human stop on its first finding.
-   - **`test-review`, the harness contract, evidence-artifact reuse, and sibling `implement-*` /
-     shared-contract stages are covered in
+     An existence-only check (the file exists, is non-empty, has an acceptance-criteria heading)
+     passes for any spec-shaped document, including a confidently wrong one. What it must actually
+     check, the `validate_spec.py` pre-check chained ahead of the verdict grep, and its `on_fail`
+     shape are in [`references/full-mode-stages.md`](references/full-mode-stages.md)'s
+     `spec-review` section.
+   - **`test-review` — including the condition under which its check folds into `generate-tests`
+     and the stage isn't generated at all — plus the harness contract, evidence-artifact reuse,
+     and sibling `implement-*` / shared-contract stages are covered in
      [`references/full-mode-stages.md`](references/full-mode-stages.md) — open it now, this is the
      point in the process where you need it.** In short: add `test-review` only when the spec's
      Reality Constraints list external dependencies or a pair of paths that must agree; give any
@@ -568,36 +522,6 @@ per-spec.
      And the `contract` stage (delete the old form) `depends_on: [integrate-and-verify]`, not the last
      batch: deleting the compatibility shim before the suite has ever passed removes the only thing
      keeping the intermediate states green.
-   - **Reality Constraints listing an external dependency triggers `test-review` by the table above
-     — but check what the *actual chosen test design* does before assuming that pass has real work
-     to do.** A spec can name an external dependency while `generate-tests` legitimately sidesteps
-     it (a real temp git repo instead of a mocked one, a real subprocess instead of a stub) — the
-     trigger condition is about what the spec's Reality Constraints *list*, not about what the tests
-     *actually contain*, so the two can diverge. Measured on a real run: a `test-review` stage
-     predicted in its own workflow-generation audit comment to be "fast/CLEAR-on-first-pass because
-     the test design uses real temp git repos, not mocks" ran twice anyway (~119k then ~105k tokens)
-     and was right both times — CLEAR with nothing to find. This is a *generation-time* decision, not
-     a run-time one: `kestra-build` makes it while writing `generate-tests`'s own brief, not after —
-     there is no run-time path where `kestra-run` drops or skips an already-generated `test-review`
-     stage; the stage list you emit is the stage list that runs (see design-principles.md and
-     `mode`'s "record of a decision" framing in `workflow-schema.md`). So: when the brief you are
-     writing for `generate-tests` mandates real fixtures (a real temp-repo helper, a real subprocess)
-     and its `exit_criteria` already enforces the absence of mock imports mechanically, don't generate
-     a `test-review` stage at all — fold its check into `generate-tests`'s own `exit_criteria` instead
-     (a static grep/check for real-fixture patterns — `execFile`, a real temp-repo helper — vs. mock-library
-     imports) rather than paying for a full separate subagent pass to confirm what the brief already
-     predicted. **This fold-in has one condition, not a blanket green light:** a real measured run
-     with no doubles at all still had its first `test-review` pass catch a genuine test-vs-test
-     contradiction (two frozen test files disagreeing about the same behavior) — a defect that is
-     double-independent and not something a mock-import grep can ever detect, since nothing about it
-     involves a double. So only take the fold when `generate-tests`'s own brief also gains an
-     explicit cross-file consistency self-check: "before finishing, cross-check assumptions shared
-     across test files — formats, fixtures, orderings — and name each pair you checked." If you omit
-     that instruction, say so plainly in the mode/stage audit line shown to the user ("test-review
-     folded in; cross-test-consistency is no longer independently reviewed") rather than letting the
-     loss pass silently — a self-check by the same stage that wrote the contradiction is weaker than
-     an independent reader catching it, and the user should get to see that trade-off, not just its
-     absence.
    - **`verify` and `review` are siblings, not a chain — both `depends_on` the implement stage
      directly, not each other.** Confirmed by direct benchmarking: chaining them
      (`review: depends_on: [verify]`) costs a whole extra sequential subagent round-trip for no
