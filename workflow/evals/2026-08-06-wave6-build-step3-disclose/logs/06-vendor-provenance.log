@@ -1,3 +1,6 @@
+sweeping compiled bytecode out of the vendored copies before checking them:
+  (nothing listed above = the copies were already clean)
+
 before-skill  vs dd4077d: 13 files, file set equal=True, content mismatches=NONE
 after-skill   vs bcc2bbd: 14 files, file set equal=True, content mismatches=NONE
 
@@ -11,3 +14,5 @@ spec-lite/0-spec.md is new to this eval; validate_spec.py against the fixture:
   WARN: no '## Exit Criteria' section — kestra-build copies its 'progress:' fragments onto the owning stages; without them clause 2 of the stop condition can never fire
   WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
   exit=0   (0 = no FAIL; the WARNs are the same five spec-full gets)
+
+ASSERT OK : both vendored copies are byte-identical to the commits they claim, source files and file set alike

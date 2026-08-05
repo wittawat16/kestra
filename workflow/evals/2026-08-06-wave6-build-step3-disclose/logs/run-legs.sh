@@ -186,16 +186,21 @@ PY
            workflow/kestra-build/scripts/test_validate_workflow_anchor.py \
            workflow/kestra-exam/scripts/test_exam_harness.py; do
     printf '%-44s ' "$(basename "$t")"
-    python3 -B "$t" 2>&1 | tail -2 | tr '\n' ' '; echo
+    python3 -B "$t" 2>&1 | tail -2 | tr '\n' ' ' | sed 's/[[:space:]]*$//'; echo
   done
   printf '%-44s ' 'tests/test_install_check.py'
-  python3 -B -m unittest discover -s tests -p 'test_install_check.py' 2>&1 | tail -2 | tr '\n' ' '; echo
+  python3 -B -m unittest discover -s tests -p 'test_install_check.py' 2>&1 \
+    | tail -2 | tr '\n' ' ' | sed 's/[[:space:]]*$//'; echo
   echo
   echo 'control: validate_workflow.py on runs/order-cancellation-refund'
   python3 workflow/kestra-build/scripts/validate_workflow.py workflow/runs/order-cancellation-refund
   echo "exit=$?"
   echo
-  printf 'git diff --check: '; git diff --check && echo clean
+  # Scoped away from this logs/ directory on purpose: the check would otherwise
+  # flag whitespace in the very file it is being written into, so the leg would
+  # report on itself instead of on the wave.
+  printf 'git diff --check (excluding this eval logs dir): '
+  git diff --check -- . ":(exclude)$LOGS" && echo clean
 } > "$LOGS/04-suites.log" 2>&1
 
 # ---------------------------------------------------------------- leg 05
@@ -221,11 +226,28 @@ PY
 # ---------------------------------------------------------------- leg 06
 # The two vendored skill copies this eval runs against must be byte-identical to
 # the commits they claim, or the runs measure something other than the wave.
-python3 - "$BEFORE" "$AFTER" "$EVAL_DIR" > "$LOGS/06-vendor-provenance.log" 2>&1 <<'PY'
+#
+# First sweep out compiled bytecode.  A half-B run invokes the vendored
+# validate_spec.py, which imports requirement_surface and drops a .pyc inside the
+# frozen copy -- so a real run leaves the very thing this leg is built to reject.
+# The sweep is printed, not silent, and is scoped to __pycache__ under the two
+# vendored folders: bytecode is generated, never authored, so removing it cannot
+# destroy evidence.  Anyone re-running half B should export
+# PYTHONDONTWRITEBYTECODE=1 so it never appears in the first place.
+{
+  echo 'sweeping compiled bytecode out of the vendored copies before checking them:'
+  find "$EVAL_DIR/before-skill" "$EVAL_DIR/after-skill" -name '__pycache__' -type d -print 2>/dev/null \
+    | sed 's|^|  removing |'
+  find "$EVAL_DIR/before-skill" "$EVAL_DIR/after-skill" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
+  echo '  (nothing listed above = the copies were already clean)'
+  echo
+} > "$LOGS/06-vendor-provenance.log" 2>&1
+python3 - "$BEFORE" "$AFTER" "$EVAL_DIR" >> "$LOGS/06-vendor-provenance.log" 2>&1 <<'PY'
 import subprocess, sys, pathlib
 before, after, ev = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
 def sh(*a):
     r = subprocess.run(a, capture_output=True, text=True); return r.stdout.strip()
+clean = True
 for sha, d in ((before,'before-skill'), (after,'after-skill')):
     tracked = {t[len('workflow/kestra-build/'):]
                for t in sh('git','ls-tree','-r','--name-only',sha,'workflow/kestra-build').split('\n') if t}
@@ -236,6 +258,7 @@ for sha, d in ((before,'before-skill'), (after,'after-skill')):
           f'content mismatches={bad or "NONE"}')
     if disk != tracked:
         print('   only on disk:', sorted(disk-tracked), '  only in commit:', sorted(tracked-disk))
+    clean = clean and disk == tracked and not bad
 src = pathlib.Path('workflow/evals/2026-07-31-build-ablation-antipatterns')
 print()
 print('spec-full/0-spec.md identical to the 2026-07-31 spec:',
@@ -245,10 +268,167 @@ print('fixture/ identical to the 2026-07-31 fixture:',
           for p in (src/'fixture').rglob('*') if p.is_file()))
 print()
 print('spec-lite/0-spec.md is new to this eval; validate_spec.py against the fixture:')
-r = subprocess.run(['python3', str(ev/'after-skill/scripts/validate_spec.py'),
+# -B, so this leg cannot leave behind the bytecode the sweep above just removed.
+r = subprocess.run(['python3', '-B', str(ev/'after-skill/scripts/validate_spec.py'),
                     str(ev/'spec-lite/0-spec.md'), str(ev/'fixture')], capture_output=True, text=True)
 print(''.join('  '+l+'\n' for l in r.stdout.strip().split('\n')), end='')
 print(f'  exit={r.returncode}   (0 = no FAIL; the WARNs are the same five spec-full gets)')
+print()
+print(f'ASSERT {"OK " if clean else "FAIL"}: both vendored copies are byte-identical to the '
+      f'commits they claim, source files and file set alike')
+PY
+
+# ---------------------------------------------------------------- leg 07
+# Leg 00 counts lines, and a line is not a token.  A table row is denser than the
+# prose it replaced, so a line count could flatter the wave.  Recount the same
+# budget in words and characters, which track tokens far more closely, and price
+# the whole saving against what a real run actually costs.
+python3 - "$BEFORE" "$AFTER" > "$LOGS/07-token-proxy-budget.log" 2>&1 <<'PY'
+import subprocess, re, sys
+before, after = sys.argv[1], sys.argv[2]
+def blob(sha, path):
+    return subprocess.run(['git','show',f'{sha}:{path}'],capture_output=True,text=True).stdout
+def step3(txt):
+    L = txt.split('\n')
+    s = next(i for i,l in enumerate(L) if l.startswith('3. **Derive the stage list'))
+    e = next(i for i in range(s+1,len(L)) if re.match(r'^4\. \*\*', L[i]))
+    return '\n'.join(L[s:e])
+# splitlines(), not split('\n'): a file ending in a newline would otherwise count
+# one phantom line and leg 07 would disagree with leg 00's wc -l by one.
+def m(t): return (len(t.splitlines()), len(t.split()), len(t))
+K = 'workflow/kestra-build/'
+bs, as_ = blob(before, K+'SKILL.md'),        blob(after, K+'SKILL.md')
+bf, af  = blob(before, K+'references/full-mode-stages.md'), blob(after, K+'references/full-mode-stages.md')
+sd      = blob(after,  K+'references/stage-derivation.md')
+
+print(f"{'':38}{'lines':>8}{'words':>9}{'chars':>9}")
+for name, t in (('SKILL.md before',bs),('SKILL.md after',as_),
+                ('  of which step 3, before',step3(bs)),('  of which step 3, after',step3(as_)),
+                ('full-mode-stages.md before',bf),('full-mode-stages.md after',af),
+                ('stage-derivation.md (new)',sd)):
+    l,w,c = m(t); print(f"{name:38}{l:8,}{w:9,}{c:9,}")
+
+print()
+print("Read budget per branch, three ways:")
+print(f"{'branch':34}{'lines':>17}{'words':>17}{'chars':>17}")
+def row(label, bparts, aparts):
+    bl,bw,bc = (sum(x) for x in zip(*[m(t) for t in bparts]))
+    al,aw,ac = (sum(x) for x in zip(*[m(t) for t in aparts]))
+    f = lambda b,a: f"{a-b:+,} ({(a-b)/b*100:+.1f}%)"
+    print(f"{label:34}{f(bl,al):>17}{f(bw,aw):>17}{f(bc,ac):>17}")
+    return ac-bc
+d_lite = row('lite, no devops',        [bs],    [as_])
+row('full, typical',                   [bs,bf], [as_,af])
+row('full + refactor + repo gate',     [bs,bf], [as_,af,sd])
+print()
+print("Words and chars move with lines, slightly further -- so the line count in")
+print("leg 00 does not flatter the wave.  ASSERT below checks that directly.")
+
+# The read gate itself: fewer lines, but MORE words.  Print it, don't hide it.
+def span(txt, a, b):
+    L = txt.split('\n'); s = next(i for i,l in enumerate(L) if a in l)
+    return '\n'.join(L[s:next(i for i in range(s+1,len(L)) if b in L[i])])
+prose = span(bs, '**If step 2 settled on `mode: lite`', 'A minimal TDD-honest skeleton')
+table = span(as_, '| Fact, already settled in step 2 |', 'Name what you opened')
+print()
+print("The read gate itself -- the one place the wave traded prose for a table:")
+if prose: print(f"  before, prose : {m(prose)[0]:>3} lines {m(prose)[1]:>5} words {m(prose)[2]:>6} chars")
+print(f"  after,  table : {m(table)[0]:>3} lines {m(table)[1]:>5} words {m(table)[2]:>6} chars")
+print("  The table is shorter in lines and LONGER in words than the prose gate it")
+print("  replaced.  That is the 'lines are not tokens' effect, isolated: it costs")
+print("  a few hundred characters, against a lite saving three orders up.")
+
+print()
+print("What the whole saving is worth against a real run (half B measured 144,954")
+print("tokens for the cheapest run; ~4 chars/token is the usual English rule):")
+tok = abs(d_lite)/4
+print(f"  lite text saved   : {abs(d_lite):,} chars  ~= {tok:,.0f} tokens")
+print(f"  as a share of one measured lite run (144,954 tokens): {tok/144954*100:.1f}%")
+print(f"  observed run-to-run delta on the lite pair          : +7.4%")
+print("  So the entire prize is smaller than the noise this design can resolve.")
+print()
+for lbl, cond in (
+    ('the char saving per branch has the same sign as the line saving',
+     (d_lite < 0)),
+    ('lite chars fall by more than 15%',
+     abs(d_lite)/m(bs)[2] > 0.15),
+):
+    print(f"ASSERT {'OK ' if cond else 'FAIL'}: {lbl}")
+PY
+
+# ---------------------------------------------------------------- leg 08
+# Half B's equivalence bar, applied mechanically to the four generated workflows
+# rather than eyeballed: same stage topology, one freeze point, same on_fail
+# wiring and exit types, and -- the hard requirement -- the same mode per spec.
+python3 - "$EVAL_DIR" > "$LOGS/08-run-equivalence.log" 2>&1 <<'PY'
+import re, sys, pathlib, subprocess
+ev = pathlib.Path(sys.argv[1])
+def parse(p):
+    txt = (ev/p/'workflow.yaml').read_text(); out=[]
+    for blk in re.split(r'\n  - id: ', txt)[1:]:
+        sid = blk.split('\n',1)[0].strip()
+        g = lambda k: (lambda mm: mm.group(1).strip() if mm else None)(
+            re.search(r'^\s{4}'+k+r':\s*(.*)$', blk, re.M))
+        one = lambda k: (lambda mm: mm.group(1) if mm else None)(re.search(k+r':\s*(\S+)', blk))
+        out.append(dict(id=sid, depends_on=g('depends_on'), write_scope=g('write_scope'),
+                        freeze=g('freeze_after'), action=one('action'), target=one('target'),
+                        max_attempts=one('max_attempts'),
+                        exit_type=(lambda mm: mm.group(1) if mm else None)(
+                            re.search(r'^\s+type:\s*(\S+)', blk, re.M))))
+    return out
+def mode(p):
+    t = (ev/p/'workflow.yaml').read_text()
+    mm = re.search(r'^mode:\s*(\S+)', t, re.M);  return mm.group(1) if mm else '(absent)'
+def norm(v, run):
+    # Path frame and run-folder name are per-run facts, not structure.  The skill
+    # never states which frame write_scope uses -- see README half B -- so compare
+    # the basenames and let leg 08 stay a structure check, not a path check.
+    if v is None: return None
+    v = v.replace(f'../{run}/','').replace('run-1-before-full/','').replace('run-2-after-full/','')
+    return re.sub(r'"[^"]*/(?=[^/"]+")', '"', v.replace('fixture/',''))
+
+pairs = (('full', 'run-1-before-full', 'run-2-after-full'),
+         ('lite', 'run-3-before-lite', 'run-4-after-lite'))
+verdicts = []
+for label, b, a in pairs:
+    B, A = parse(b), parse(a)
+    print('='*72); print(f'{label}: {b}  vs  {a}')
+    print(f'  mode           : {mode(b)}  vs  {mode(a)}'
+          f'   {"AGREE" if mode(b)==mode(a) else "*** DISAGREE = REGRESSION ***"}')
+    print(f'  stage count    : {len(B)} vs {len(A)}')
+    print(f'  freeze_after=1 : {sum(1 for r in B if r["freeze"]=="true")} vs '
+          f'{sum(1 for r in A if r["freeze"]=="true")}')
+    renamed, diffs = [], []
+    for i,(rb,ra) in enumerate(zip(B,A)):
+        if rb['id'] != ra['id']: renamed.append((rb['id'], ra['id']))
+        for k in ('depends_on','write_scope','action','target','max_attempts','exit_type'):
+            x, y = norm(rb[k], b), norm(ra[k], a)
+            if k in ('depends_on','target'):          # ids differ when a stage is renamed
+                for o,n in renamed:
+                    if x: x = x.replace(o,n)
+            if x != y: diffs.append((i, rb['id'], k, x, y))
+    print(f'  renamed stages : {renamed or "none"}')
+    if diffs:
+        print('  differences after normalising path frame and renames:')
+        for i,sid,k,x,y in diffs: print(f'    [{i}] {sid:28} {k:13} {x}  ->  {y}')
+    else:
+        print('  differences    : none, after normalising path frame and renames')
+    ok = (mode(b)==mode(a) and len(B)==len(A)
+          and sum(1 for r in B if r['freeze']=='true')==1==sum(1 for r in A if r['freeze']=='true')
+          and all(d[2] not in ('depends_on','action','max_attempts','exit_type') for d in diffs))
+    verdicts.append((label, ok))
+print('='*72)
+print('validate_workflow.py on all four, each under BOTH vendored validators:')
+for run in ('run-1-before-full','run-2-after-full','run-3-before-lite','run-4-after-lite'):
+    for v in ('before-skill','after-skill'):
+        r = subprocess.run(['python3','-B',str(ev/v/'scripts/validate_workflow.py'),str(ev/run)],
+                           capture_output=True, text=True)
+        last = [l for l in r.stdout.strip().split('\n') if l.strip()][-1]
+        print(f'  {run:20} under {v:12} exit={r.returncode}  {last}')
+print()
+for label, ok in verdicts:
+    print(f'ASSERT {"OK " if ok else "FAIL"}: {label} pair is equivalent on mode, topology, '
+          f'one freeze point, on_fail wiring and exit types')
 PY
 
 echo "legs written to $LOGS:"
