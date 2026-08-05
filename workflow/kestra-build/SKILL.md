@@ -302,7 +302,7 @@ generate-tests → freeze-tests (freeze point) → implement → {verify, review
 | `test-review` | **dropped** | its trigger is the presence of test doubles, and the lite condition table already established there are none |
 | `freeze-tests` | kept, unchanged | the freeze is the point of the whole thing; a "lite" mode that skips it is not this skill |
 | `implement-*` | kept, exactly one, `effort: low` | the lite condition table already established there's one component and nothing heavy to reason about — set `effort: low` automatically here (never `model`, that stays opt-in — see the `effort`/`model` sections in `references/workflow-schema.md`) |
-| `verify` | kept | script-eligible by default (see the script-eligibility table above) — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
+| `verify` | kept | script-eligible by default (see the script-eligibility table in step 2 below) — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
 | `review` | kept, unconditional | passing tests say nothing about injection/authn/secrets or a missing runtime guard. This is the one judgment stage lite keeps, and the reason lite is still safe to use |
 | `deploy-readiness` | **appended when `needs_devops: true`** | not a lite/full distinction — see below |
 
@@ -361,33 +361,33 @@ per-spec.
    show the user alongside the final workflow.yaml/state.json, so the inconsistency is visible to
    them too if you miss one.
 
-### Script-eligibility — check this before deriving stages, not per-stage as you go
+   **Then settle script-eligibility, here and once — not per-stage as you go.** Same
+   mechanical-table pattern as the flags above, checked once so the per-stage bullets in step 3
+   don't each re-derive it. A stage is **script-eligible** — no subagent, `exit_criteria` alone
+   decides pass/fail — only when **both** hold: it produces no real diff of new work
+   (`write_scope: []`, or for `freeze-tests`, a `write_scope` kept only so the test-hash covers it
+   while the stage's own diff stays empty), **and** its `exit_criteria` settles pass/fail without
+   anyone judging content. Missing either condition means a real subagent every time. This table is
+   the single source of truth — the per-stage bullets below point back to it instead of re-arguing
+   eligibility; they still carry the implementation-specific instructions (what a script-only
+   stage's brief should say, what its `exit_criteria.run` should invoke) that this table doesn't
+   repeat.
 
-Same mechanical-table pattern as the flags above, checked once so the per-stage bullets in step 3
-don't each re-derive it. A stage is **script-eligible** — no subagent, `exit_criteria` alone decides
-pass/fail — only when **both** hold: it produces no real diff of new work (`write_scope: []`, or for
-`freeze-tests`, a `write_scope` kept only so the test-hash covers it while the stage's own diff stays
-empty), **and** its `exit_criteria` settles pass/fail without anyone judging content. Missing either
-condition means a real subagent every time. This table is the single source of truth — the per-stage
-bullets below point back to it instead of re-arguing eligibility; they still carry the
-implementation-specific instructions (what a script-only stage's brief should say, what its
-`exit_criteria.run` should invoke) that this table doesn't repeat.
-
-| Stage type | Script-eligible? | Condition | Notes |
-|---|---|---|---|
-| `spec-review` | No — mechanical pre-check only | `write_scope` covers `source_spec`; `exit_criteria.run` chains `validate_spec.py` (a script) + a verdict grep | the script proves presence/existence only (e.g. Files-to-Touch paths exist); judging contradictions/on-violation wording still needs a subagent |
-| `generate-tests` | No | writes real test code | creative work |
-| `design` (`needs_ui: true`) | No | writes `design.md`/artifact | creative work |
-| `design-tests` (rare split) | No | writes the scenario table | creative work, even though `exit_criteria.type` can be `artifact_exists` |
-| `freeze-tests` | **Yes** | `write_scope` = the same test paths (kept only so the hash covers them); the stage itself writes no new diff — `exit_criteria` re-runs `generate-tests`'s own static checks against the exact commit being frozen | mechanical re-check, not a review; `on_fail: reworking`, never `fixing` |
-| `implement-*` | No | writes real code | creative work |
-| `define-shared-contract` | No | writes the shared file | small, but still a design decision |
-| `verify` | **Usually yes** | `write_scope: []`; `exit_criteria.run` is the frozen suite's own exit code | a subagent is only needed for the genuinely-uncovered ACs the brief's binary check flags — see step 4's `verify` brief guidance |
-| `review` | No | `write_scope: []`, but the verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
-| `test-review` | No, or dropped entirely | `write_scope: []`; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
-| `deploy-readiness` | No | reads diff + spec, judges devops risk | folded into `review`'s brief by default; still judgment either way |
-| repo-declared pre-merge test gate (sibling) | **Yes** | `write_scope: []`; `exit_criteria.run` invokes the repo's own documented command | give it no work-describing brief — "kestra-run runs `exit_criteria.run` directly; spawn nothing" |
-| `done` | **Yes** | `write_scope` scoped to one summary file; `exit_criteria.type: artifact_exists` | `kestra-run` writes the summary itself from `state.json`/`git log`, no spawn |
+   | Stage type | Script-eligible? | Condition | Notes |
+   |---|---|---|---|
+   | `spec-review` | No — mechanical pre-check only | `write_scope` covers `source_spec`; `exit_criteria.run` chains `validate_spec.py` (a script) + a verdict grep | the script proves presence/existence only (e.g. Files-to-Touch paths exist); judging contradictions/on-violation wording still needs a subagent |
+   | `generate-tests` | No | writes real test code | creative work |
+   | `design` (`needs_ui: true`) | No | writes `design.md`/artifact | creative work |
+   | `design-tests` (rare split) | No | writes the scenario table | creative work, even though `exit_criteria.type` can be `artifact_exists` |
+   | `freeze-tests` | **Yes** | `write_scope` = the same test paths (kept only so the hash covers them); the stage itself writes no new diff — `exit_criteria` re-runs `generate-tests`'s own static checks against the exact commit being frozen | mechanical re-check, not a review; `on_fail: reworking`, never `fixing` |
+   | `implement-*` | No | writes real code | creative work |
+   | `define-shared-contract` | No | writes the shared file | small, but still a design decision |
+   | `verify` | **Usually yes** | `write_scope: []`; `exit_criteria.run` is the frozen suite's own exit code | a subagent is only needed for the genuinely-uncovered ACs the brief's binary check flags — see step 4's `verify` brief guidance |
+   | `review` | No | `write_scope: []`, but the verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
+   | `test-review` | No, or dropped entirely | `write_scope: []`; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
+   | `deploy-readiness` | No | reads diff + spec, judges devops risk | folded into `review`'s brief by default; still judgment either way |
+   | repo-declared pre-merge test gate (sibling) | **Yes** | `write_scope: []`; `exit_criteria.run` invokes the repo's own documented command | give it no work-describing brief — "kestra-run runs `exit_criteria.run` directly; spawn nothing" |
+   | `done` | **Yes** | `write_scope` scoped to one summary file; `exit_criteria.type: artifact_exists` | `kestra-run` writes the summary itself from `state.json`/`git log`, no spawn |
 
 3. **Derive the stage list from what the spec actually needs** — don't default to a fixed phase set.
    **If step 2 settled on `mode: lite`, the stage list is already fixed** by the lite shape above —
