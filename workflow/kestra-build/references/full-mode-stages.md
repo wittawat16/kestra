@@ -3,17 +3,14 @@
 Read this file **only** when `mode: full` — none of it applies to a `mode: lite` workflow, since
 lite's fixed shape (`generate-tests → freeze-tests → implement → {verify, review} → done`) never
 contains `test-review`, more than one `implement-*` stage, or a shared-contract stage. If you're
-deriving stages for a `lite` spec with no devops flag, skip this file entirely and go straight to
-`SKILL.md` step 4 — opening this file costs real tokens for content you won't use.
+deriving stages for a `lite` spec with no devops flag, skip this file entirely and go back to
+`SKILL.md` step 3's inline rules — opening this file costs real tokens for content you won't use.
 
 Two exceptions, both apply regardless of mode: `deploy-readiness` below (it appends to a lite
 workflow too, on `needs_devops: true` — see its section for what changes), and the evidence-artifact
-convention just below this note.
-
-The one exception: the evidence-artifact convention below (writing an expensive computation's
-result to `<run-folder>/evidence/`) can matter for a `lite` workflow too, if `review` or `verify`
-ever needs to run something costly. If that's the only reason you're here, read just that
-subsection and skip the rest.
+convention (writing an expensive computation's result to `<run-folder>/evidence/`), which matters
+for a `lite` workflow whenever `review` or `verify` needs to run something costly. If one of those
+is the only reason you are here, read just that section and skip the rest.
 
 ---
 

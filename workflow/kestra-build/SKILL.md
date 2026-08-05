@@ -387,17 +387,28 @@ per-spec.
    generate exactly those stages and skip ahead to step 4; the per-stage guidance below still
    applies in full to each stage lite keeps (`generate-tests`'s exit_criteria polarity,
    `freeze-tests`'s write_scope, `review`'s verdict artifact and `on_fail.target`), so read it for
-   those, not for whether to add more stages. **Do not open
-   [`references/full-mode-stages.md`](references/full-mode-stages.md) for a lite spec with
-   `needs_devops: false`** — every stage it covers other than `deploy-readiness`
-   (`test-review`, sibling `implement-*`, shared-contract) is structurally impossible under the lite
-   shape, so reading it costs real tokens for nothing a lite workflow can use. Measured directly:
-   skipping it is the difference between `kestra-build` staying flat-cost on a trivial spec and
-   paying a fixed tax for guidance that never applied. If the spec sets `needs_devops: true`, open
-   only that file's `deploy-readiness` section (below), which appends to lite too — nothing else in
-   the file applies. The
-   rest of this step is the `mode: full` path, and it's where that file's content is actually
-   needed — open it once you reach the bullets below that say so.
+   those, not for whether to add more stages.
+
+   **Then settle which references this spec needs, here and once** — off the facts step 2 already
+   recorded, same mechanical-table pattern as step 2's own two tables. Open the rows that fired and
+   nothing else: measured directly, skipping a file whose branch this spec cannot reach is the
+   difference between `kestra-build` staying flat-cost on a trivial spec and paying a fixed tax on
+   every one for guidance that never applied.
+
+   | Fact, already settled in step 2 | Open | For |
+   |---|---|---|
+   | `mode: lite` **and** `needs_devops: false` | **nothing** | the bullets below are the whole story |
+   | `mode: full` | [`references/full-mode-stages.md`](references/full-mode-stages.md) | what `spec-review` must actually check · `test-review`, its risk table, and the condition under which its check folds into `generate-tests` and the stage isn't generated · the harness contract · evidence artifacts · sibling `implement-*` · the shared-contract stage · splitting `review` per component |
+   | `needs_devops: true`, **either** mode | that same file's `deploy-readiness` **section only** | the exact trigger wording, the default fold into `review`'s brief, and the two freshness enforcement points that fold depends on |
+   | the user wants to approve the scenario list before any test code exists, **or** the spec is too large for one spawn | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | when a real `design-tests` stage is justified, and what it must look like when it is |
+   | any stage you generate will write a verdict artifact | that same file's § 2 | why the shape inline below is that shape, and what a finding asserting a number additionally owes |
+   | the spec is a wide refactor or a batched migration | that same file's §§ 3–4 | the two legal shapes for a batch whose blast radius reaches test files, and how each batch's own gate stays honest |
+   | the codebase survey found a pre-merge test gate the repo's own docs declare mandatory | that same file's § 5 | generating it as a stage with `exit_criteria` rather than leaving it as a suggestion in a brief |
+
+   **Name what you opened in the mode/stage audit line** — "references opened: none (lite, no
+   devops)", "references opened: full-mode-stages.md + stage-derivation.md §5". A table consulted
+   silently leaves nothing behind to check, which is the same reason step 2's flag table has to
+   appear in your output rather than being filled in mentally.
    A minimal TDD-honest skeleton looks like:
    `spec-review → generate-tests → freeze-tests (freeze point) → implement[-per-component] →
    {verify, review} → done`. Add stages only when the spec calls for them (e.g. a UI-facing spec
