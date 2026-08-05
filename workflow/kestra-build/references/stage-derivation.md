@@ -2,10 +2,13 @@
 
 Every rule here is mandatory where it applies and dead weight where it isn't, which is why it lives
 outside `SKILL.md` step 3 rather than inside it. Step 3's gate table names the spec fact that sends
-you to each section below; if no gate row fired, you are not missing anything — go on to step 4.
+you to each section; if no gate row fired, you are not missing anything — go on to step 4.
 
-**The five sections:** 1. splitting `design-tests` out · 2. verdict artifacts · 3. a wide refactor ·
-4. batches that can't stay green alone · 5. a repo-declared pre-merge gate
+**Sections 1 and 3–5 are gated.** Section 2 is background for a rule that is inline in step 3
+because it applies to every run — nothing sends you there, and skipping it costs you nothing.
+
+**The five sections:** 1. splitting `design-tests` out · 2. verdict artifacts, background only ·
+3. a wide refactor · 4. batches that can't stay green alone · 5. a repo-declared pre-merge gate
 
 ---
 
@@ -47,9 +50,11 @@ inventing rows the plan lacks — a coverage gap with no legal path to close it.
 
 ## 2. Verdict artifacts — why that shape, and what a numeric finding owes
 
-*Reached when: writing the brief for any stage that produces a verdict (`spec-review`,
-`test-review`, `review`). The shape itself is inline in step 3; below is why it is that shape, and
-the extra rule a finding asserting a number has to meet.*
+*Reached when: nothing sends you here — no gate row names this section, deliberately. Every rule a
+verdict-writing brief needs is inline in step 3, because every workflow has at least one such stage
+(`review` is mandatory in both modes), so a gate for it would fire on every run and this file would
+stop being optional. What follows is only the reasoning: why the shape is that shape, and what one
+measured run cost when a reviewer skipped it.*
 
 Left unspecified, these come back as multi-page prose, and the stage spends turns composing
 something no one reads that way: the gate greps a single line, and the only other consumer is a

@@ -401,7 +401,6 @@ per-spec.
    | `mode: full` | [`references/full-mode-stages.md`](references/full-mode-stages.md) | what `spec-review` must actually check · `test-review`, its risk table, and the condition under which its check folds into `generate-tests` and the stage isn't generated · the harness contract · evidence artifacts · sibling `implement-*` · the shared-contract stage · splitting `review` per component |
    | `needs_devops: true`, **either** mode | that same file's `deploy-readiness` **section only** | the exact trigger wording, the default fold into `review`'s brief, and the two freshness enforcement points that fold depends on |
    | the user wants to approve the scenario list before any test code exists, **or** the spec is too large for one spawn | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | when a real `design-tests` stage is justified, and what it must look like when it is |
-   | any stage you generate will write a verdict artifact | that same file's § 2 | why the shape inline below is that shape, and what a finding asserting a number additionally owes |
    | the spec is a wide refactor or a batched migration | that same file's §§ 3–4 | the two legal shapes for a batch whose blast radius reaches test files, and how each batch's own gate stays honest |
    | the codebase survey found a pre-merge test gate the repo's own docs declare mandatory | that same file's § 5 | generating it as a stage with `exit_criteria` rather than leaving it as a suggestion in a brief |
 
@@ -505,8 +504,14 @@ per-spec.
        `VERDICT: CLEAR` or `VERDICT: CHANGES_REQUESTED` as the first line; then a findings table with
        one row per finding — severity, the claim in one line, and `file:line`; then paths into
        `<run-folder>/evidence/` for anything that took real computation to establish.
-       Why that shape, what to tell the brief so a reviewer doesn't drop findings to comply, and what
-       a numeric finding additionally owes:
+       A blocking finding that admits a runnable check carries one: a numeric finding names the
+       quantity, the inputs, and the exact command or script, with the output pasted — a numeric
+       finding without them isn't a finding yet — and any other blocking row carries a command whose
+       exit code flips once the finding is addressed, **where possible**. Keep that qualifier: a
+       judgment-only finding (missing error handling, an unclear name) has no such command, and
+       forcing one invites a reviewer to invent a fake one to satisfy the format.
+       Why the shape is that shape, what to tell the brief so a reviewer doesn't drop findings to
+       comply, and the measured cost of getting this wrong:
        [`references/stage-derivation.md`](references/stage-derivation.md) section 2.
      - **When there are 2+ sibling `implement-*` stages**, `review` (and sometimes `verify`) needs
        splitting one-per-component so `on_fail.target` has an unambiguous single stage to route a
