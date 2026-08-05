@@ -259,6 +259,14 @@ class TestCli(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertIn("does not declare", err)
 
+    def test_only_with_no_check_ids_refuses(self):
+        # An empty subset silently ran the whole exam and reported its own exit
+        # code as the subset's — a full run masquerading as a delta red proof.
+        for argv in (("--only",), ("--only", "--json"), ("--only", "C-1", "--only")):
+            code, _, err = _run(self.dir, *argv)
+            self.assertEqual(code, 3, argv)
+            self.assertIn("--only needs at least one check id", err)
+
     def test_red_c0_exits_two_and_blocks(self):
         code, out, _ = _run(self.broken, "--json")
         self.assertEqual(code, 2, out)
@@ -410,6 +418,40 @@ class TestPointerTransport(unittest.TestCase):
         with patch.object(P.subprocess, "run", side_effect=responses):
             self.assertEqual(P.transport("github.com__owner__repo"),
                              ("local", "owner/repo"))
+
+
+class TestExamAnchorRead(unittest.TestCase):
+    TRIPLE = ('{"raise_commit": "%s", "surface_hash": "%s", '
+              '"extractor_version": 1}' % ("1" * 40, "a" * 64))
+
+    def _exam(self, body):
+        path = Path(tempfile.mkdtemp()) / "exam.py"
+        path.write_text(body)
+        return path
+
+    def test_one_anchor_reads(self):
+        anchor = A.read_exam_anchor(self._exam(f"ANCHOR = {self.TRIPLE}\n"))
+        self.assertEqual(anchor["raise_commit"], "1" * 40)
+
+    def test_two_anchors_are_refused(self):
+        # A run of exam.py reports the last; reading the first would compare a
+        # triple the exam never claims, so the three-copy agreement is bypassed.
+        path = self._exam(f"ANCHOR = {self.TRIPLE}\n"
+                          f'ANCHOR = {{"raise_commit": "{"2" * 40}", '
+                          f'"surface_hash": "{"b" * 64}", "extractor_version": 1}}\n')
+        with self.assertRaises(A.Refused) as cm:
+            A.read_exam_anchor(path)
+        self.assertIn("2 module-level ANCHOR", str(cm.exception))
+
+    def test_no_anchor_is_unreadable(self):
+        with self.assertRaises(A.Unreadable):
+            A.read_exam_anchor(self._exam("EXAM = 'x'\n"))
+
+    def test_ancestry_not_existence(self):
+        with patch.object(A, "_git", return_value=(0, "", "")) as git:
+            A.raise_reachable("/tmp/repo", "1" * 40)
+        self.assertEqual(git.call_args[0][0],
+                         ["merge-base", "--is-ancestor", "1" * 40, "HEAD"])
 
 
 class TestCreatableAnchor(unittest.TestCase):

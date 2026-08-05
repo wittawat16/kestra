@@ -586,9 +586,13 @@ def _main(seam, checks, argv):
             i += 1  # already consumed by repo_root() at import time
         elif a == "--only":
             i += 1
+            before = len(only)
             while i < len(argv) and not argv[i].startswith("--"):
                 only.append(argv[i])
                 i += 1
+            if len(only) == before:
+                print("FAIL: --only needs at least one check id", file=sys.stderr)
+                return 3
             continue
         else:
             print(f"FAIL: unknown argument {a!r}. "

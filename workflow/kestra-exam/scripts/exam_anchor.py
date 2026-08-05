@@ -114,7 +114,11 @@ def read_pointer_anchor(text):
 
 def read_exam_anchor(exam_py):
     """`ANCHOR = {...}` from exam.py, without importing it (importing would run
-    the exam's module-level seam construction)."""
+    the exam's module-level seam construction).
+
+    Exactly one assignment, never the first of several: a run of exam.py reports
+    whichever ANCHOR executed last, so reading the first would compare a triple
+    the exam never self-reports."""
     p = Path(exam_py)
     if not p.exists():
         raise Unreadable(f"no exam.py at {p}")
@@ -122,15 +126,21 @@ def read_exam_anchor(exam_py):
         tree = ast.parse(p.read_text())
     except SyntaxError as e:
         raise Unreadable(f"{p} does not parse: {e}") from None
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "ANCHOR"
-                for t in node.targets):
-            try:
-                return ast.literal_eval(node.value)
-            except ValueError:
-                raise Unreadable(f"{p}: ANCHOR is not a literal dict") from None
-    raise Unreadable(f"{p} declares no module-level ANCHOR")
+    found = [node.value for node in tree.body
+             if isinstance(node, ast.Assign) and any(
+                 isinstance(t, ast.Name) and t.id == "ANCHOR"
+                 for t in node.targets)]
+    if len(found) > 1:
+        raise Refused(f"{p} declares {len(found)} module-level ANCHOR "
+                      "assignments — ambiguous by construction; a run reports "
+                      "the last, so the three-copy agreement would be checked "
+                      "against a triple the exam never claims")
+    if not found:
+        raise Unreadable(f"{p} declares no module-level ANCHOR")
+    try:
+        return ast.literal_eval(found[0])
+    except ValueError:
+        raise Unreadable(f"{p}: ANCHOR is not a literal dict") from None
 
 
 # --------------------------------------------------------------------------
@@ -239,7 +249,9 @@ def discover_raise(repo_root, slug, run_dir):
 
 
 def raise_reachable(repo_root, sha):
-    code, _, _ = _git(["cat-file", "-e", sha + "^{commit}"], repo_root)
+    """Ancestry, not existence: `cat-file -e` still passes for a commit orphaned
+    by the prescribed re-raise (`git reset --hard <raise>^^`)."""
+    code, _, _ = _git(["merge-base", "--is-ancestor", sha, "HEAD"], repo_root)
     return code == 0
 
 
@@ -341,8 +353,10 @@ def compare(run_dir, exam_dir, pointer_text=None):
 
     if not raise_reachable(repo_root, recorded["raise_commit"]):
         raise Refused(_block(recorded, now_hash, now_ver,
-                             "raise commit unreachable — `git cat-file -e "
-                             f"{recorded['raise_commit'][:12]}^{{commit}}` failed"))
+                             "raise commit is not an ancestor of HEAD — "
+                             "`git merge-base --is-ancestor "
+                             f"{recorded['raise_commit'][:12]} HEAD` failed "
+                             "(an orphaned re-raise still satisfies cat-file -e)"))
     discovered = discover_raise(repo_root, exam_dir.name, run_dir)
     recorded["_now_raise"] = discovered
 
