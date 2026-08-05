@@ -18,24 +18,24 @@ WHY THIS FILE EXISTS
     to prevent. Everything reads SURFACE_SECTIONS / extract_surface() from
     here; nothing re-states the boundary in prose or in code.
 
-THE BOUNDARY (design ticket #24's five sections; standing default, unvetoed)
+THE BOUNDARY (design ticket #24's five sections, plus the ACs — see ADR 0001)
     IN surface:
       1. "## Functional Requirements"
       2. "## Edge Cases & Error States"
       3. "## Runtime Invariants"
-      4. "## AC Coverage Map"  — restricted to its `AC` and `Source` columns
-      5. "## External Interface"
-    OUT of surface, deliberately: "## Acceptance Criteria" (the Given-When-Then
-    rows the Coverage Map paraphrases), "## Business Rules", and every other
-    section (Overview, Problem Statement, Reality Constraints, Codebase Survey,
-    Files to Touch, Dependencies, Design Notes, Solution Architecture, Risks,
-    Out of Scope, Flags, Open Items). The Coverage Map's "Covered by
-    (files/steps)" column is OUT — it records where a build put the coverage,
-    not what the requirement is, so re-planning coverage must not read as a
-    moved requirement.
-    Consequence, stated so nobody re-derives it: an AC edited in the GWT
-    "## Acceptance Criteria" section but not in the Coverage Map hashes FRESH.
-    That is the vetter's standing default, not an oversight.
+      4. "## Acceptance Criteria"  — the Given-When-Then rows themselves
+      5. "## AC Coverage Map"  — restricted to its `AC` and `Source` columns
+      6. "## External Interface"
+    OUT of surface, deliberately: "## Business Rules" and every other section
+    (Overview, Problem Statement, Reality Constraints, Codebase Survey, Files to
+    Touch, Dependencies, Design Notes, Solution Architecture, Risks, Out of
+    Scope, Flags, Open Items). The Coverage Map's "Covered by (files/steps)"
+    column is OUT — it records where a build put the coverage, not what the
+    requirement is, so re-planning coverage must not read as a moved requirement.
+    Why the ACs joined at EXTRACTOR_VERSION 2: the Coverage Map was treated as
+    their canonical paraphrase, but its `AC` cell is permitted to be a bare id,
+    and the first shipped run took that reading — so every word of AC text could
+    be rewritten with the hash unmoved.
 
 BOTH SPEC SHAPES
     Today's template (workflow/runs/order-cancellation-refund/0-spec.md) has
@@ -96,9 +96,9 @@ ASSUMPTIONS (surfaced rather than silently chosen)
       canonical heading text — reordering sections in the file, or changing a
       heading's emoji, is not a requirement change.
     * Per-AC rows come from the Coverage Map only: it is the one in-surface
-      place where an AC carries identity (`AC-1`) and a `Source`. In today's
-      shape the `AC` cell is free text, so the id is that text — an AC whose
-      text is rewritten reads as a new row, which is the honest answer. Columns
+      place where an AC carries a `Source` alongside its identity (`AC-1`). The
+      AC's text is hashed from the Acceptance Criteria section, so a bare id in
+      the `AC` cell is harmless and the map is a pure mapping table. Columns
       are located by header name and serialized in AC_COLUMNS order, so the id
       is the `AC` cell whatever order the table is written in, and reordering
       the Coverage Map's columns is not a requirement change.
@@ -107,9 +107,10 @@ Usage:
     python3 requirement_surface.py <path-to-0-spec.md>          # hash + surface
     python3 requirement_surface.py <path-to-0-spec.md> --hash   # hash only
 
-Exits 1 and prints FAIL only on an unreadable spec or an unclosed code fence —
-the false-fresh failure mode, where a runaway fence would swallow the rest of
-the file and hand back a silently truncated surface that still hashes cleanly.
+Exits 1 and prints FAIL only on an unreadable spec, an unclosed code fence, or a
+duplicated in-surface heading — the false-fresh failure modes, where a runaway
+fence swallows the rest of the file and a duplicate drops its first body, both
+handing back a silently truncated surface that still hashes cleanly.
 """
 import hashlib
 import re
@@ -117,7 +118,7 @@ import sys
 from collections import namedtuple
 from pathlib import Path
 
-EXTRACTOR_VERSION = 1
+EXTRACTOR_VERSION = 2
 
 # The boundary. One data structure, canonical order, read by every other
 # mechanism. Do not restate this list anywhere else.
@@ -125,6 +126,7 @@ SURFACE_SECTIONS = (
     "Functional Requirements",
     "Edge Cases & Error States",
     "Runtime Invariants",
+    "Acceptance Criteria",
     "AC Coverage Map",
     "External Interface",
 )
@@ -142,7 +144,8 @@ Surface = namedtuple("Surface", "sections ac_rows text surface_hash")
 
 
 class SurfaceError(Exception):
-    """The spec cannot be extracted honestly (today: an unclosed code fence)."""
+    """The spec cannot be extracted honestly: an unclosed code fence, or an
+    in-surface heading written twice."""
 
 
 def _ws(s):
@@ -167,7 +170,7 @@ def _scan(text):
                 fence = None
     if fence is not None:
         raise SurfaceError(
-            "unclosed code fence — the surface would be silently truncated"
+            "unclosed code fence — the requirement surface would be silently truncated"
         )
 
 
@@ -249,6 +252,9 @@ def extract_surface(text):
             if current:
                 sections[current] = buf
             current, buf = _BY_NAME.get(canonical_heading(m.group(2))), []
+            if current in sections:
+                raise SurfaceError(f"'## {current}' appears twice — the first body "
+                                   f"would be silently dropped from the surface")
         elif current:
             buf.append((line, in_fence))
     if current:

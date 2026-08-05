@@ -473,7 +473,7 @@ it came from. The exam is **red-proofed** before any implementation exists — i
 clone at the raise commit, where each check has to fail for the right reason (a behavioral failure,
 not a missing import), so a later green can't be an accident of the harness.
 
-It reads only the five in-surface sections of the spec (the ones `requirement_surface.py` extracts)
+It reads only the in-surface sections of the spec (the ones `requirement_surface.py` extracts)
 and deliberately never reads the implementation plan, the file list, or the code: an exam derived
 from the implementation's shape stops being an independent derivation of the requirement.
 

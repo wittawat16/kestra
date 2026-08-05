@@ -109,7 +109,7 @@ class Boundary(unittest.TestCase):
                          [("AC-1", "AC-1 | US-1, US-2"), ("AC-2", "AC-2 | US-3")])
 
     def test_out_of_surface_sections_never_leak(self):
-        for out in ("Business Rules", "Acceptance Criteria", "Risks", "Overview",
+        for out in ("Business Rules", "Risks", "Overview",
                     "Out of Scope", "BR-1", "atomic", "Pager"):
             self.assertNotIn(out, extract_surface(TODAY).text + extract_surface(GROWN).text)
 
@@ -143,6 +143,18 @@ class Fences(unittest.TestCase):
             extract_surface(TODAY.replace("## \U0001f3af AC Coverage Map",
                                           "```\n## \U0001f3af AC Coverage Map"))
 
+    def test_duplicate_in_surface_heading_fails_loudly(self):
+        # Dict assignment let the second body win and dropped the first, so a
+        # spec with a deleted requirement hashed like one that never had it.
+        with self.assertRaises(SurfaceError) as cm:
+            extract_surface(TODAY + "\n## \U0001f4dc Functional Requirements\n\n"
+                                    "* [ ] a second, silently-winning body\n")
+        self.assertIn("appears twice", str(cm.exception))
+
+    def test_duplicate_out_of_surface_heading_is_not_an_error(self):
+        # Only in-surface headings can lose a body from the surface.
+        extract_surface(TODAY + "\n## Business Rules\n\n* second body\n")
+
 
 class Normalization(unittest.TestCase):
 
@@ -164,12 +176,18 @@ class Normalization(unittest.TestCase):
         edited = (TODAY
                   .replace("* **BR-1 — Only pre-shipment orders are cancellable.**",
                            "* **BR-1 — Only unshipped orders are cancellable.** Rewritten.")
-                  .replace("* [ ] Cancelling a paid order refunds it in full",
-                           "* [x] Cancelling a paid order refunds the uncredited balance")
                   .replace("* Refund and inventory release must be atomic.",
                            "* Nothing risky here after all."))
         self.assertNotEqual(edited, TODAY)
         self.assertEqual(h(edited), h(TODAY))
+
+    def test_rewritten_ac_text_moves_the_hash(self):
+        # v1 hashed the Coverage Map only, so an AC whose id stayed put could be
+        # rewritten to mean the opposite and still read FRESH everywhere.
+        inverted = TODAY.replace("* [ ] Cancelling a paid order refunds it in full",
+                                 "* [ ] Cancelling a paid order refunds nothing")
+        self.assertNotEqual(inverted, TODAY)
+        self.assertNotEqual(h(inverted), h(TODAY))
 
     def test_coverage_map_column_order_is_not_content(self):
         reordered = (GROWN

@@ -511,9 +511,8 @@ def check_delimiter_precondition(text, chained):
         return
     try:
         extract_surface(text)
-    except SurfaceError:
-        report(chained, "unclosed code fence — the requirement surface would be silently "
-                        "truncated (false-fresh hash)")
+    except SurfaceError as e:
+        report(chained, f"{e} (false-fresh hash)")
         return
     known = {canonical_heading(name) for name in TEMPLATE_SECTIONS}
     for line, in_fence in _scan(text):
