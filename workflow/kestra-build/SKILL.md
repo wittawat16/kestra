@@ -25,13 +25,6 @@ If the user actually wants agents dispatched and running right now — spec shar
 verified — chain whatever specialized spec/plan/build/review skills or agents you have available
 directly, not this. kestra-build is for when the shape of the pipeline itself is the deliverable.
 
-**Suggested model, if spawning this as a subagent with a model to choose:** Sonnet 5. Measured
-same-effort against Opus 5 on this same skill: cost came out roughly a wash, and Sonnet's one real
-defect found (a wrong claim about ESM import failure behavior baked into a generated brief) is now
-fixed in this file's own `generate-tests` guidance below, narrowing the gap that motivated Opus
-elsewhere. A suggestion to offer the user, not a default to pick silently — ask before spawning.
-Doesn't apply when running inline in an already-active session.
-
 ---
 
 ## Why this shape (read before generating anything)

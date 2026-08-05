@@ -521,6 +521,34 @@ this skill, so nobody implements a phantom gate.
 
 ---
 
+## Suggested models, when spawning a skill as a subagent
+
+Measured recommendations for whoever *spawns* one of these skills with a model to choose — a
+suggestion to offer the user, not a default to pick silently. **None of them apply when a skill runs
+inline in an already-active session**, because a skill cannot switch that session's model on its
+own. That is why they live here rather than in the skill bodies, where they paid context load on
+every invocation without ever being actionable by the agent reading them. `kestra-exam` has no
+measurement, so it has no entry.
+
+**`kestra-spec` — Opus 5.** Measured same-effort against Sonnet 5 on this same skill: Opus caught a
+real spec defect (an execution-verified edge case, e.g. a spread-order default-overwrite bug) that
+Sonnet's read-and-reason pass missed entirely, for ~14% more tokens.
+
+**`kestra-build` — Sonnet 5.** Measured same-effort against Opus 5 on this same skill: cost came out
+roughly a wash, and Sonnet's one real defect found (a wrong claim about ESM import failure behavior
+baked into a generated brief) is now fixed in that skill's own `generate-tests` guidance, narrowing
+the gap that motivated Opus elsewhere.
+
+**`kestra-run` — Sonnet 5.** Measured same-effort against Opus 5 running the same live workflow end
+to end: the orchestration logic itself (context-pack composition, mechanical verification, scoped
+stopping) was identical and correct on both, and cost came out a wash — this layer showed no
+model-sensitivity, so the cheaper default is the sane one. What a spawned *stage* subagent decides
+is a separate question: see that stage's own `model` field in
+[`kestra-build/references/workflow-schema.md`](kestra-build/references/workflow-schema.md).
+
+Every figure above is a dated single-run measurement against the model generation available when it
+was taken. Re-measure before relying on one.
+
 ## Further reference docs
 
 | File | Contents |

@@ -24,15 +24,6 @@ verifies the result — using real commands, not its own judgment, for every che
 (there is no fixed-phase orchestrator — chain whatever specialized skills you have by hand). If
 there's no `workflow.yaml` yet, say so and point at kestra-build instead of improvising one.
 
-**Suggested model, if spawning this as a subagent with a model to choose:** Sonnet 5. Measured
-same-effort against Opus 5 running the same live workflow end to end: the orchestration logic itself
-(context-pack composition, mechanical verification, scoped stopping) was identical and correct on
-both, and cost came out a wash — this layer showed no model-sensitivity, so the cheaper default is
-the sane one. (What a spawned *stage* subagent decides is a separate question — see that stage's own
-`model` field in `workflow.yaml`, per kestra-build's guidance.) A suggestion to offer the user, not a
-default to pick silently — ask before spawning. Doesn't apply when running inline in an
-already-active session.
-
 ---
 
 ## The one rule everything else follows
