@@ -5,15 +5,13 @@ description: >
   drives only the spec's declared seam, one check per acceptance criterion, one `manifest.md`
   carrying the AC→check map, each check's class (must-flip / must-hold / unexaminable), its
   provenance, its recorded red proof and failure signature, the anchor triple, and the verdict
-  contract as its final section. The exam lives in the user-level exams directory, keyed by the
-  repo's `origin` URL, git-committed there, and recorded by exactly one pointer — a tracker ticket
-  edited in place, or a local pointer file. Use this skill when the user asks to build the exam for
-  a feature, "derive an exam from 0-spec.md", "prove these ACs actually fail before we implement
-  them", "regenerate the exam after the spec changed", "is this exam stale?", "run the
-  pre-delivery exam gate", "which ACs are unproven", or asks "does the delivered work actually
-  match what was asked" — and right after `kestra-spec` raises `0-spec.md` on a full-mode feature,
-  before `kestra-build` derives stages. A spec change re-proves only the checks whose ACs moved; a
-  moved anchor produces a refusal, never a verdict.
+  contract as its final section. Use this skill when the user asks to build the exam for a
+  feature, "derive an exam from 0-spec.md", "prove these ACs actually fail before we implement
+  them", "is this exam stale after the spec changed?", "run the pre-delivery exam gate", "which
+  ACs are unproven", or asks "does the delivered work actually match what was asked" — and right
+  after `kestra-spec` raises `0-spec.md` on a full-mode feature, before `kestra-build` derives
+  stages. A spec change re-proves only the checks whose ACs moved; a moved anchor produces a
+  refusal, never a verdict.
 ---
 
 # kestra-exam — the spec-derived exam

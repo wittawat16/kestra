@@ -2,18 +2,16 @@
 name: kestra-run
 description: >
   This skill should be used when the user asks to "run the workflow", "execute this pipeline",
-  "run/resume kestra-run", "resume the stage machine from where it left off", "drive kestra-build's
-  output to completion", "pick up this stage machine where the orchestrator left off", or points
-  at an existing workflow.yaml + state.json pair (produced by kestra-build) and wants it actually
-  executed, not just planned. Reads state, spawns a subagent per stage, then mechanically verifies
-  each result via real Bash/git commands — never by reading a diff and judging it. Loops
-  automatically but always stops at a fixing→reworking escalation, a blocked stage, a test-hash
-  mismatch, an anchored requirement-surface mismatch, or (only if the workflow explicitly declares
-  one) a human_approval gate; commits per
-  stage so every run is resumable. This is
-  NOT: generating a workflow.yaml from a spec (that's kestra-build), a fixed-phase agent pipeline
-  with no workflow file (chain whatever specialized skills you have yourself for that), or a
-  generic CI/CD deployment pipeline runner.
+  "resume the stage machine where the orchestrator left off", "drive kestra-build's output to
+  completion", or points at an existing workflow.yaml + state.json pair (produced by kestra-build)
+  and wants it actually executed, not just planned. Reads state, spawns a subagent per stage, then
+  mechanically verifies each result via real Bash/git commands — never by reading a diff and
+  judging it. Loops automatically but always stops at a fixing→reworking escalation, a blocked
+  stage, a test-hash mismatch, an anchored requirement-surface mismatch, or (only if the workflow
+  explicitly declares one) a human_approval gate; commits per stage so every run is resumable.
+  This is NOT: generating a workflow.yaml from a spec (that's kestra-build), a fixed-phase agent
+  pipeline with no workflow file (chain whatever specialized skills you have yourself for that),
+  or a generic CI/CD deployment pipeline runner.
 ---
 
 # kestra-run — Workflow Orchestrator

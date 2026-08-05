@@ -1,21 +1,15 @@
 ---
 name: kestra-spec
 description: >
-  Produce a single, build-ready 0-spec.md for kestra-build. Two input modes: in-chain, the input
-  is a human-vetted tracker ticket — this skill checks the vet, materializes the ticket verbatim,
-  then raises it into 0-spec.md as a second commit; standalone (no ticket named), it runs its own
-  short clarifying pass over a hand-written idea and writes the same file in one commit. Either
-  way it does spec-sharpening (testable acceptance criteria, explicit error states,
-  needs_ba/needs_ui/needs_sa/needs_devops flags), the test seam (External Interface), the stop
-  condition (Exit Criteria), inline UI/design notes and solution-architecture decisions, runtime
-  invariants and external-dependency reality constraints, a codebase survey with verified file
-  paths, and an execution-verified self-check — all in one pass, one output file. Use this
-  whenever the user wants a spec that kestra-build can consume without an agent having to guess
-  or interpret gaps: "write the spec for kestra-build", "raise this vetted ticket into
-  0-spec.md", "materialize issue #123 into a spec", "turn this idea into 0-spec.md", "make a spec
-  kestra-build can use directly", "sharpen this into a build-ready spec", or right after a
-  /grilling session when the next step is producing the spec artifact. A chain ticket that is
-  silent on intent bounces back upstream instead of having the rule invented here.
+  Produce the single build-ready 0-spec.md that kestra-build reads. Two input modes, decided
+  mechanically: in-chain, a human-vetted tracker ticket is checked for the vet, materialized
+  verbatim, then raised into 0-spec.md as a second commit; standalone (no ticket named), a
+  hand-written idea gets one short clarifying pass and the same file in one commit. Use this
+  whenever the user wants a spec kestra-build can consume without an agent guessing at gaps:
+  "raise this vetted ticket into 0-spec.md", "materialize issue #123 into a spec", "turn this
+  idea into a build-ready spec for kestra-build", or right after a /grilling session when
+  producing the spec artifact is the next step. A chain ticket that is silent on intent bounces
+  back upstream instead of having the rule invented here.
 ---
 
 # kestra-spec — One-Pass, Build-Ready Spec for kestra-build
