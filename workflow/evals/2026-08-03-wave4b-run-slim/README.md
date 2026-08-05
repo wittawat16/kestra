@@ -4,9 +4,12 @@
 assertions, `run-legs.sh` exit 0.**
 
 kestra-run is prose-driven — there is no orchestrator binary to test. What this eval grades is
-therefore the *commands* the new prose mandates: every leg executes the exact recipe text from
-`workflow/kestra-run/references/enforcement.md` against a real git repo and records the real exit
-code. A reviewer re-runs everything with one command:
+therefore the *commands* the new prose mandates, run against a real git repo with the real exit
+code recorded. **Read the surface-check legs as log-grade, not assertion-grade:**
+`fixtures/run-legs.sh:42` defines its own `surface_check()` transcription of
+`workflow/kestra-run/references/enforcement.md`'s recipe rather than executing the shipped text, so
+deleting that section of the skill would leave most of these assertions passing. A reviewer re-runs
+everything with one command:
 
 ```
 sh workflow/evals/2026-08-03-wave4b-run-slim/fixtures/run-legs.sh          # writes ../logs/
@@ -94,4 +97,4 @@ exit 0 · `validate_workflow.py workflow/runs/order-cancellation-refund` → 1 W
 |---|---|
 | [`fixtures/run-legs.sh`](fixtures/run-legs.sh) | **the whole eval, one command**, legs 0–9 → `logs/` |
 | [`logs/00-fixture.log`](logs/00-fixture.log) … [`logs/09-upstream-regression.log`](logs/09-upstream-regression.log) | literal output + exit codes per leg |
-| [`logs/verdict.log`](logs/verdict.log) | all 17 assertions, `assertion failures: 0` |
+| [`logs/verdict.log`](logs/verdict.log) | all 18 assertions, `assertion failures: 0` |

@@ -12,5 +12,5 @@ Measured result: final green implementation/evidence run recorded below.
 | Full-mode stages | 8/8 |
 | Feature tests | 9/9 unittest cases; final suite exit 0 |
 | Exam AC coverage / red proof / final passes / unproven | 6/8 ACs executable; AC-7/AC-8 unexaminable; red proof 5 must-flip with 1 unproven; final checks 7 pass (including smoke), 0 fail, current-run unproven 5; exit 0 |
-| Scrutinize rounds and C/M/m per round | 2 rounds: R1 `1/0/1` (Major/Minor; no Critical), R2 `0/0/0` |
-| Deviations | 1: Luna Max implementation attempts timed out; controller fallback stayed within the frozen write scope |
+| Scrutinize rounds and C/M/m per round | 2 rounds: R1 raised 2 findings, both disposed as false positives after fix (`review-verdict.md` rows 12-13; the per-severity split was never recorded, and the two artifacts that guessed it disagreed), R2 `0/0/0` — `state.json` records the final round only |
+| Deviations | 2: Luna timed out on `generate-tests` and Luna Max on `implement-install-check`; both fell back to the controller, inside the frozen write scope (`state.json` spawn_type) |
