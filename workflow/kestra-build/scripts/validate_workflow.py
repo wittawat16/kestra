@@ -380,12 +380,12 @@ def check_spec_anchor(workflow, target, required=False):
 
     spec_path = resolve_spec_path(str(source_spec), target)
     if spec_path is None:
-        # A property of where this was invoked from, not of the artifact — a FAIL
-        # here would make the validator unrunnable from outside the repo root.
-        warnings.append(
+        problems.append(
             f"source_spec '{source_spec}' not found beside workflow.yaml, relative to the "
-            f"current directory, or under '{target}' — the spec_anchor.surface_hash could not "
-            f"be recomputed (re-run from the directory source_spec is relative to)"
+            f"current directory, or under '{target}' — spec_anchor.surface_hash "
+            f"{_short(values['surface_hash'])} could not be recomputed, so a fabricated anchor "
+            f"passes unchecked (not-run is not passed; kestra-build commits the spec into the "
+            f"run folder, so restore it there)"
         )
         return problems, warnings
 
@@ -398,8 +398,9 @@ def check_spec_anchor(workflow, target, required=False):
         )
         return problems, warnings
     except OSError as e:
-        warnings.append(f"source_spec '{spec_path}' could not be read ({e}) — "
-                        f"spec_anchor.surface_hash not recomputed")
+        problems.append(f"source_spec '{spec_path}' could not be read ({e}) — "
+                        f"spec_anchor.surface_hash not recomputed, so a fabricated anchor "
+                        f"passes unchecked (not-run is not passed)")
         return problems, warnings
 
     if recomputed != values["surface_hash"]:
@@ -479,9 +480,9 @@ def _ticket_ac_lines(text):
 
 def _load_surface(workflow, target, problems, warnings):
     """The spec's surface, or None with the reason already recorded. FAIL when the
-    extractor or the spec is unusable (an unverifiable ac_hash is the thing this
-    check exists to catch); WARN when the spec merely could not be located from
-    here, which is a property of the invocation, not of the artifact."""
+    extractor or the spec is unusable, located or not — an ac_hash nobody could
+    recompute is the thing this check exists to catch, and returning None skips
+    every one of them."""
     if EXTRACTOR_VERSION is None:
         problems.append(
             "this workflow carries a sliced ticket set but requirement_surface.py is not beside "
@@ -492,10 +493,11 @@ def _load_surface(workflow, target, problems, warnings):
     source_spec = str(workflow.get("source_spec") or "0-spec.md")
     spec_path = resolve_spec_path(source_spec, target)
     if spec_path is None:
-        warnings.append(
+        problems.append(
             f"source_spec '{source_spec}' not found beside workflow.yaml, relative to the current "
-            f"directory, or under '{target}' — the recorded ac_hash values could not be recomputed "
-            f"(re-run from the directory source_spec is relative to)"
+            f"directory, or under '{target}' — the recorded ac_hash values could not be recomputed, "
+            f"so every one of them passes unverified (not-run is not passed; kestra-build commits "
+            f"the spec into the run folder, so restore it there)"
         )
         return None
     try:
@@ -506,8 +508,9 @@ def _load_surface(workflow, target, problems, warnings):
             f"still hashes cleanly, so every ac_hash compared against it would be false-fresh"
         )
     except OSError as e:
-        warnings.append(f"source_spec '{spec_path}' could not be read ({e}) — the recorded "
-                        f"ac_hash values were not recomputed")
+        problems.append(f"source_spec '{spec_path}' could not be read ({e}) — the recorded "
+                        f"ac_hash values were not recomputed, so every one of them passes "
+                        f"unverified (not-run is not passed)")
     return None
 
 
@@ -968,14 +971,50 @@ def validate(workflow, state, target=None, raw=""):
     return problems, warnings
 
 
+MODES = ("--refold-guard", "--separation-guard")
+_SEPARATED_STAGE = re.compile(r"^(generate-tests|implement(-.+)?)$")
+
+
+def check_spawn_separation(workflow, state):
+    """Whoever wrote the tests must not be whoever wrote the code.
+
+    Post-run, so it reads the only record of who ran a stage: that stage's own
+    metrics.spawn_type. 'fresh' is the one value that means a new context;
+    absent, 'none', 'resumed' and any improvised label leave the separation
+    unproven, and not-run is not passed. Comparing the two stages' values to each
+    other is not enough — the run this guard exists to catch recorded two
+    different labels for the same actor."""
+    problems = []
+    ids = [str(stage.get("id")) for stage in (workflow.get("stages") or [])
+           if isinstance(stage, dict) and stage.get("id")]
+    gated = [sid for sid in ids if _SEPARATED_STAGE.match(sid)]
+    if not gated:
+        problems.append("no generate-tests or implement-* stage — a workflow that "
+                        "declares neither cannot certify writer/implementer separation")
+        return problems
+    stages = (state or {}).get("stages") or {}
+    for sid in gated:
+        row = stages.get(sid)
+        recorded = (row.get("metrics") or {}).get("spawn_type") if isinstance(row, dict) else None
+        if recorded != "fresh":
+            problems.append(
+                f"stage '{sid}' recorded spawn_type {recorded!r}, not 'fresh' — the writer/"
+                f"implementer separation is unproven for this run (a stage run on the "
+                f"orchestrator shares its context with the stage before it)"
+            )
+    return problems
+
+
 def main():
     if (len(sys.argv) not in (2, 3)
-            or (len(sys.argv) == 3 and sys.argv[2] != "--refold-guard")):
+            or (len(sys.argv) == 3 and sys.argv[2] not in MODES)):
         print("usage: python3 validate_workflow.py "
-              "<dir-containing-workflow.yaml-and-state.json> [--refold-guard]")
+              "<dir-containing-workflow.yaml-and-state.json> "
+              "[--refold-guard|--separation-guard]")
         sys.exit(2)
 
-    refold_guard = len(sys.argv) == 3
+    refold_guard = len(sys.argv) == 3 and sys.argv[2] == "--refold-guard"
+    separation_guard = len(sys.argv) == 3 and sys.argv[2] == "--separation-guard"
     target = Path(sys.argv[1])
     wf_path = target / "workflow.yaml"
     state_path = target / "state.json"
@@ -1024,6 +1063,24 @@ def main():
                     "a live run with a moved ticket.")
             sys.exit(1)
         print("PASS — re-fold guard: every existing stage is pending.")
+        sys.exit(0)
+
+    if separation_guard:
+        if not wf_path.exists():
+            print(f"FAIL: {wf_path} not found")
+            sys.exit(1)
+        if state is None:
+            print("FAIL: state.json not found — the separation guard reads what each "
+                  "stage recorded about its own spawn; not-run is not passed")
+            sys.exit(1)
+        problems = check_spawn_separation(parse_yaml(wf_path.read_text()), state)
+        for problem in problems:
+            print(f"FAIL: {problem}")
+        if problems:
+            print(f"\n{len(problems)} problem(s) found — this run does not demonstrate "
+                  f"writer/implementer separation.")
+            sys.exit(1)
+        print("PASS — separation guard: every gated stage recorded a fresh spawn.")
         sys.exit(0)
 
     if not wf_path.exists():

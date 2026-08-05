@@ -212,7 +212,9 @@ do when one or both of them fail.
    result's usage numbers, and timestamps you captured before/after the spawn) — never spawn an
    extra subagent or add an `exit_criteria` check just to fetch it, and never let `metrics` or
    `seen_failures` be read by `exit_criteria`, `write_scope` diffing, or the test-hash computation;
-   they're informational only. This is what makes the `done` stage's per-stage cost table (see
+   the rest is informational, with one exception — `spawn_type` on `generate-tests` and
+   `implement-*` is a gated fact, so write `fresh` only when it was, and run
+   `python3 "$RUN"/validate_workflow.py "$RUN" --separation-guard` before `done` reports the run. This is what makes the `done` stage's per-stage cost table (see
    kestra-build's `done`-stage guidance) real instead of aspirational — nothing else in this loop
    tracks it, so a skipped line means an absent row in that table, never a stage failure. The
    spawn-type/attempt-count columns only mean something across a pause/resume if this was actually

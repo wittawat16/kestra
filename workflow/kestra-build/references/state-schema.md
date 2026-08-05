@@ -50,7 +50,9 @@ anything, the run's frozen validator enforces this with
                                 // transition — a future stage-generator must not start reading this field
                                 // to decide fixing/reworking; it exists only to inform the reworking report.
   "metrics": {},               // OPTIONAL, orchestrator-populated: { tokens, wall_ms, spawn_type } per
-                                // completed attempt, purely informational. Never read by exit_criteria,
+                                // completed attempt. `spawn_type` on generate-tests/implement-* is read by
+                                // `validate_workflow.py <run> --separation-guard`, which FAILs on anything
+                                // but "fresh"; the rest is informational. Never read by exit_criteria,
                                 // write_scope diffing, or the test-hash computation — populated by the
                                 // orchestrator itself from data it already holds at commit time (Agent-tool
                                 // usage numbers + timestamps), never by an extra subagent or exit_criteria

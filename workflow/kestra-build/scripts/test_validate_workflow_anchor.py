@@ -113,9 +113,9 @@ def workflow_yaml(anchor=None, spec_name="0-spec.md", extra=""):
     return head + "mode: full\n" + extra + STAGES
 
 
-def run(script, target, cwd):
+def run(script, target, cwd, *args):
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    proc = subprocess.run([sys.executable, str(script), str(target)],
+    proc = subprocess.run([sys.executable, str(script), str(target), *args],
                           capture_output=True, text=True, env=env, cwd=str(cwd))
     return proc.returncode, proc.stdout + proc.stderr
 
@@ -212,12 +212,14 @@ class AnchorMatrix(unittest.TestCase):
         finally:
             folder.close()
 
-    def test_unlocatable_spec_warns_even_when_anchored(self):
-        # Invocation-relative failure, not an artifact defect: a FAIL here would
-        # make the validator unrunnable from outside the repo root.
-        self.check(valid_anchor(), 0,
-                   ["WARN: source_spec 'missing/elsewhere.md' not found", "PASS —"],
-                   expect_not_in=["FAIL"], spec_name="missing/elsewhere.md")
+    def test_unlocatable_spec_fails_when_anchored(self):
+        # An anchor nobody can recompute is a fabricated anchor that passes. The
+        # spec is committed into the run folder, so resolve_spec_path's basename
+        # candidate hits for every real artifact regardless of the caller's cwd.
+        self.check(valid_anchor(), 1,
+                   ["FAIL: source_spec 'missing/elsewhere.md' not found",
+                    "passes unchecked"],
+                   expect_not_in=["PASS —"], spec_name="missing/elsewhere.md")
 
     def test_unclosed_fence_is_a_false_fresh_fail(self):
         truncated = SPEC.replace("## AC Coverage Map", "```\n## AC Coverage Map")
@@ -338,6 +340,16 @@ class SpecMarkerFences(unittest.TestCase):
         code, out = self.spec(BARE_SPEC + f"\n{MARKER}\n")
         self.assertEqual(code, 1, out)
         self.assertIn("FAIL: 'Spec-ticket:' line outside the preamble", out)
+
+    def test_duplicate_heading_is_reported_as_itself(self):
+        # The SurfaceError arm used to print "unclosed code fence" for every
+        # cause, so a duplicated heading was reported as something it was not.
+        code, out = self.spec(f"# [demo] Spec — Demo\n\n{MARKER}\n"
+                              + BARE_SPEC.split("\n", 1)[1]
+                              + "\n## Functional Requirements\n\n- [ ] FR-2\n")
+        self.assertEqual(code, 1, out)
+        self.assertIn("appears twice", out)
+        self.assertNotIn("unclosed code fence", out)
 
     def test_unfenced_preamble_marker_still_chains(self):
         code, out = self.spec(f"# [demo] Spec — Demo\n\n{MARKER}\n"
@@ -624,6 +636,70 @@ def embedded_block(body, tid=TICKET_ID, hex_=None, indent="      "):
     return "\n".join((indent + ln) if ln else "" for ln in lines)
 
 
+class SeparationGuard(unittest.TestCase):
+    """--separation-guard — the writer/implementer split, read off what each stage
+    recorded about its own spawn. Post-run, so it needs a populated state.json."""
+
+    WORKFLOW = """feature: demo
+mode: full
+
+stages:
+  - id: generate-tests
+    depends_on: []
+  - id: implement-demo
+    depends_on: [generate-tests]
+"""
+
+    def guard(self, spawns, workflow=None):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "workflow.yaml").write_text(workflow or self.WORKFLOW)
+        (root / "state.json").write_text(json.dumps({"stages": {
+            sid: {"status": "passed", "metrics": {"spawn_type": spawn}} if spawn
+            else {"status": "passed"} for sid, spawn in spawns.items()}}))
+        shutil.copy(VALIDATE_WORKFLOW, root / "validate_workflow.py")
+        shutil.copy(REQUIREMENT_SURFACE, root / "requirement_surface.py")
+        return run(root / "validate_workflow.py", root, root, "--separation-guard")
+
+    def test_two_fresh_spawns_pass(self):
+        code, out = self.guard({"generate-tests": "fresh", "implement-demo": "fresh"})
+        self.assertEqual(code, 0, out)
+        self.assertIn("PASS — separation guard", out)
+
+    def test_inline_controller_fails_even_with_distinct_labels(self):
+        # The run this guard exists to catch: two different labels, one actor.
+        code, out = self.guard({"generate-tests": "inline-controller-fallback-after-x",
+                                "implement-demo": "controller-fallback-after-y"})
+        self.assertEqual(code, 1, out)
+        self.assertIn("stage 'generate-tests' recorded spawn_type", out)
+        self.assertIn("stage 'implement-demo' recorded spawn_type", out)
+
+    def test_absent_metrics_is_not_a_pass(self):
+        code, out = self.guard({"generate-tests": None, "implement-demo": "fresh"})
+        self.assertEqual(code, 1, out)
+        self.assertIn("recorded spawn_type None", out)
+
+    def test_resumed_is_not_fresh(self):
+        code, out = self.guard({"generate-tests": "fresh", "implement-demo": "resumed"})
+        self.assertEqual(code, 1, out)
+        self.assertIn("'implement-demo'", out)
+
+    def test_a_workflow_with_neither_stage_cannot_certify(self):
+        code, out = self.guard({"review": "fresh"},
+                               workflow="feature: demo\nmode: full\n\nstages:\n"
+                                        "  - id: review\n    depends_on: []\n")
+        self.assertEqual(code, 1, out)
+        self.assertIn("declares neither", out)
+
+    def test_default_mode_never_reads_spawn_type(self):
+        # The guard is opt-in: an unanchored, metrics-less workflow still passes.
+        folder = RunFolder(None)
+        self.addCleanup(folder.close)
+        code, out = folder.validate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("spawn_type", out)
+
+
 class SlicedFolder(RunFolder):
     """A run folder for a *sliced* fold: 0-spec.md + tickets/<id>.md + a tickets[]
     map + the ticket embedded in the owning stage's brief. Built clean, then
@@ -694,6 +770,17 @@ class TicketFoldMatrix(unittest.TestCase):
         code, out = folder.validate()
         self.assertEqual(code, 1, out)
         self.assertIn("FAIL: sliced fold has no spec_anchor", out)
+
+    def test_unlocatable_spec_fails_both_the_anchor_and_every_ac_hash(self):
+        # _load_surface returning None skipped every per-ticket ac_hash compare
+        # silently; both checks must now name their own unverifiable recompute.
+        self.folder.edit_workflow("source_spec: 0-spec.md",
+                                  "source_spec: missing/elsewhere.md")
+        code, out = self.folder.validate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("spec_anchor.surface_hash", out)
+        self.assertIn("passes unchecked", out)
+        self.assertIn("every one of them passes unverified", out)
 
     def test_wrapped_ticket_ac_normalizes_as_one_logical_unit(self):
         spec = SPEC.replace("| AC-1 | US-1 |", "| AC-1 works across lines | US-1 |")
