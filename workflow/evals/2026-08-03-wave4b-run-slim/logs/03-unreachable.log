@@ -1,0 +1,5 @@
+=== leg 3 — raise_commit unreachable: MISMATCH, fail-closed, never a skip ===
+$ surface_check deadbeefdeadbeefdeadbeefdeadbeefdeadbeef ...
+MISMATCH: raise_commit unreachable in this repo
+exit=1
+ASSERT OK: unreachable anchor is a MISMATCH (exit 1)

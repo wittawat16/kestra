@@ -1,0 +1,12 @@
+=== leg 2 — an AC edited in the working-tree spec: MISMATCH, hard stop ===
+$ diff pristine edited:
+57c57
+< | AC-2 an export of an empty result set returns a header-only CSV | US-1 | tests/csv_export/test_writer.py::test_header_only |
+---
+> | AC-2 an export of an empty result set returns an empty body | US-1 | tests/csv_export/test_writer.py::test_header_only |
+MISMATCH: surface moved — working 840d9931fe124198900589946750871725b7d9fa80ec91c80c0c375821cbd5a3 vs raised 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+exit=1
+ASSERT OK: moved surface is a MISMATCH (exit 1)
+SURFACE OK: working == raised == recorded == 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+exit=0
+ASSERT OK: restored tree passes again (exit 0)

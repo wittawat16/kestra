@@ -1,0 +1,5 @@
+=== leg 1 — pre-spawn surface check on a clean tree: must pass ===
+$ surface_check da6415dfdbf5b69fbed0be34c5b275e473efe25e run/0-spec.md run 1 <surface_hash>
+SURFACE OK: working == raised == recorded == 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+exit=0
+ASSERT OK: clean tree passes (exit 0)

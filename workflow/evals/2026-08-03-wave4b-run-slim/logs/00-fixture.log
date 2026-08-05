@@ -1,0 +1,5 @@
+=== leg 0 — materialize the wave4a fixture into a real git repo ===
+raise commit: da6415dfdbf5b69fbed0be34c5b275e473efe25e
+31a51bc fold: workflow + state + frozen tooling
+da6415d raise: fixture spec
+exit=0

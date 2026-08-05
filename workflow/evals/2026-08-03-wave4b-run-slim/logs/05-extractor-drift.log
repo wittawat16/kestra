@@ -1,0 +1,4 @@
+=== leg 5 — recorded extractor_version 2 vs run copy 1: not comparable, MISMATCH ===
+MISMATCH: extractor_version differs (recorded 2 vs run copy 1) — hashes not comparable
+exit=1
+ASSERT OK: extractor_version drift is a MISMATCH (exit 1)
