@@ -1,0 +1,13 @@
+the four suites and the control, at bcc2bbd
+
+test_requirement_surface.py                   OK 
+test_validate_workflow_anchor.py              OK 
+test_exam_harness.py                          OK 
+tests/test_install_check.py                   OK 
+
+control: validate_workflow.py on runs/order-cancellation-refund
+WARN: no spec_anchor — this workflow is not anchored to a raise commit (standalone/hand-written spec); staleness cannot be checked mechanically
+PASS — 11 stages, structurally sound.
+exit=0
+
+git diff --check: clean

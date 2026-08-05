@@ -1,0 +1,12 @@
+before dd4077d: SKILL.md=921 references/full-mode-stages.md=189 references/stage-derivation.md=-
+after  bcc2bbd: SKILL.md=749 references/full-mode-stages.md=275 references/stage-derivation.md=163
+
+lines a run reads, by the branch the spec takes:
+run shape                       before   after   delta     pct  opens
+lite, no devops                    921     749    -172  -18.7%  nothing
+full, typical                     1110    1024     -86   -7.7%  full-mode-stages.md
+full + refactor + repo gate       1110    1187     +77   +6.9%  both
+
+step 3, the ordered-list item this wave targeted:
+  dd4077d: step 3 =  335 lines   Process = [1, 2, 3, 4, 5, 6, 7, 8]
+  bcc2bbd: step 3 =  163 lines   Process = [1, 2, 3, 4, 5, 6, 7, 8]

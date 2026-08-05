@@ -1,0 +1,31 @@
+moved spans, measured against dd4077d
+
+D  spec-review             467-519 -> full-mode-stages.md    49/52 byte-identical
+    REWRITTEN: and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
+    REWRITTEN: run folder's **own** copy of `validate_spec.py`, emitted by step F5 above (the single owner of
+    REWRITTEN: `references/design-principles.md`'s "Default HITL posture" for why a brief this substantive
+H  test-review fold-in     571-600 -> full-mode-stages.md    29/30 byte-identical
+    REWRITTEN: **Reality Constraints listing an external dependency triggers `test-review` by the table above
+C  design-tests split      448-466 -> stage-derivation.md    19/19 byte-identical
+F  wide refactor           533-554 -> stage-derivation.md    21/22 byte-identical
+    REWRITTEN: rejected by step 7's validator: giving a post-freeze migrate stage test paths in its
+G  batch greens            555-570 -> stage-derivation.md    15/16 byte-identical
+    REWRITTEN: reads a batch's green as a suite green, which is the whole defect this bullet exists to prevent.
+K2 numeric finding         647-663 -> stage-derivation.md    17/17 byte-identical
+L  repo pre-merge gate     669-692 -> stage-derivation.md    23/24 byte-identical
+    REWRITTEN: sibling stage (see the table above). Projects that have been burned by
+
+173/180 moved lines byte-identical; 7 rewritten, each printed above.
+
+spans SPLIT rather than moved — the rule stayed inline, the reasoning moved,
+so line boundaries changed on both sides and a line-level check does not apply:
+  B  same-spawn scenario table   436-447   rule inline, argument -> stage-derivation.md section 1
+  K1 verdict-artifact shape      634-646   shape inline, reasoning -> stage-derivation.md section 2
+  B: 2/3 sentences still present verbatim across SKILL.md + stage-derivation.md
+      REWORDED: Be honest about what a separate stage with `exit_criteria.type: artifact_exists` actually buys: nobody reviews that table (nothing gates on more than its existence, and `kestra-run`'s default HITL posture auto-advances through an `artifact_exists` check), so a coverage gap in the table would translate 1:1 into the frozen tests exactly as it would without the split — the split buys decomposition (a smaller, focused spawn per stage), not assurance, and presenting it as the latter is the defect this bullet used to have.
+  K1: 4/5 sentences still present verbatim across SKILL.md + stage-derivation.md
+      REWORDED: **Specify the verdict artifact's shape in the brief — every stage that writes one (`spec-review`, `test-review`, `review`).** Left unspecified, these come back as multi-page prose, and the stage spends turns composing something no one reads that way: the gate greps a single line, and the only other consumer is a later stage that needs the claims and where to check them.
+
+a sentence listed REWORDED above was edited, not dropped — the edits in the split spans are
+the same relocation-forced kind as the moved ones: "this bullet" became "this rule" in text
+that is no longer a bullet.
