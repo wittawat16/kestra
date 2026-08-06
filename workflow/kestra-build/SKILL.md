@@ -105,8 +105,8 @@ doing anything else, the same way `kestra-spec` decides in-chain vs. standalone:
 
 | Form | The invocation names | Do |
 |---|---|---|
-| **A — sliced fold** | a run folder with `0-spec.md` **plus** the slice set: GitHub refs (`#N` / URLs) with the repo, or a directory of local-file tickets | the fold below, in full |
-| **B — monolithic fold** | a run folder with `0-spec.md` only | the ordinary Process below; no `tickets:` block, and `spec_anchor` only if the spec carries a `> Spec-ticket:` preamble marker |
+| **A — sliced fold** | a run folder with `0-spec.md` **plus** the slice set: GitHub refs (`#N` / URLs) with the repo, or a directory of local-file tickets | **G1–G2 below**, then the fold, then the Process |
+| **B — monolithic fold** | a run folder with `0-spec.md` only | **G1–G2 below**, then the ordinary Process; no `tickets:` block, and `spec_anchor` only if the spec carries a `> Spec-ticket:` preamble marker |
 | **C — chain-marked, no set named** | a chain-marked `0-spec.md`, no slices | ask **once**: "this spec is chain-marked `<url>` — name the sliced ticket set, or fold monolithically?" |
 
 **Never search the tracker for tickets nobody named.** No named set *is* the monolithic signal, and
@@ -115,17 +115,44 @@ guessing a set is how scope no human vetted gets frozen into a workflow. This is
 
 ---
 
-## Folding a sliced ticket set — run F0–F5 before the Process below
+## Before any run — G1 and G2, both forms
 
-Form A only; form B skips this whole section. These are the **fold-start** steps, labelled F0–F5 so
+These two are **run-lifecycle** rules, not fold mechanics: they protect the run folder and the
+frozen tooling, which every run has regardless of how the spec arrived. Labelled G so they never
+read as fold steps or as the numbered Process steps. **Form B runs exactly these two, then goes
+straight to the Process** and skips the fold section entirely.
+
+**G1. Guard an existing run before overwriting it.** If `state.json` exists, its frozen tooling must
+exist too; run `python3 "$RUN"/validate_workflow.py "$RUN" --refold-guard`. Any non-`pending` stage
+refuses the run. A first run has no `state.json` and skips this command; an existing state without
+the run's validator is unreadable, not permission to continue. **G1 reads the tooling G2 overwrites,
+so the order is fixed** — emit first and the missing-validator signal is gone before it is checked.
+
+**G2. Emit this run's frozen tooling and commit it with the workflow:**
+
+```bash
+cp <skill-scripts-dir>/requirement_surface.py <skill-scripts-dir>/validate_spec.py \
+   <skill-scripts-dir>/validate_workflow.py "$RUN"/
+```
+
+All three, on **every** run in **either** form — this is the single owner of that `cp`, referenced
+by the `spec-review` bullet, by F1 below, and by step 7 rather than repeated. `kestra-spec` already
+emits the first two; overwriting them is idempotent, and a genuine skill-version difference then
+shows up as a git diff instead of hiding. The third is not optional: `validate_workflow.py` imports
+`requirement_surface` as a same-directory sibling with no path setup, so run from the skill directory
+it would bind the *skill's* extractor and quietly defeat the per-run freeze. A check that reads this
+run in six months must not change its answer because a skill was reinstalled since — and step 7's
+dry-run and `kestra-run`'s own `--separation-guard` both execute the run's copies, so a run that
+skips G2 produces a workflow that can be neither validated nor executed, on any machine.
+
+---
+
+## Folding a sliced ticket set — run F0–F4 after G1–G2, before the Process below
+
+Form A only; form B skips this whole section. These are the **fold-start** steps, labelled F0–F4 so
 they never read as the numbered Process steps further down. Exact commands, regexes, hashes and
 refusal texts: [`references/ticket-fold.md`](references/ticket-fold.md) — open it now if you are
 folding a set, it is the file this section points at for every detail it deliberately doesn't repeat.
-
-**Before F0, guard an existing run before overwriting anything.** If `state.json` exists, its frozen
-tooling must exist too; run `python3 "$RUN"/validate_workflow.py "$RUN" --refold-guard`. Any
-non-`pending` stage refuses the fold. A first fold has no `state.json` and skips this command; an
-existing state without the run's validator is unreadable, not permission to continue.
 
 **F0. Materialize the slices, then resolve the raise commit.** Copy every slice into
 `<run>/tickets/<id>.md` with `tr -d '\r'` and nothing else — the same one declared normalization
@@ -165,21 +192,6 @@ because a second copy can drift while both still look populated.
 including rows whose status is `unchanged`. A refresh nobody can see is indistinguishable from a
 refresh that did not run.
 
-**F5. Emit this run's frozen tooling and commit it with the workflow:**
-
-```bash
-cp <skill-scripts-dir>/requirement_surface.py <skill-scripts-dir>/validate_spec.py \
-   <skill-scripts-dir>/validate_workflow.py "$RUN"/
-```
-
-All three, on **every** fold including form B — this is the single owner of that `cp`, referenced by
-the `spec-review` bullet and by step 7 rather than repeated. `kestra-spec` already emits the first
-two; overwriting them is idempotent, and a genuine skill-version difference then shows up as a git
-diff instead of hiding. The third is not optional: `validate_workflow.py` imports
-`requirement_surface` as a same-directory sibling with no path setup, so run from the skill directory
-it would bind the *skill's* extractor and quietly defeat the per-run freeze. A check that reads this
-run in six months must not change its answer because a skill was reinstalled since.
-
 **Then record what F0–F4 produced, in `workflow.yaml`:** the `spec_anchor` triple beside
 `source_spec`, the `tickets:` map, and each owning stage's `brief` carrying its ticket body verbatim
 between `<!-- ticket:begin <id> sha256:<64 hex> -->` / `<!-- ticket:end <id> -->` delimiters, with the
@@ -199,8 +211,9 @@ brief's own footer too, so the rule travels with the artifact into every spawn.
 `pending`, stop and print the refusal in `ticket-fold.md` §4 — the honest paths are letting
 `kestra-run` escalate to `reworking`, or a destructive reset to the pre-run commit. Overwriting
 `state.json` mid-run destroys the resume checkpoints and orphans the commits that were the rollback
-points, so this is a `reworking`-class event, not a regeneration: enforce it before F0 with the
-run's `validate_workflow.py --refold-guard`, escalate upward, never patch sideways.
+points, so this is a `reworking`-class event, not a regeneration: G1 above already enforces it with
+the run's `validate_workflow.py --refold-guard` — escalate upward, never patch sideways. G1 runs on
+a monolithic regeneration too, which overwrites the same `state.json` for the same reason.
 
 **Print the tracker-side line; never post it.** One line per slice in the closing report —
 `Verified-against: <sha…> · ac_hash: <hex…> · extractor: v<N> · fold: <ISO-8601>` — for a human to
@@ -688,7 +701,8 @@ per-spec.
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
 7. **Dry-run it before showing it to the user.** Run
    `python3 <run-folder>/validate_workflow.py <run-folder>` — the run's **own** copy, emitted by step
-   F5, not the skill's: the checker imports `requirement_surface` as a same-directory sibling with no
+   G2 (which every form runs; if the copy is missing, G2 was skipped — run its `cp` now rather than
+   falling back to the skill's), not the skill's: the checker imports `requirement_surface` as a same-directory sibling with no
    path setup, so running it from the skill directory binds the skill's extractor and defeats the
    per-run freeze the emit exists to create. (The in-place `python3
    workflow/kestra-build/scripts/validate_workflow.py <dir>` invocation documented in `CLAUDE.md`
@@ -726,10 +740,10 @@ per-spec.
 
 Default to `<repo>/<feature-id>/workflow.yaml` and `<repo>/<feature-id>/state.json` next to the
 spec you generated from (e.g. alongside `workflows/runs/<feature-id>/0-spec.md` if that's where the
-spec lives). Ask if the repo has a different convention already. A sliced fold adds
-`<run-folder>/tickets/<id>.md` per slice plus the three emitted scripts (step F5) — all of them
-committed with the workflow, because a hash recorded against a file that isn't in the commit proves
-nothing later.
+spec lives). Ask if the repo has a different convention already. Every run also writes the three
+emitted scripts (step G2), and a sliced fold adds `<run-folder>/tickets/<id>.md` per slice — all of
+them committed with the workflow, because a hash recorded against a file that isn't in the commit
+proves nothing later.
 
 ## What kestra-build does not do
 

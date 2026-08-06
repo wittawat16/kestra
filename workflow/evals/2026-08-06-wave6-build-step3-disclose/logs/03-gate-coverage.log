@@ -1,4 +1,4 @@
-gate table, step 3 (lines 385-547):
+gate table, step 3 (lines 398-560):
   | Fact, already settled in step 2 | Open | For |
   |---|---|---|
   | `mode: lite` **and** `needs_devops: false` | **nothing** | the bullets below are the whole story |

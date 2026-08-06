@@ -68,16 +68,20 @@ PY
 # same span at BEFORE.  A line that is not found byte-identical in its new home
 # is printed, so the rewritten ones are on the record rather than glossed as
 # "moved verbatim".
-python3 - "$BEFORE" > "$LOGS/01-move-fidelity.log" 2>&1 <<'PY'
-import subprocess, sys, pathlib
-before = sys.argv[1]
-old = subprocess.run(['git','show',f'{before}:workflow/kestra-build/SKILL.md'],
-                     capture_output=True, text=True, check=True).stdout.split('\n')
+python3 - "$BEFORE" "$AFTER" > "$LOGS/01-move-fidelity.log" 2>&1 <<'PY'
+import subprocess, sys
+before, after = sys.argv[1], sys.argv[2]
+def blob(sha, path):
+    return subprocess.run(['git','show',f'{sha}:{path}'],
+                          capture_output=True, text=True, check=True).stdout
+old = blob(before, 'workflow/kestra-build/SKILL.md').split('\n')
 def dedent(a, b, w=5):
     return [old[a-1][w:]] + ['' if not old[i-1].strip() else old[i-1][w:] for i in range(a+1, b+1)]
-R = pathlib.Path('workflow/kestra-build/references')
-fms = (R/'full-mode-stages.md').read_text()
-sd  = (R/'stage-derivation.md').read_text()
+# Destinations read at AFTER, not from the working tree.  This eval grades the
+# commits b82a4c7..bcc2bbd; a later wave editing a relocated line would otherwise
+# drift this number and make a dated record report on work it never measured.
+fms = blob(after, 'workflow/kestra-build/references/full-mode-stages.md')
+sd  = blob(after, 'workflow/kestra-build/references/stage-derivation.md')
 spans = [
     ('D  spec-review',            467, 519, 5, fms, 'full-mode-stages.md'),
     ('H  test-review fold-in',    571, 600, 5, fms, 'full-mode-stages.md'),
@@ -102,7 +106,7 @@ print('so line boundaries changed on both sides and a line-level check does not 
 print('  B  same-spawn scenario table   436-447   rule inline, argument -> stage-derivation.md section 1')
 print('  K1 verdict-artifact shape      634-646   shape inline, reasoning -> stage-derivation.md section 2')
 import re
-corpus = ' '.join((pathlib.Path('workflow/kestra-build/SKILL.md').read_text() + '\n' + sd).split())
+corpus = ' '.join((blob(after, 'workflow/kestra-build/SKILL.md') + '\n' + sd).split())
 for label, a, b, w in (('B', 436, 447, 5), ('K1', 634, 646, 7)):
     flat = ' '.join(x.strip() for x in dedent(a, b, w) if x.strip())
     body = flat[2:] if flat.startswith('- ') else flat

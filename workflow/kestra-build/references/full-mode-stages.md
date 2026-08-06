@@ -41,8 +41,8 @@ and you inferred them (see `SKILL.md`'s **Inputs**), say so in the brief so this
 rather than assuming a human already blessed it.
 
 **Chain a mechanical pre-check ahead of the verdict grep.** This stage's `exit_criteria` runs the
-run folder's **own** copy of `validate_spec.py`, emitted by `SKILL.md`'s step F5 (the single owner of
-that `cp`, which emits all three scripts on every fold) alongside `workflow.yaml`/`state.json` —
+run folder's **own** copy of `validate_spec.py`, emitted by `SKILL.md`'s step G2 (the single owner of
+that `cp`, which emits all three scripts on every run, in either form) alongside `workflow.yaml`/`state.json` —
 same convention as `harness/` and `evidence/` — so the frozen
 `exit_criteria` field carries no dependency on the `kestra-build` skill being installed on
 whatever machine later executes the workflow. Set `exit_criteria.run` to

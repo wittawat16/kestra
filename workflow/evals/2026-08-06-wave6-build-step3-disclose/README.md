@@ -61,8 +61,16 @@ wave this way does not work.
 sh workflow/evals/2026-08-06-wave6-build-step3-disclose/logs/run-legs.sh
 ```
 
-Nine legs, literal output in `logs/`. Consecutive re-runs produce identical bytes, with one
-deliberate exception: leg 04 records the short SHA of `HEAD`, so it changes when `HEAD` moves.
+Nine legs, literal output in `logs/`. Consecutive re-runs at a fixed `HEAD` produce identical bytes.
+
+**Which legs are pinned and which are live**, because the difference decides what a re-run a year
+from now is even claiming. Legs 00, 01, 06 and 07 read their inputs out of `dd4077d` and `bcc2bbd`
+with `git show`: they grade *this wave* and their numbers must never move again. Legs 02, 03, 04,
+05 and 08 read the working tree: they are standing invariants — links resolve, every gate row still
+lands on a section, the suites pass, the 2026-07-31 record stays untouched, the four generated
+workflows stay equivalent — and they are *supposed* to fail if a later wave breaks one. Leg 04 also
+records `HEAD`'s short SHA, and leg 05 prints the live `SKILL.md` line count, so both change text
+whenever the file does.
 
 | Leg | Result |
 |---|---|
@@ -224,8 +232,11 @@ share one `write_scope` — and it is not the forbidden thing, which is splittin
 
 Neither of the first two is a Wave 6 regression — both are present identically at `dd4077d` and at
 `bcc2bbd`, and both were found *behaviourally*, by agents tripping over them, which is the thing
-half A structurally cannot do. They are filed separately rather than fixed here, to keep the wave's
-diff honest.
+half A structurally cannot do. Both were left out of the wave's own commits to keep its diff honest.
+**Defect 1 was fixed immediately afterwards**, in the commit that follows this eval on `develop`,
+which relocated the guard and the tooling emit out of the form-A-only section into a `G1`/`G2`
+block both forms run — so the `F5` line numbers quoted below describe `bcc2bbd`, not `HEAD`.
+**Defect 2 is still open.**
 
 1. **F5 contradicts its own section header.** `SKILL.md:120` opens the fold-start section with
    "Form A only; form B skips this whole section," while `SKILL.md:175` — inside it — says the `cp`

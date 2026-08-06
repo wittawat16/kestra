@@ -3,8 +3,9 @@
 Load this when the invocation names a **sliced ticket set** alongside the spec (the long-run path:
 one `0-spec.md`, N tickets, one `workflow.yaml`), when a ticket body changed and something has to
 decide re-fold vs. escalate, or when a `body_sha256` / `ac_hash` / `Verified-against` value needs
-recomputing. A **monolithic** fold — run folder with `0-spec.md` and no ticket set — needs none of
-this: `SKILL.md`'s own Process is complete for it, and nothing here fires.
+recomputing. A **monolithic** fold — run folder with `0-spec.md` and no ticket set — never needs
+this file: its whole path is `SKILL.md`'s G1 guard, its G2 tooling emit, and the Process. Nothing
+here fires.
 
 `SKILL.md`'s "Folding a sliced ticket set" section is the procedure and the order; this file is the
 exact commands, regexes, hashes and refusal texts it points at. The field grammars the fold writes
@@ -21,7 +22,7 @@ Three invocation forms, decided mechanically before anything else, the same post
 | Form | What the invocation names | Behavior |
 |---|---|---|
 | **A — sliced fold** | a run folder with `0-spec.md` **plus** the slice set — either (a) GitHub refs (`#N` / full URLs) with the repo, or (b) a directory of local-file tickets (`.scratch/<feature-slug>/issues/<NN>-<slug>.md`) | this file's whole procedure |
-| **B — monolithic fold** | a run folder with `0-spec.md` only | unchanged from before the fold existed: no `tickets:` block, and `spec_anchor` written only if the spec carries a `> Spec-ticket:` preamble marker |
+| **B — monolithic fold** | a run folder with `0-spec.md` only | no `tickets:` block, and `spec_anchor` written only if the spec carries a `> Spec-ticket:` preamble marker; `SKILL.md`'s G1 guard and G2 emit still run, stated there rather than here |
 | **C — chain-marked spec, no set named** | a run folder whose `0-spec.md` carries `> Spec-ticket: <url>` but the invocation names no slices | ask **once**: "this spec is chain-marked `<url>` — name the sliced ticket set, or fold monolithically?" |
 
 **Never search the tracker for tickets nobody named.** This is verbatim the rule `kestra-spec`'s
@@ -89,13 +90,13 @@ copies would look populated.
 
 ---
 
-## 3. Fold-start verification — F0…F5
+## 3. Fold-start verification — F0…F4
 
 A fixed, numbered sequence at the top of every fold, first fold and re-fold alike. Run it in order;
 each step's output is what the next one is allowed to assume.
 
-Before F0 can overwrite `tickets/*.md`, guard any existing run state with the validator frozen into
-that run:
+`SKILL.md`'s G1 and G2 have already run by this point — both forms run them, which is why they live
+there and not here. G1 is the guard that stops a re-fold from overwriting a live run:
 
 ```bash
 test ! -e "$RUN/state.json" || python3 "$RUN/validate_workflow.py" "$RUN" --refold-guard
@@ -103,6 +104,7 @@ test ! -e "$RUN/state.json" || python3 "$RUN/validate_workflow.py" "$RUN" --refo
 
 First fold has no `state.json` and proceeds. Existing state with a missing validator, malformed
 `stages`, or any status other than `pending` is a hard stop; do not materialize even one slice first.
+G2 has also already put this run's `requirement_surface.py` in place, which is what F1 below runs.
 
 ### F0 — resolve the raise commit
 
@@ -183,22 +185,12 @@ issue-49      55c2de…      a7739e…               4f1c0b9e…         new
 refresh that did not run, and the whole value of a last-checked marker is that someone can tell the
 difference.
 
-### F5 — emit the run's frozen tooling
+### After F4 — the tooling emit is already done
 
-Byte-identical copies, committed with the workflow:
-
-```bash
-cp <skill-scripts-dir>/requirement_surface.py <skill-scripts-dir>/validate_spec.py \
-   <skill-scripts-dir>/validate_workflow.py "$RUN"/
-```
-
-`kestra-spec` already emits the first two at raise time; kestra-build overwrites them — idempotent,
-and a genuine skill-version difference then surfaces as a git diff instead of hiding. **The third
-one is not optional:** `validate_workflow.py` imports `requirement_surface` as a *same-directory
-sibling with no path setup*, so run from the skill directory it would bind the **skill's** extractor
-and quietly defeat the per-run freeze. Emitting it means the checker, the extractor and the artifact
-it grades are all the same vintage. `SKILL.md` step 7's dry-run therefore runs
-`python3 <run-folder>/validate_workflow.py <run-folder>`.
+There is no F5. Emitting the run's three frozen scripts is `SKILL.md`'s **G2**, which runs before
+F0 on either form, so by the time F4 finishes the copies are in place and committed with the
+workflow. G2 is the single owner of that `cp`; this file does not restate it, because a second copy
+of a rule that both forms need is exactly what put it in a form-A-only section in the first place.
 
 ---
 
@@ -287,8 +279,8 @@ on the tracker side — detectable only at the next fold, which re-prints the li
 
 ## 6. Where the refusal actually bites
 
-* **On a re-fold** the prior artifacts exist, so F0–F4 run before anything is overwritten — a
-  genuine pre-write refusal.
+* **On a re-fold** the prior artifacts exist, so `SKILL.md`'s G1 guard and then F0–F4 run before
+  anything is overwritten — a genuine pre-write refusal.
 * **On a first fold** there is no `workflow.yaml` yet, so the mechanical half of F1–F3 lands at
   `SKILL.md` step 7's dry-run: after the artifacts are written, but **before** they are shown,
   committed, or handed off. Step 7's standing rule ("don't show a workflow this check already knows
