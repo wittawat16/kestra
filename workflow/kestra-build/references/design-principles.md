@@ -175,8 +175,8 @@ Concretely, in kestra-build's default generated template:
   loop is exhausted (or stuck repeating the same diff) does it fall through to `reworking` — the
   one and only human stop.
 - **The terminal stage** (formerly `waiting_approval`) becomes a mechanical "everything upstream
-  passed, write the completion summary" stage — `write_scope: []`, `exit_criteria.type:
-  artifact_exists` on a generated summary file. Nothing left to approve; every judgment-bearing
+  passed, write the completion summary" stage — a `write_scope` holding just that summary file, and
+  `exit_criteria.type: artifact_exists` on it. Nothing left to approve; every judgment-bearing
   check already ran and already had its own escalation path.
 
 `human_approval` is not removed from the schema — it stays available for a user who explicitly

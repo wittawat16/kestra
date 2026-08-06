@@ -27,7 +27,7 @@ stages:
       consistent prior-refund totals. Write the verdict to
       workflow/runs/order-cancellation-refund/spec-verdict.md, first line exactly "VERDICT: CLEAR"
       or "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+    write_scope: ["workflow/runs/order-cancellation-refund/spec-verdict.md"]
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/spec-verdict.md"
@@ -113,7 +113,7 @@ stages:
       mechanical checks already ran in generate-tests' exit_criteria. Write the verdict to
       workflow/runs/order-cancellation-refund/test-verdict.md, first line exactly "VERDICT: CLEAR"
       or "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+    write_scope: ["workflow/runs/order-cancellation-refund/test-verdict.md"]
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/test-verdict.md"
@@ -226,7 +226,7 @@ stages:
       try them, proceed with a direct review if none are available. Write the verdict to
       workflow/runs/order-cancellation-refund/review-backend-verdict.md as the first line,
       exactly: "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+    write_scope: ["workflow/runs/order-cancellation-refund/review-backend-verdict.md"]
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/review-backend-verdict.md"
@@ -250,7 +250,7 @@ stages:
       available. Write the verdict to
       workflow/runs/order-cancellation-refund/review-frontend-verdict.md as the first line,
       exactly: "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+    write_scope: ["workflow/runs/order-cancellation-refund/review-frontend-verdict.md"]
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' workflow/runs/order-cancellation-refund/review-frontend-verdict.md"

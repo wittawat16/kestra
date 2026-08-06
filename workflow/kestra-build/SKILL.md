@@ -371,7 +371,8 @@ per-spec.
    mechanical-table pattern as the flags above, checked once so the per-stage bullets in step 3
    don't each re-derive it. A stage is **script-eligible** — no subagent, `exit_criteria` alone
    decides pass/fail — only when **both** hold: it produces no real diff of new work
-   (`write_scope: []`, or for `freeze-tests`, a `write_scope` kept only so the test-hash covers it
+   (`write_scope: []`; or a `write_scope` holding only the report the stage emits, as `done` does;
+   or for `freeze-tests`, one kept only so the test-hash covers it
    while the stage's own diff stays empty), **and** its `exit_criteria` settles pass/fail without
    anyone judging content. Missing either condition means a real subagent every time. This table is
    the single source of truth — the per-stage bullets below point back to it instead of re-arguing
@@ -389,8 +390,8 @@ per-spec.
    | `implement-*` | No | writes real code | creative work |
    | `define-shared-contract` | No | writes the shared file | small, but still a design decision |
    | `verify` | **Usually yes** | `write_scope: []`; `exit_criteria.run` is the frozen suite's own exit code | a subagent is only needed for the genuinely-uncovered ACs the brief's binary check flags — see step 4's `verify` brief guidance |
-   | `review` | No | `write_scope: []`, but the verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
-   | `test-review` | No, or dropped entirely | `write_scope: []`; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
+   | `review` | No | owns no code — `write_scope` holds only its own verdict — but that verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
+   | `test-review` | No, or dropped entirely | owns only its own verdict; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
    | `deploy-readiness` | No | reads diff + spec, judges devops risk | folded into `review`'s brief by default; still judgment either way |
    | repo-declared pre-merge test gate (sibling) | **Yes** | `write_scope: []`; `exit_criteria.run` invokes the repo's own documented command | give it no work-describing brief — "kestra-run runs `exit_criteria.run` directly; spawn nothing" |
    | `done` | **Yes** | `write_scope` scoped to one summary file; `exit_criteria.type: artifact_exists` | `kestra-run` writes the summary itself from `state.json`/`git log`, no spawn |
@@ -482,7 +483,8 @@ per-spec.
    - **`verify` and `review` are siblings, not a chain — both `depends_on` the implement stage
      directly, not each other.** Confirmed by direct benchmarking: chaining them
      (`review: depends_on: [verify]`) costs a whole extra sequential subagent round-trip for no
-     reason, because neither stage writes code (`write_scope: []` on both) — `review`'s diff is
+     reason, because neither stage writes code (`verify` writes nothing at all, `review` only its
+     own verdict, so their scopes can't collide) — `review`'s diff is
      already final the moment `implement` passes, so it doesn't need to wait for `verify` to
      finish reading the same, unchanging diff. Making them siblings lets kestra-run's existing
      "independent stages with non-overlapping `write_scope` run in parallel" rule apply to them
@@ -501,7 +503,8 @@ per-spec.
      when the user explicitly asks for a manual milestone (e.g. "I want to sign off myself before
      this touches prod") — ask, don't assume, the same as any other scope decision.
    - **`review` is not optional — always include it, right before the terminal stage.** It's a
-     mechanical exit_criteria stage (`write_scope: []`, no `freeze_after`) whose brief asks whatever
+     mechanical exit_criteria stage (owns no code — `write_scope` holds only the verdict it writes
+     — and no `freeze_after`) whose brief asks whatever
      gets spawned to review the real diff for correctness/edge-cases *and* injection/authn/secrets
      risk, writing a `VERDICT: CLEAR` / `VERDICT: CHANGES_REQUESTED` artifact that `exit_criteria`
      greps — naming whatever code-review and security-review skills you have available as suggested

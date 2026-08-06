@@ -289,6 +289,61 @@ class WriteScopeFrame(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
 
+class ArtifactLicensing(unittest.TestCase):
+    """A stage gated on an artifact has to own that artifact. Unlicensed, the
+    orchestrator reverts the file as a scope violation before exit_criteria looks
+    for it, and the stage never passes."""
+
+    # write-tests is the only artifact_exists stage in STAGES; anchoring on the
+    # exit_criteria block that follows it disambiguates from freeze-tests, which
+    # declares the identical write_scope.
+    GATE = ('write_scope: ["tests/demo.test.js"]\n'
+            '    exit_criteria:\n'
+            '      type: artifact_exists')
+
+    def scope(self, entry):
+        folder = RunFolder(None)
+        self.addCleanup(folder.close)
+        path = folder.dir / "workflow.yaml"
+        text = path.read_text()
+        assert self.GATE in text, f"pattern absent: {self.GATE!r}"
+        new = self.GATE.replace('["tests/demo.test.js"]', entry, 1)
+        path.write_text(text.replace(self.GATE, new, 1))
+        return folder.validate()
+
+    def test_empty_scope_under_an_artifact_gate_fails(self):
+        code, out = self.scope("[]")
+        self.assertEqual(code, 1, out)
+        self.assertIn("stage 'write-tests' gates on artifact 'tests/demo.test.js' but its "
+                      "write_scope does not cover it", out)
+
+    def test_scope_pointing_somewhere_else_fails(self):
+        code, out = self.scope('["docs/**"]')
+        self.assertEqual(code, 1, out)
+        self.assertIn("gates on artifact 'tests/demo.test.js'", out)
+
+    def test_a_glob_that_covers_the_artifact_passes(self):
+        code, out = self.scope('["tests/**"]')
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("gates on artifact", out)
+
+    def test_a_command_gate_is_not_path_guessed(self):
+        # Deliberate limit: only artifact_exists is checked, because there the path
+        # is a field. Extracting one from a `run:` command would be a heuristic, so
+        # `implement` keeps a scope covering src/ while its gate greps elsewhere.
+        folder = RunFolder(None)
+        self.addCleanup(folder.close)
+        path = folder.dir / "workflow.yaml"
+        old = 'run: "true"\n    on_fail:\n      action: fixing'
+        text = path.read_text()
+        assert old in text, f"pattern absent: {old!r}"
+        path.write_text(text.replace(
+            old, 'run: "grep -q OK unlicensed.md"\n    on_fail:\n      action: fixing', 1))
+        code, out = folder.validate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("gates on artifact", out)
+
+
 class ImportPath(unittest.TestCase):
     """The extractor must come from the run folder's own copy — sibling file, no
     path setup. Asserted twice: statically and empirically."""

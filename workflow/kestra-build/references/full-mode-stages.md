@@ -87,9 +87,11 @@ the `needs_*` flags are, not as a judgment call to re-open.
 Everything mechanically detectable belongs in `generate-tests`'s `exit_criteria` instead — a linter
 can't be talked out of its answer, so it needs no independent reviewer. What lands here is the part
 that requires reading the doubles against the real thing they imitate. Give the stage
-`write_scope: []` and `on_fail.action: fixing` with `target: generate-tests`, which is the same
-mechanism `review` uses against `implement-*`: the reviewer owns no files but can direct a bounded
-number of fixes inside the stage that does. This works only because the freeze hasn't happened yet
+a `write_scope` holding only the `<run-folder>/test-verdict.md` it writes — the verdict is a diff
+like any other, and a stage told to write one under `write_scope: []` has that file reverted before
+`exit_criteria` can grep it — plus `on_fail.action: fixing` with `target: generate-tests`, which is
+the same mechanism `review` uses against `implement-*`: the reviewer owns no *code* but can direct
+a bounded number of fixes inside the stage that does. This works only because the freeze hasn't happened yet
 — after `freeze-tests`, no such loop is legal.
 
 Ask the brief for a table with a row per risk below, each marked applicable or not with `file:line`
@@ -268,7 +270,8 @@ This fold is safe **only** with checklist freshness mechanically enforced, not a
   earlier diff.
 
 **Keep `deploy-readiness` as its own stage instead** (between `review` and the terminal stage,
-`write_scope: []`, brief asks for the checklist, naming whatever devops-focused skill you have as a
+`write_scope: ["<run-folder>/deploy-checklist.md"]` — the checklist it produces, and nothing else —
+brief asks for the checklist, naming whatever devops-focused skill you have as a
 suggestion) whenever either enforcement point above can't be wired into the specific project/CI
 setup, or the user explicitly asks for a distinct deploy milestone separate from code review. Skip
 the stage/fold entirely when the spec has no devops flag — don't add it unconditionally the way

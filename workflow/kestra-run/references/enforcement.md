@@ -138,17 +138,27 @@ Then treat this attempt as failed (go to the `fixing` accounting in SKILL.md ste
 silently keep the out-of-scope change. Always check the exit code of the revert command itself;
 a failed revert must not be treated as "handled."
 
-`write_scope: []` (approval gates, verify-only stages) means **zero** tolerance — any diff at all
-is a violation.
+`write_scope: []` means **zero** tolerance — any diff at all is a violation. Reserve it for a stage
+that writes literally nothing, such as a `human_approval` gate. **A stage told to write a verdict
+artifact is not one of those.** The verdict is a brand-new untracked file, `git ls-files --others`
+above reports it, and under `[]` it is a violation — so it gets snapshotted and `rm -f`'d, and then
+`exit_criteria` greps a file that no longer exists. That stage cannot pass on any attempt. Such a
+stage lists its own verdict path in `write_scope`; `kestra-build` writes them that way.
 
-**Exception: a `fixing` retry with `on_fail.target` set.** A `review`/verify stage with
-`write_scope: []` can still declare `on_fail: {action: fixing, target: implement-x}` — the fix
-attempt is legitimately allowed to touch `implement-x`'s `write_scope`, not the review stage's own
-empty one. When checking a fixing attempt spawned this way, diff against `target`'s `write_scope`
-globs instead of the failing stage's own. Everything else about the check is identical — same
+**Never counted as any stage's diff: the run folder's own `state.json`.** The orchestrator rewrites
+it every attempt and it stays uncommitted until the stage passes (see Commit-per-stage below), so
+it appears in every diff while belonging to no stage. Exclude it from the comparison rather than
+expecting it in a `write_scope` — the same reason the semantic-diff hash below excludes it.
+
+**Exception: a `fixing` retry with `on_fail.target` set.** A `review`/verify stage owns no code, so
+it declares `on_fail: {action: fixing, target: implement-x}` — the fix attempt is legitimately
+allowed to touch `implement-x`'s `write_scope`. When checking a fixing attempt spawned this way,
+diff against `target`'s `write_scope` globs **plus the failing stage's own** — the fix writes the
+code, then the stage re-runs and rewrites its verdict. **The trigger is `target` being set**, not
+the failing stage's `write_scope` being empty. Everything else about the check is identical — same
 tracked-vs-untracked revert distinction, same "treat as failed attempt" outcome on a violation.
-Get this wrong (checking against the review stage's own `[]`) and every such fix attempt reads as
-a 100% violation regardless of what the subagent actually did.
+Get this wrong (checking against the review stage's own scope alone) and every such fix attempt
+reads as a 100% violation regardless of what the subagent actually did.
 
 ## Test-hash: computing and checking the freeze
 
@@ -363,11 +373,11 @@ git commit -m "stage(<feature-id>): <stage-id> passed"
 `state.json` must be part of that same commit — update it (status, test_hash if this was the
 freeze stage, attempt/seen_diffs reset if this followed a `reworking`) and stage it alongside the
 code changes before committing, not as a separate commit afterward. One commit per stage, always —
-**with one exception**: when multiple `write_scope: []` stages pass in the same batch (e.g.
+**with one exception**: when multiple stages that own no code pass in the same batch (e.g.
 `verify`+`review`), combine them into a single commit naming every stage id
-(`stage(<feature-id>): verify-acceptance-criteria, review passed`), since a `write_scope: []`
-stage's commit contains only the `state.json` update and there's no per-stage code state a separate
-commit would preserve. Name every id individually in the message so the rollback grep below still
+(`stage(<feature-id>): verify-acceptance-criteria, review passed`), since such a
+stage's commit holds only its own verdict artifact and the `state.json` update — there's no
+per-stage code state a separate commit would preserve. Name every id individually in the message so the rollback grep below still
 resolves per stage.
 
 No `git tag` per stage — the commit itself is the rollback point (see Rollback below). Tags

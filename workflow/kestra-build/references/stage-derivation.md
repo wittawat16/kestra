@@ -149,7 +149,7 @@ agent may recall and one it cannot skip — and a gate the project already decla
 exactly the kind that shouldn't depend on recall. Give it `write_scope: []`, an
 `exit_criteria.run` that invokes whatever command the repo documents, and
 `on_fail.action: fixing` with `target` pointing at the implement stage. Place it as a sibling
-of `verify`/`review` — all three read the same finished diff and none of them writes, so
+of `verify`/`review` — all three read the same finished diff and none of them writes code, so
 chaining them only costs wall-clock. Name the gate as the repo documents it rather than
 inventing a name, and if the documented command doesn't run standalone, say so instead of
 generating a stage that can never pass. **Give this stage no work-describing brief** — or a

@@ -908,6 +908,22 @@ def validate(workflow, state, target=None, raw=""):
                 problems.append(f"stage '{sid}' exit_criteria.type is 'command' but 'run' is empty")
             if t == "artifact_exists" and not ec.get("artifact"):
                 problems.append(f"stage '{sid}' exit_criteria.type is 'artifact_exists' but 'artifact' is empty")
+            # The gated artifact is this stage's own output, so its own write_scope has to
+            # license it. Unlicensed, the orchestrator reverts the file as a scope violation
+            # *before* exit_criteria looks for it (kestra-run SKILL.md step 3 runs the scope
+            # check first), and the stage can never pass. Only checked for artifact_exists:
+            # the path is a field there, where inside a `run:` command it would be a guess.
+            art = ec.get("artifact") if t == "artifact_exists" else None
+            if art:
+                scopes = s.get("write_scope")
+                scopes = scopes if isinstance(scopes, list) else []
+                if not any(fnmatch.fnmatch(str(art), str(g)) for g in scopes):
+                    problems.append(
+                        f"stage '{sid}' gates on artifact '{art}' but its write_scope does not "
+                        f"cover it — the orchestrator reverts an unlicensed file before "
+                        f"exit_criteria reads it, so the stage can never pass. Add the artifact "
+                        f"path to this stage's write_scope"
+                    )
             if "progress" in ec and not str(ec.get("progress") or "").strip():
                 problems.append(
                     f"stage '{sid}' exit_criteria.progress is empty — omit the field or give it "

@@ -12,6 +12,7 @@ description: >
   This is NOT: generating a workflow.yaml from a spec (that's kestra-build), a fixed-phase agent
   pipeline with no workflow file (chain whatever specialized skills you have yourself for that),
   or a generic CI/CD deployment pipeline runner.
+argument-hint: "[feature-id]"
 ---
 
 # kestra-run — Workflow Orchestrator
@@ -108,8 +109,8 @@ do when one or both of them fail.
    kestra-build's `model` guidance for why it's scoped to `implement-*`). Same for `effort`: if the
    stage sets it, pass it as the spawn's effort override; otherwise inherit the orchestrator's own
    effort level — `effort` and `model` are independent fields, check and pass each on its own, one
-   can be set without the other. **Exception for a target-based fix attempt** (a `write_scope: []`
-   review/verify stage whose `on_fail.target` names an `implement-*` stage — see step 6): that spawn
+   can be set without the other. **Exception for a target-based fix attempt** (a review/verify
+   stage — one that owns no code — whose `on_fail.target` names an `implement-*` stage — see step 6): that spawn
    does implement-shaped work inside the target's `write_scope`, so pass the *target* stage's
    `model`/`effort`, not the failing reviewer's (which is usually unset) — otherwise a workflow that
    declares `implement-*` at `effort: low` silently loses that setting on every fix attempt routed
@@ -155,11 +156,13 @@ do when one or both of them fail.
      changed. `references/efficiency-notes.md`.
 
 3. **Verify mechanically — in this order, every single time:**
-   - `write_scope`: real `git diff --name-only` against the paths in `write_scope` — **except**
-     when this attempt is a `fixing` retry of a stage whose own `write_scope: []` and whose
-     `on_fail.target` names another stage; in that case check the diff against `target`'s
-     `write_scope` instead (that's the whole point of `target` — a review/verify stage judges a
-     diff, it doesn't own one). Before the existing revert, copy the already-computed violating
+   - `write_scope`: real `git diff --name-only` against the paths in `write_scope`, never counting
+     the run folder's own `state.json` — the orchestrator rewrites it every attempt and it stays
+     uncommitted until the stage passes, so it is in every diff and belongs to no stage.
+     **Except** when this attempt is a `fixing` retry of a stage whose `on_fail.target` names
+     another stage; in that case check the diff against `target`'s `write_scope` **plus this
+     stage's own** (that's the whole point of `target` — a review/verify stage judges a diff, it
+     doesn't own the code in one; it does own the verdict it writes). Before the existing revert, copy the already-computed violating
      paths to the fresh external snapshot directory from `references/enforcement.md`, report its
      path, then revert and count the attempt as failed. Keeping it outside the repo prevents the
      evidence from becoming the next attempt's violation. This applies only to a current stage
@@ -181,11 +184,11 @@ do when one or both of them fail.
 5. **On pass (non-`human_approval` stages only):** stage → `passed`. If this stage has
    `freeze_after: true`, compute and store the test-hash into `state.json` now. Commit everything
    (code + `state.json` — see `references/enforcement.md` for the exact sequence; no `git tag` per
-   stage, the commit itself is the rollback point). **When multiple `write_scope: []` siblings pass
+   stage, the commit itself is the rollback point). **When multiple siblings that own no code pass
    in the same batch** (the `verify`+`review` case), make one commit naming every stage id that
-   passed, instead of one commit per sibling — a `write_scope: []` stage's commit contains only the
-   `state.json` update, so there's no per-stage code state a separate commit would need to preserve
-   as a rollback point; combining them loses nothing. Make sure the commit message still names every
+   passed, instead of one commit per sibling — such a stage's commit holds only its own verdict
+   artifact and the `state.json` update, so there's no per-stage code state a separate commit would
+   need to preserve as a rollback point; combining them loses nothing. Make sure the commit message still names every
    stage id individually so a later `git log --grep "stage(<feature-id>): <stage-id> passed"` lookup
    resolves for each one (see `enforcement.md`'s rollback-grep convention). A sibling with a
    non-empty `write_scope` still gets its own commit as before. Remove this stage from `current_stage` and add
@@ -242,7 +245,7 @@ do when one or both of them fail.
      today, a repeat escalates to `reworking` immediately, with no grace retries in between. The
      grace window this paragraph describes only actually exists when a workflow sets `escalate_at` to
      3 or higher; don't assume a generated workflow has one just because this field exists. When
-     `on_fail.target` is set (a review/verify stage with `write_scope: []`), the next attempt's
+     `on_fail.target` is set (a review/verify stage, which owns no code), the next attempt's
      brief goes to a fix on `target`'s write_scope — hand the subagent the failing stage's own
      output (e.g. `review-verdict.md`'s `CHANGES_REQUESTED` findings) as the thing to address, let
      it edit within `target`'s `write_scope` **at the target stage's own `model`/`effort`** (see

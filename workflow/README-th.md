@@ -337,6 +337,8 @@ review ไม่ใช่ของ stage machine)
    ตัวนั้นโดยไม่มีการ setup path ใดๆ ทำให้ run folder ตรวจตัวเองได้ไม่ว่าจะถูก copy ไปไว้ที่ไหน
    เป็นการเช็คโครงสร้างแบบ zero-LLM (ไม่มี PyYAML ไม่มีการตัดสินใจของ AI) ที่จับเรื่องเหล่านี้:
    - `on_fail.target` หายไปใน stage ที่ `write_scope: []` + `action: fixing`
+   - `write_scope` ที่ไม่ได้อ้างอิงจาก repo root หรือ artifact ใน `exit_criteria` ที่ `write_scope`
+     ของ stage นั้นเองไม่ครอบคลุม
    - `write_scope` ทับซ้อนกับ path ที่ freeze เป็นเทสต์ไปแล้ว
    - stage อิสระที่ `write_scope` ชนกัน (เสี่ยงจริงถ้ารันขนานกัน)
    - `freeze_after: true` หายไป หรือถูกตั้งไว้มากกว่าหนึ่ง stage
@@ -390,7 +392,7 @@ exit code จริงของคำสั่งเทสต์ — นี่�
    anchor ที่บันทึกไว้ ถ้า anchor ผิดรูป/เข้าถึงไม่ได้, คำนวณไม่สำเร็จ หรือไม่ตรงกัน ให้ hard stop
    แบบ fail-closed ไม่ใช่ retry หรือ `reworking`
 2. **ทำงานของ stage** — spawn subagent (หรือทำเองตรงๆ ถ้าเป็นแค่การเช็ค mechanical ที่ไม่ต้องใช้
-   วิจารณญาณ เช่น stage `review`/`verify` ที่ `write_scope: []`) — stage `done` เขียนสรุปของตัวเอง
+   วิจารณญาณ เช่น stage `verify` ที่ไม่เขียนอะไรเลย) — stage `done` เขียนสรุปของตัวเอง
    ได้ตรงๆ จาก `state.json`/`git log` โดยไม่ต้อง spawn อะไร stage แบบ sliced ที่มี anchor จะได้
    slim pack (brief ของ ticket เดียวที่พิสูจน์ ownership แล้ว + provision layer และอ่าน spec ตาม
    ต้องการ) ต่อเมื่อ provenance กับ surface check ของรอบนี้ผ่านเท่านั้น stage ที่ไม่มี anchor,

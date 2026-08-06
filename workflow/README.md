@@ -347,6 +347,8 @@ regenerating tests, re-freezing, and resetting the attempt counter.
    validator imports that sibling with no path setup, so a run folder stays self-checking wherever
    it is copied. A zero-LLM structural check (no PyYAML, no AI judgment) that catches:
    - Missing `on_fail.target` on a `write_scope: []` + `action: fixing` stage
+   - A `write_scope` entry that isn't repo-root-relative, or an `exit_criteria` artifact the
+     stage's own `write_scope` doesn't cover
    - `write_scope` overlapping a path that was already frozen as a test path
    - Independent stages whose `write_scope`s collide (a real risk if they run in parallel)
    - `freeze_after: true` missing, or set on more than one stage
@@ -403,7 +405,7 @@ here: every decision that matters is mechanical, not an opinion.
    requirement surfaces and require both to match the recorded anchor. A malformed/unreachable
    anchor, failed recompute, or mismatch is a fail-closed hard stop, never a retry or `reworking`.
 2. **Do the stage's work** — spawn a subagent (or do it directly if it's just a mechanical check
-   with no judgment needed, e.g. a `review`/`verify` stage with `write_scope: []`) — the `done`
+   with no judgment needed, e.g. a `verify` stage, which writes nothing at all) — the `done`
    stage can write its own summary directly from `state.json`/`git log` without spawning anything.
    An anchored sliced stage gets the slim pack (its proven single-ticket brief + provision layer,
    spec read on demand) only after this round's provenance and surface checks pass. Unanchored,

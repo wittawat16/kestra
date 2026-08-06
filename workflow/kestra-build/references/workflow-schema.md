@@ -406,18 +406,24 @@ on_fail:
                                # nothing prior to compare against), so at the conventional value of
                                # 2 there is no actual grace window — a repeat escalates immediately.
                                # Set 3+ if you want a real grace window; 2 is "no tolerance."
-  target: implement-x        # required when action: fixing AND this stage's own write_scope is []
-                               # (a review/verify-only stage) — names the upstream stage whose
-                               # write_scope the fix attempt is allowed to touch. Omit when the
-                               # stage has its own non-empty write_scope (fixes apply to itself).
+  target: implement-x        # required when action: fixing AND this stage owns no code — a
+                               # review/verify stage, whose write_scope holds only the verdict
+                               # artifact it writes (or nothing at all). Names the upstream stage
+                               # whose write_scope the fix attempt may touch. Omit when the stage
+                               # owns the code its own fix would edit.
   reason: "short phrase"     # required when action: reworking or blocked — shown to the human
 ```
 
 - `fixing` — orchestrator lets the stage retry, touching only `write_scope`, up to `max_attempts`.
   Every `fixing` stage must set both `max_attempts` and `escalate_at`; never leave it unbounded.
-  A stage whose own `write_scope: []` (review, verify) can still use `action: fixing` — set
-  `target` to the upstream implementation stage id. The orchestrator then: checks the fix attempt's
-  diff against `target`'s `write_scope` (not this stage's own `[]`), tells the fix subagent what
+  A stage that owns no code (review, verify) can still use `action: fixing` — set `target` to the
+  upstream implementation stage id. **`target`, not an empty `write_scope`, is what marks such a
+  stage**: writing a verdict *is* a diff, so a stage whose brief orders one lists that path in its
+  own `write_scope`, and `[]` is reserved for a stage that writes literally nothing. Get that wrong
+  and the orchestrator reverts the verdict as a scope violation before `exit_criteria` greps it —
+  the stage then cannot pass at all, on any attempt. The orchestrator: checks the fix attempt's
+  diff against `target`'s `write_scope` **plus this stage's own** (the fix writes code, then this
+  stage re-runs and rewrites its verdict), tells the fix subagent what
   this stage's failure output said (e.g. the `CHANGES_REQUESTED` findings), and re-runs *this*
   stage's own work + `exit_criteria` again afterward. `attempt`/`seen_diffs` are still tracked
   against this stage's own entry in `state.json`, same as any other `fixing` stage.
@@ -528,7 +534,7 @@ stages:
       are addressed and review the changed lines and their interactions with the rest of the suite;
       do not re-derive relations between unchanged files already cleared, which write_scope
       enforcement guarantees are unchanged.
-    write_scope: []
+    write_scope: ["workflows/runs/csv-export/test-verdict.md"]   # the verdict it writes, nothing else
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/test-verdict.md"
@@ -599,8 +605,9 @@ stages:
       target: implement-csv-export
 
   # Sibling of verify-acceptance-criteria, not its successor — both depend on implement-csv-export
-  # directly so kestra-run can run them concurrently (neither writes code: write_scope: [] on both,
-  # so there's nothing for them to collide on, and review's diff is already final the moment
+  # directly so kestra-run can run them concurrently (neither writes code — verify writes nothing at
+  # all, review writes only its own verdict — so there's nothing for them to collide on, and
+  # review's diff is already final the moment
   # implement-csv-export passes — it doesn't need verify to finish first).
   - id: review
     depends_on: [implement-csv-export]
@@ -612,7 +619,7 @@ stages:
       direct review if none are available. Write the verdict to
       workflows/runs/csv-export/review-verdict.md as the first line, exactly: "VERDICT: CLEAR" or
       "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+    write_scope: ["workflows/runs/csv-export/review-verdict.md"]   # the verdict it writes, not the code it judges
     exit_criteria:
       type: command
       run: "grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/review-verdict.md"
@@ -641,7 +648,7 @@ stages:
       feature flags, infra changes, deploy order, rollback trigger, monitoring. Whatever
       devops-focused skill you have fits this stage well; try it, proceed with a direct checklist
       if not available.
-    write_scope: []
+    write_scope: ["workflows/runs/csv-export/deploy-checklist.md"]   # the checklist it produces
     exit_criteria:
       type: artifact_exists
       artifact: "workflows/runs/csv-export/deploy-checklist.md"
@@ -671,15 +678,18 @@ Notice: `generate-tests` and `freeze-tests` are the only stages with `write_scop
 point, which is why owning test paths is legitimate for them — that's how tests get written and
 revised while revising them is still a bounded `fixing` loop rather than a `reworking` bounce. Every
 stage from the freeze onward is forbidden those paths: if `implement-csv-export`'s diff touches
-`test/**`, the orchestrator rejects it regardless of intent. `test-review`,
-`verify-acceptance-criteria`, `review`, and `deploy-readiness` all have `write_scope: []` — they
-judge or report on work they don't produce. `test-review` still directs fixes through
+`test/**`, the orchestrator rejects it regardless of intent. `test-review`, `review` and
+`deploy-readiness` own **only the artifact each one writes** — they judge or report on work they
+don't produce, and the artifact is the report, not the work. `verify-acceptance-criteria` is the
+one true `[]`: it writes nothing at all, its `exit_criteria` command *is* the verification.
+`test-review` still directs fixes through
 `on_fail.target: generate-tests`, the same mechanism `review` uses against the implement stage; a
 reviewer that could edit what it reviews wouldn't be an independent check at all.
 
 `verify-acceptance-criteria` and `review` both `depends_on: [implement-csv-export]` directly — they
 are **siblings, not a chain**. kestra-run's rule for running independent stages in parallel ("their
-`write_scope`s can't collide by construction") applies to them directly: both are `[]`, so there's
+`write_scope`s can't collide by construction") applies to them directly: one is `[]` and the other
+owns only its own verdict file, so there's
 nothing to collide on, and neither needs the other's result to do its own job. Confirmed by direct
 benchmarking: chaining them the "obvious" way (`review: depends_on: [verify-acceptance-criteria]`)
 pays for a whole extra sequential subagent round-trip whenever both stages happen to need one, for

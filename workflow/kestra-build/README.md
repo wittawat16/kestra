@@ -150,7 +150,7 @@ kestra-build just writes the file, but here's what happens when [`kestra-run`](.
 - Does it meet its `exit_criteria`? (a test passes, a command succeeds, an artifact exists — or, for a `human_approval` stage a user explicitly asked for, a human approves)
 - Did it stay inside its `write_scope`? (didn't touch paths it shouldn't)
 
-**If a stage fails**, it retries up to `max_attempts` times, only touching paths in `write_scope` (or, for a `write_scope: []` stage like `review`, in its `on_fail.target`'s `write_scope`). If it keeps failing or produces the same diff twice, it escalates to `reworking` — the system admitting the frozen spec/tests might be wrong, not blaming the code. That escalation is the one point that always stops for a human — see [`references/design-principles.md`](references/design-principles.md)'s "Default HITL posture."
+**If a stage fails**, it retries up to `max_attempts` times, only touching paths in `write_scope` (or, for a stage that owns no code like `review`, in its `on_fail.target`'s `write_scope` as well as its own verdict). If it keeps failing or produces the same diff twice, it escalates to `reworking` — the system admitting the frozen spec/tests might be wrong, not blaming the code. That escalation is the one point that always stops for a human — see [`references/design-principles.md`](references/design-principles.md)'s "Default HITL posture."
 
 **Once tests freeze**, no stage after that point can touch test files. The orchestrator enforces this by checking the diff, not by asking nicely.
 
@@ -180,8 +180,10 @@ that stage ever failed during a real `kestra-run`, the orchestrator would have h
 fix. Nothing about that file looked wrong on a read-through; it only breaks once you check the
 `on_fail` fields across every stage against each other. Concretely, the checker catches:
 
-- **Missing fix target** — a `write_scope: []` stage (`review`, `verify`, `deploy-readiness`) with
+- **Missing fix target** — a `write_scope: []` stage (`verify`, or any gate that writes nothing) with
   `on_fail.action: fixing` but no `target` naming another stage to apply the fix to.
+- **An unlicensed gate artifact** — a stage whose `exit_criteria` gates on an `artifact` its own
+  `write_scope` doesn't cover, which the orchestrator would revert before ever looking for it.
 - **Frozen-test leakage** — any stage's `write_scope` (other than the freeze stage or `reworking`)
   overlapping the paths that were frozen at test-generation time.
 - **Parallel write collisions** — two stages with no dependency ordering between them (so kestra-run
