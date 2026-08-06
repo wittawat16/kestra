@@ -5,12 +5,33 @@ the fields only make sense in light of *why* they exist.
 
 **What's in here**, so one field doesn't cost you 700 lines:
 
+- **Paths** — the one repo-root frame `write_scope`, `exit_criteria` and every `brief` share
 - **Top-level** — `feature`, `source_spec`, `mode`, and `spec_anchor` + `tickets` (the anchor triple
   and the ticket map, for a sliced fold only)
 - **Per-stage fields** — `model` · `effort` · `brief` · `exit_criteria` · the verdict artifact ·
   `on_fail` · `branches`
 - **Worked example** — csv-export, complete and copyable; the longest section by far
 - **The `design` stage** — not in the worked example, since csv-export has no UI
+
+## Paths — repo-root-relative, all of them
+
+`write_scope` is matched against `git diff --name-only HEAD`, and git prints every path from the
+repo root whatever directory it runs in. The frame is git's, not one this schema picked, so the
+only spelling that can ever match is the repo-root-relative one:
+`workflows/runs/csv-export/spec-verdict.md`, not `spec-verdict.md`. (`<run-folder>` below expands
+the same way — `workflows/runs/csv-export`.) The run's own `validate_workflow.py` FAILs a
+`write_scope` entry starting `./`, `../`, or `/`.
+
+**The orchestrator runs `exit_criteria.run` from the repo root**, so one frame covers the whole
+stage: every path inside `run`, `exit_criteria.artifact`, `branches.artifact_exists`, and every
+file a `brief` tells the stage to write or read. Spell all of them out from the repo root and a
+stage's scope, its gate, and its instructions name the same file — which is what makes the gate a
+gate.
+
+**The run folder lives inside the target repo** — that is what puts its artifacts into
+`git diff --name-only HEAD` at all (`SKILL.md`'s **Output location**). A run folder outside the
+repo never appears there, so `write_scope` cannot bound an artifact-writing stage and that stage
+runs unenforced.
 
 ## Top-level
 
@@ -102,7 +123,7 @@ partial anchor triple."
 | `id` | yes | unique string | referenced by other stages' `depends_on` and `branches.goto` |
 | `depends_on` | yes | list of stage ids | `[]` for the first stage(s); a stage only starts once every dependency is `passed` |
 | `brief` | no | free text | plain-language instructions for whatever Claude gets spawned to do this stage's work. **Never a skill name or ID** — see note below |
-| `write_scope` | yes | list of glob patterns | paths this stage's diff may touch. `[]` means the stage produces no code diff (e.g. approval gates). Enforced at apply time by the orchestrator — not a promise the AI makes itself |
+| `write_scope` | yes | list of repo-root-relative glob patterns | paths this stage's diff may touch. `[]` means the stage produces no code diff (e.g. approval gates). Enforced at apply time by the orchestrator against `git diff --name-only HEAD` — not a promise the AI makes itself |
 | `exit_criteria` | yes | object, see below | how the orchestrator decides `verifying` → `passed` vs `fixing` |
 | `freeze_after` | no, default `false` | bool | set `true` **only** on the dedicated freeze stage, whose successful completion snapshots the test-hash into `state.json` and commits the freeze point. Exactly one stage per file has this set, and its `write_scope` must be non-empty — the hash is computed from that scope, so an empty one snapshots nothing and the invariant silently doesn't exist. Not the stage that *writes* the tests: that one stays unfrozen so its output can still be reviewed and fixed cheaply (see `design-principles.md`) |
 | `on_fail` | yes | object, see below | what happens when `exit_criteria` fails |
@@ -265,11 +286,11 @@ four hand-edit routes it closes, and the mid-run refusal: `ticket-fold.md` §4.
 exit_criteria:
   type: command             # command | artifact_exists | human_approval
   run: "npm test"           # required when type: command — the orchestrator's verifying step
-  artifact: "path/to/file"  # required when type: artifact_exists
+  artifact: "<run-folder>/design.md"  # required when type: artifact_exists
   progress: "<one spec bullet, verbatim>"   # optional — see below; absent is the normal case
 ```
 
-- `command` — orchestrator runs `run`, exit code 0 = pass. When `run` executes a real test suite
+- `command` — orchestrator runs `run` **from the repo root**, exit code 0 = pass. When `run` executes a real test suite
   (a `verify` stage, or any stage whose exit_criteria re-runs the frozen tests), prefer the test
   runner's own parallel-execution flag over a plain serial invocation — e.g. `pytest -n auto`
   (pytest-xdist), `jest --maxWorkers=<n>`, `go test -parallel <n>`, `vitest --pool=threads`. This
@@ -422,7 +443,7 @@ on_fail:
 branches:
   - when: { exit_code: 0 }
     goto: implement-happy-path
-  - when: { artifact_exists: "design.md" }
+  - when: { artifact_exists: "<run-folder>/design.md" }
     goto: generate-tests-with-ui-cases
 ```
 
@@ -453,15 +474,17 @@ stages:
       the brief above — review the inference itself, don't assume a human already approved it. Any
       numeric finding must name the exact quantity measured, the inputs, and the command/script used
       — paste its output; a numeric claim without them isn't a finding yet. Write the verdict to
-      spec-verdict.md, first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed
-      by findings.
-    write_scope: ["workflows/runs/csv-export/0-spec.md"]
+      workflows/runs/csv-export/spec-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: ["workflows/runs/csv-export/0-spec.md", "workflows/runs/csv-export/spec-verdict.md"]
     exit_criteria:
       type: command
       # validate_spec.py is emitted into this run folder at generation time (see SKILL.md's
       # spec-review bullet) — it FAILs only on format-independent, spec-fixable facts (an
-      # edit/exists row whose path is absent); everything else WARNs without failing.
-      run: "python3 validate_spec.py workflows/runs/csv-export/0-spec.md . && grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+      # edit/exists row whose path is absent); everything else WARNs without failing. Its second
+      # argument is the repo root the spec's Files-to-Touch paths resolve against; the command
+      # runs from there, so `.` is it.
+      run: "python3 workflows/runs/csv-export/validate_spec.py workflows/runs/csv-export/0-spec.md . && grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/spec-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -499,7 +522,7 @@ stages:
       shared logic, non-determinism), each marked applicable or n/a with file:line evidence. Add
       rows this codebase's own conventions imply and say which you added. Judgment only — the
       mechanical checks already ran in generate-tests' exit_criteria; don't re-derive them. Write
-      the verdict to test-verdict.md, first line exactly "VERDICT: CLEAR" or
+      the verdict to workflows/runs/csv-export/test-verdict.md, first line exactly "VERDICT: CLEAR" or
       "VERDICT: CHANGES_REQUESTED", followed by findings. On a re-review after a fixing attempt
       (the context pack will include the fix diff and your own prior findings), verify the findings
       are addressed and review the changed lines and their interactions with the rest of the suite;
@@ -508,7 +531,7 @@ stages:
     write_scope: []
     exit_criteria:
       type: command
-      run: "grep -q '^VERDICT: CLEAR$' test-verdict.md"
+      run: "grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/test-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 3
@@ -586,12 +609,13 @@ stages:
       injection/authn/secrets risk. Passing tests only prove the spec's own acceptance criteria —
       this stage exists to catch what the spec never thought to test for. Whatever code-review and
       security-review skills you have available both fit this stage well; try them, proceed with a
-      direct review if none are available. Write the verdict to review-verdict.md as the first
-      line, exactly: "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
+      direct review if none are available. Write the verdict to
+      workflows/runs/csv-export/review-verdict.md as the first line, exactly: "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
     write_scope: []
     exit_criteria:
       type: command
-      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+      run: "grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/review-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 3
@@ -601,9 +625,10 @@ stages:
   # Conditional on the spec's needs_devops flag alone (never on scanning the spec text for
   # deploy-related keywords — see full-mode-stages.md's deploy-readiness section). DEFAULT shape:
   # fold this into `review` above instead of a standalone stage — review already writes
-  # review-verdict.md, so it additionally writes deploy-checklist.md and its exit_criteria becomes
-  # `grep -q '^VERDICT: CLEAR$' review-verdict.md && test -f deploy-checklist.md`, with freshness
-  # mechanically enforced (see full-mode-stages.md for both enforcement points). This standalone
+  # workflows/runs/csv-export/review-verdict.md, so it additionally writes
+  # workflows/runs/csv-export/deploy-checklist.md and its exit_criteria becomes
+  # `grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/review-verdict.md && test -f workflows/runs/csv-export/deploy-checklist.md`,
+  # with freshness mechanically enforced (see full-mode-stages.md for both enforcement points). This standalone
   # block is the FALLBACK shape — use it only when that freshness enforcement can't be wired into
   # the target project/CI, or the user explicitly wants a distinct deploy milestone. When using the
   # fallback: depends on BOTH siblings, not just review — it needs the full diff to be
@@ -619,7 +644,7 @@ stages:
     write_scope: []
     exit_criteria:
       type: artifact_exists
-      artifact: "deploy-checklist.md"
+      artifact: "workflows/runs/csv-export/deploy-checklist.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -628,12 +653,13 @@ stages:
   - id: done
     depends_on: [deploy-readiness]   # or [review, verify-acceptance-criteria] when deploy-readiness was omitted
     brief: >
-      Every upstream stage passed. Write a one-page completion-summary.md: what shipped, which
-      commits, the review/security verdicts, and (if present) the deploy checklist location.
-    write_scope: ["completion-summary.md"]
+      Every upstream stage passed. Write a one-page workflows/runs/csv-export/completion-summary.md:
+      what shipped, which commits, the review/security verdicts, and (if present) the deploy
+      checklist location.
+    write_scope: ["workflows/runs/csv-export/completion-summary.md"]
     exit_criteria:
       type: artifact_exists
-      artifact: "completion-summary.md"
+      artifact: "workflows/runs/csv-export/completion-summary.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -693,7 +719,7 @@ pattern; here it is written down so it stops being a guess:
   - id: design
     depends_on: [spec-review]
     brief: >
-      The spec sets needs_ui: true. Produce design.md: a component audit (reuse vs. new, with real
+      The spec sets needs_ui: true. Produce <run-folder>/design.md: a component audit (reuse vs. new, with real
       import paths read from this codebase's actual component library), real token names read from
       the actual token source rather than invented hex values, and all four screen states
       (empty/loading/success/error) for every view this feature touches — including any state the

@@ -836,6 +836,21 @@ def validate(workflow, state, target=None, raw=""):
         if ws is None:
             problems.append(f"stage '{sid}' missing write_scope (use [] if it produces no diff)")
             continue
+        # write_scope is compared against `git diff --name-only HEAD`, which prints
+        # repo-root-relative paths whatever the cwd. An entry anchored anywhere else
+        # cannot match any line of that output, so the stage runs unbounded. Guard on
+        # list: a wrapped or unbracketed write_scope parses as a *string*, and iterating
+        # one yields characters — "/" would then FAIL every such stage on its own slash.
+        if isinstance(ws, list):
+            for scope in ws:
+                if str(scope).startswith(("/", "./", "../")):
+                    problems.append(
+                        f"stage '{sid}' write_scope entry is not repo-root-relative: "
+                        f"'{scope}' — enforcement compares it against "
+                        f"`git diff --name-only HEAD`, which prints every path from the repo "
+                        f"root whatever the cwd, so a leading '/', './' or '../' matches nothing "
+                        f"and the stage runs unbounded. Spell it out from the repo root."
+                    )
         if frozen and sid != frozen[0] and sid not in pre_freeze:
             for scope in ws:
                 for fscope in frozen_scopes:

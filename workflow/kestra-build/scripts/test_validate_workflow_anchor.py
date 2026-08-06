@@ -245,6 +245,50 @@ class AnchorMatrix(unittest.TestCase):
             folder.close()
 
 
+class WriteScopeFrame(unittest.TestCase):
+    """write_scope is matched against `git diff --name-only HEAD`, so it can only ever
+    be repo-root-relative. The refusal has to teach that, not merely refuse."""
+
+    def scope(self, entry):
+        """Validate a run whose implement stage declares exactly `entry`."""
+        folder = RunFolder(None)
+        self.addCleanup(folder.close)
+        path = folder.dir / "workflow.yaml"
+        old, new = 'write_scope: ["src/demo.js"]', f'write_scope: ["{entry}"]'
+        text = path.read_text()
+        assert old in text, f"pattern absent: {old!r}"
+        path.write_text(text.replace(old, new, 1))
+        return folder.validate()
+
+    def test_each_out_of_frame_prefix_fails(self):
+        for entry in ("./src/demo.js", "../sibling/src/demo.js", "/tmp/src/demo.js"):
+            with self.subTest(entry=entry):
+                code, out = self.scope(entry)
+                self.assertEqual(code, 1, out)
+                self.assertIn(
+                    f"stage 'implement' write_scope entry is not repo-root-relative: "
+                    f"'{entry}'", out)
+
+    def test_the_refusal_names_the_git_basis(self):
+        # The teaching half is the whole reason this is a FAIL and not a WARN — an
+        # author who never opened workflow-schema.md learns the frame from the message.
+        code, out = self.scope("./src/demo.js")
+        self.assertEqual(code, 1, out)
+        self.assertIn("git diff --name-only HEAD", out)
+
+    def test_dotfile_directory_scope_is_not_flagged(self):
+        code, out = self.scope(".github/workflows/**")
+        self.assertEqual(code, 0, out)
+        self.assertIn("PASS —", out)
+        self.assertNotIn("repo-root-relative", out)
+
+    def test_interior_dotdot_is_not_flagged(self):
+        # Prefix-only by design. Documented so nobody quietly upgrades the check into
+        # a path normaliser without deciding to.
+        code, out = self.scope("src/../src/demo.js")
+        self.assertEqual(code, 0, out)
+
+
 class ImportPath(unittest.TestCase):
     """The extractor must come from the run folder's own copy — sibling file, no
     path setup. Asserted twice: statically and empirically."""

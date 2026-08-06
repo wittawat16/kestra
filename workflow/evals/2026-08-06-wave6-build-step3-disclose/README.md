@@ -236,7 +236,13 @@ half A structurally cannot do. Both were left out of the wave's own commits to k
 **Defect 1 was fixed immediately afterwards**, in the commit that follows this eval on `develop`,
 which relocated the guard and the tooling emit out of the form-A-only section into a `G1`/`G2`
 block both forms run — so the `F5` line numbers quoted below describe `bcc2bbd`, not `HEAD`.
-**Defect 2 is still open.**
+**Defect 2 was fixed in the commit after that one**, which put the repo-root frame into
+`workflow-schema.md` — the file the author reads at the moment of writing — and added a
+`validate_workflow.py` FAIL for a `write_scope` entry starting `/`, `./` or `../`. It also found
+that the schema's own worked example could not execute from any cwd, and that seven stages declare
+`write_scope: []` while their briefs order them to write a verdict, which by the same enforcement
+mechanism means they never pass. That last one is still open — it is a cross-skill change, not a
+line each.
 
 1. **F5 contradicts its own section header.** `SKILL.md:120` opens the fold-start section with
    "Form A only; form B skips this whole section," while `SKILL.md:175` — inside it — says the `cp`

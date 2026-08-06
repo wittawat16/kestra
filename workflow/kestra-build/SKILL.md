@@ -688,7 +688,7 @@ per-spec.
      implementation file gets re-pasted, verbatim, into every subsequent spawn that reads that file's
      diff (`test-review`, `verify`, `review`, and any `fixing` retry), so a comment that costs one
      line to write costs that line again on every stage downstream of it.
-5. **Write `workflow.yaml`** — schema and a full worked example in `references/workflow-schema.md`.
+5. **Write `workflow.yaml`** — path frame, schema, and a full worked example in `references/workflow-schema.md`.
    - **Copy every `progress:` bullet out of the spec's `## Exit Criteria` onto the one stage that
      owns it**, as `exit_criteria.progress`, verbatim. The spec declares the metric, kestra-build
      copies it, `kestra-run` compares it across attempt rounds — so a reworded metric is a different

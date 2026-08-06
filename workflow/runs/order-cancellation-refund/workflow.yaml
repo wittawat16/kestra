@@ -38,7 +38,8 @@ stages:
   - id: design
     depends_on: [spec-review]
     brief: >
-      needs_ui: true in the spec — produce design.md covering the order-detail page's new Cancel
+      needs_ui: true in the spec — produce workflow/runs/order-cancellation-refund/design.md
+      covering the order-detail page's new Cancel
       action: a component audit (reuse vs. new, real import paths for whatever component library
       this codebase actually uses), real design tokens (not invented hex values), and all four
       screen states (empty/loading/success/error) for the cancel confirmation flow — including the
@@ -75,7 +76,8 @@ stages:
       (pre-shipment cancel succeeds, post-shipment cancel rejected), BR-2 (refund amount accounts
       for a prior partial refund), BR-3 (refund + inventory release happen atomically), the
       payment-provider-failure and duplicate-cancel edge cases, and the four screen states
-      design.md defines (including the BR-1 rejected-shipped state as its own scenario). Each
+      workflow/runs/order-cancellation-refund/design.md defines (including the BR-1
+      rejected-shipped state as its own scenario). Each
       scenario should be traceable back to the BR, edge case, or design state it came from — don't
       collapse multiple business rules into one generic "cancel order" test.
     write_scope: ["test/order-cancellation/**"]
@@ -167,7 +169,8 @@ stages:
   - id: implement-frontend
     depends_on: [freeze-tests]
     brief: >
-      Implement the order-detail page's Cancel action per design.md — the confirmation step, and
+      Implement the order-detail page's Cancel action per
+      workflow/runs/order-cancellation-refund/design.md — the confirmation step, and
       the four screen states (empty/loading/success/error, including the BR-1 rejected-shipped
       state as its own explicit UI state) it defines. Do not modify test/**. An
       implementation-focused skill, if you have one installed, fits this stage well.
@@ -238,7 +241,8 @@ stages:
     brief: >
       Review the frontend diff (src/web/order-detail/**) since the last stage commit for
       correctness and injection/XSS risk — in particular that the Cancel flow renders all four
-      screen states design.md defines (with the BR-1 rejected-shipped state as its own explicit
+      screen states workflow/runs/order-cancellation-refund/design.md defines (with the BR-1
+      rejected-shipped state as its own explicit
       state, not a generic error), that no refund amount or order status shown to the user is
       computed client-side from trusted input, and that design.md's components/tokens are actually
       used rather than one-off styles. Whatever code-review and security-review skills you have
@@ -259,7 +263,8 @@ stages:
   - id: done
     depends_on: [verify-acceptance-criteria, review-backend, review-frontend]
     brief: >
-      Every upstream stage passed. Write a one-page completion-summary.md: what shipped, which
+      Every upstream stage passed. Write a one-page
+      workflow/runs/order-cancellation-refund/completion-summary.md: what shipped, which
       commits, the review verdict, and confirmation that BR-1/2/3 all have passing
       Given-When-Then coverage.
     write_scope: ["workflow/runs/order-cancellation-refund/completion-summary.md"]

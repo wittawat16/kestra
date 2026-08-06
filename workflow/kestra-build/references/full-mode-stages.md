@@ -45,8 +45,10 @@ run folder's **own** copy of `validate_spec.py`, emitted by `SKILL.md`'s step G2
 that `cp`, which emits all three scripts on every run, in either form) alongside `workflow.yaml`/`state.json` —
 same convention as `harness/` and `evidence/` — so the frozen
 `exit_criteria` field carries no dependency on the `kestra-build` skill being installed on
-whatever machine later executes the workflow. Set `exit_criteria.run` to
-`python3 <run-folder>/validate_spec.py <source_spec> <repo-root> && grep -q '^VERDICT: CLEAR$' spec-verdict.md`.
+whatever machine later executes the workflow. Every path in it is repo-root-relative and the
+command runs from the repo root, so set `exit_criteria.run` to
+`python3 <run-folder>/validate_spec.py <source_spec> . && grep -q '^VERDICT: CLEAR$' <run-folder>/spec-verdict.md`
+— the `.` is that repo root, the base the spec's Files-to-Touch paths resolve against.
 The script only FAILs (non-zero exit) on facts that are both format-independent and fixable
 within spec-review's own `write_scope` (the spec file itself) — a Files-to-Touch row marked
 `edit`/`exists` whose path is absent; everything else (missing sections, empty columns, an
@@ -64,8 +66,9 @@ no contradiction between invariants/edge-cases/ACs, every AC testable, every che
 actually run." A reviewer told the checks "already ran" in the borrowed phrasing can rationally
 skip that semantic read, which is exactly the false-CLEAR-over-a-real-defect failure this whole
 stage exists to prevent. Give it the same `on_fail` shape as `review`
-too: `action: fixing`, `max_attempts: 2`, `escalate_at: 2`, `write_scope` covering `source_spec`
-itself (there's no separate stage to `target` the way `review` targets an `implement-*` stage),
+too: `action: fixing`, `max_attempts: 2`, `escalate_at: 2`, `write_scope` covering both
+`source_spec` itself (there's no separate stage to `target` the way `review` targets an
+`implement-*` stage) and the `<run-folder>/spec-verdict.md` the brief tells it to write,
 falling through to `reworking` only once that's exhausted or the same diff repeats — see
 `design-principles.md`'s "Default HITL posture" for why a brief this substantive
 shouldn't skip straight to the one human stop on its first finding.
@@ -180,7 +183,7 @@ On one run, `review` ran a 200,001-case sweep against an exact oracle that `test
 already run a variant of; neither could see the other's work, because there was nowhere to put it.
 Add to the briefs: any computation costing more than a moment writes its result **and the exact
 command that produced it** into `<run-folder>/evidence/`, and any stage about to compute something
-checks `evidence/` first and computes only what's missing. The command matters more than the
+checks `<run-folder>/evidence/` first and computes only what's missing. The command matters more than the
 number — a result whose provenance isn't recorded can't be re-derived, and then a later stage is
 trusting a figure it cannot check. Two guards worth stating in the brief: an `evidence/` file is
 only valid for the commit it was computed against, so a stage reusing one after the code changed
@@ -250,10 +253,10 @@ a keyword hit elsewhere in the prose.
 **Default: fold the checklist into `review`'s own brief and verdict artifact**, rather than a
 separate stage — `review` already reads the same final diff a deploy-readiness pass would read, and
 its value is read-and-report, not independence from `review` (the same reasoning `meta-review`
-already applies to fold `meta-security` into one pass). `review` writes both `review-verdict.md` and
-`deploy-checklist.md`; `exit_criteria.run` becomes
-`grep -q '^VERDICT: CLEAR$' review-verdict.md && test -f deploy-checklist.md`. This fold is safe
-**only** with checklist freshness mechanically enforced, not assumed:
+already applies to fold `meta-security` into one pass). `review` writes both
+`<run-folder>/review-verdict.md` and `<run-folder>/deploy-checklist.md`; `exit_criteria.run` becomes
+`grep -q '^VERDICT: CLEAR$' <run-folder>/review-verdict.md && test -f <run-folder>/deploy-checklist.md`.
+This fold is safe **only** with checklist freshness mechanically enforced, not assumed:
 - Revoke, for this combined stage specifically, the "a sibling that already passed doesn't need
   re-running" exemption `kestra-run`'s batch-fixing rule normally grants (see its step 6) — if a
   fixing attempt lands on `review`'s `on_fail.target` triggered by a *different* failing sibling
