@@ -14,10 +14,18 @@ because it applies to every run — nothing sends you there, and skipping it cos
 
 ## 1. Splitting `design-tests` out of `generate-tests`
 
-*Reached when: the user wants to approve the scenario list before any test code exists **and no
-`acceptance-tests.csv` came with the spec**, or the spec is too large for one spawn to write the
-table plus all test code. Otherwise step 3's default — the same-spawn scenario table, or a
-translation of the approved CSV — is the whole answer.*
+*Reached when: the spec is too large for one spawn to write the scenario table plus all test code.
+Otherwise step 3's default — the same-spawn scenario table, or a translation of the approved CSV —
+is the whole answer.*
+
+**Approval is never the reason.** A user wanting to sign off the scenario list before any test code
+exists names a real need, but a stage is the wrong place to meet it: the natural artifact is
+`kestra-spec`'s `acceptance-tests.csv`, approved at spec handoff where a human is already reading —
+and if the spec arrived without one, collect the approval now, at build time, while the human who
+asked is still in the session. A mid-run `human_approval` stage re-collects the same sign-off at the
+most expensive point instead — the run stops for it, and a rejected scenario there costs a
+`reworking` bounce rather than an edit. This section used to allow that stage as an opt-in case;
+retiring it is deliberate, not an omission.
 
 Be honest about what a separate stage with `exit_criteria.type: artifact_exists` actually buys:
 nobody reviews that table (nothing gates on more than its existence, and `kestra-run`'s default
@@ -29,23 +37,19 @@ benefit — `test-review` and a human glancing at the diff can recognize a missi
 missing table row — at zero extra spawn cost, and `on_fail.target: generate-tests` can legally
 edit both the table and the tests together since they're the same stage's `write_scope`.
 
-**Only split into a real, separate `design-tests` stage in two cases**, both narrow: (1) the
-user explicitly asks to approve the scenario list before any test code exists **and no
-`acceptance-tests.csv` came with the spec** — then give it `exit_criteria.type: human_approval` on
-the table, never `artifact_exists`, so the split
-actually buys the assurance its name implies rather than recreating the same
-assurance-without-a-mechanism gap one level up. With the CSV present this case is already satisfied
-upstream; generating the stage anyway asks a human to approve the same scenarios twice, the second
-time mid-run where rejecting one is far more expensive. Or (2) the spec is genuinely too large for one
-spawn to write the full scenario table plus all test code — context-size decomposition, the one
-benefit user opt-in alone can't reach, since the user won't know to ask for it. Flag this case
-explicitly in the mode/stage audit line ("spec too large for one spawn to write table plus all
-test code — splitting for context size, not for coverage assurance") rather than silently
-defaulting to it. In either case: `design-tests` writes nothing but the table,
-`write_scope`d to that artifact only, `depends_on` the same stage `generate-tests` would have;
-`generate-tests` then `depends_on: [design-tests]` and translates the approved table into real
+**The one case that justifies a real, separate `design-tests` stage: the spec is genuinely too
+large for one spawn to write the full scenario table plus all test code** — context-size
+decomposition, which no upstream artifact can substitute for and the user won't know to ask for.
+Decomposition is all it claims: its `exit_criteria` is `artifact_exists` on the table, honestly a
+formality per the paragraph above. Flag the case explicitly in the mode/stage audit line ("spec too
+large for one spawn to write table plus all test code — splitting for context size, not for
+coverage assurance") rather than silently defaulting to it. Shape: `design-tests` writes nothing
+but the table, `write_scope`d to that artifact only, `depends_on` the same stage `generate-tests`
+would have; `generate-tests` then `depends_on: [design-tests]` and translates the table into real
 test code 1:1 — its own judgment burden shrinks to "does this code match the plan," not "did I
-think of everything." Two traps either way: if the `generate-tests` brief could already
+think of everything." (With an `acceptance-tests.csv` present, the approved rows are the table's
+spine — `design-tests` expands them into runnable Given/When/Then detail, it never adds or drops a
+scenario.) Two traps: if the `generate-tests` brief could already
 enumerate every scenario by name up front (BRs, edge cases, states), a separate table just
 duplicates the brief at the cost of a full extra spawn; and on a `needs_ui` spec, `design-tests`
 must stay downstream of `design`, because design.md's screen states can't appear in a plan

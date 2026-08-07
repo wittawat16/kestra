@@ -44,14 +44,17 @@ the other three only as suggestions.
 
 ### What it does
 
-In one pass, produces a single `0-spec.md`: testable acceptance criteria, explicit error states,
+In one pass, produces `0-spec.md`: testable acceptance criteria, explicit error states,
 the `needs_ba`/`needs_ui`/`needs_sa`/`needs_devops` flags `kestra-build` reads, the test seam
 (**External Interface**), the stop condition (**Exit Criteria**), business rules (when `needs_ba:
 true`), design notes (when `needs_ui: true`), solution-architecture decisions (when `needs_sa:
-true`), and a codebase survey with every file path verified to exist.
+true`), and a codebase survey with every file path verified to exist. Beside it,
+`acceptance-tests.csv`: the same acceptance criteria rendered as steps a person with no access to
+the code can execute — the artifact a human signs off at handoff, which is what lets the generated
+workflow run with no mid-run approval stop.
 
 Where the `meta/` group splits this same work across five skills and five files, `kestra-spec`
-does it as one continuous pass, one file — so nobody has to remember to chain five skills by hand,
+does it as one continuous pass — so nobody has to remember to chain five skills by hand,
 and `kestra-build`'s stage agents don't have to guess at gaps left by a handoff.
 
 ### Two input modes, decided mechanically
@@ -100,7 +103,7 @@ With the vet in hand it makes exactly two commits, with nothing committed betwee
 | Commit | Subject | What it carries |
 |---|---|---|
 | 1 | `spec(<feature-id>): materialize vetted ticket verbatim` | the ticket body written to `0-spec.md` unmodified, plus this run's own copies of `requirement_surface.py` and `validate_spec.py`. Message records `Spec-ticket: <url>` and `Ticket-body-sha256: <hex>` |
-| 2 | `spec(<feature-id>): raise vetted ticket into 0-spec.md` | exactly one path — the raised `0-spec.md` overwriting the verbatim body, so the raise is literally one `git diff`. Message records `Spec-ticket:` and `Vetted-by:` |
+| 2 | `spec(<feature-id>): raise vetted ticket into 0-spec.md` | modifies exactly one path — the raised `0-spec.md` overwriting the verbatim body, so the raise is literally one `git diff`; `acceptance-tests.csv` rides along as a brand-new file, adding nothing to that diff. Message records `Spec-ticket:` and `Vetted-by:` |
 
 `tr -d '\r'` is the one declared normalization (GitHub returns web-authored bodies with CRLF);
 nothing else is normalized, because more would make "verbatim" negotiable. After commit 2 it
@@ -218,8 +221,8 @@ template shape — it's the unmarked standalone/foreign-shape exemplar, and the 
 conditional checks print `WARN` against it, which is the standalone contract demonstrated on a real
 file. The current template lives in [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md).
 
-**It writes no code and runs no stage** — it writes `0-spec.md`, commits it (two commits in-chain,
-one standalone), and stops. It is read-only on the tracker throughout. Hand it off to
+**It writes no code and runs no stage** — it writes `0-spec.md` and `acceptance-tests.csv`, commits
+them (two commits in-chain, one standalone), and stops. It is read-only on the tracker throughout. Hand it off to
 `kestra-build` next — unless the status line says `BLOCKED_ON_INTENT`, in which case the handoff is
 back upstream, to whoever owns the rule the ticket didn't decide.
 

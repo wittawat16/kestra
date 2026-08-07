@@ -44,14 +44,17 @@ skill ตัวที่สี่ในโฟลเดอร์นี้ซึ�
 
 ### มันทำอะไร
 
-สร้าง `0-spec.md` ไฟล์เดียวในรอบเดียว: acceptance criteria ที่ทดสอบได้, error state ที่ชัดเจน,
+สร้าง `0-spec.md` ในรอบเดียว: acceptance criteria ที่ทดสอบได้, error state ที่ชัดเจน,
 flag `needs_ba`/`needs_ui`/`needs_sa`/`needs_devops` ที่ `kestra-build` จะอ่านต่อ, test seam
 (**External Interface**), เงื่อนไขหยุด (**Exit Criteria**), business rules (ถ้า `needs_ba: true`),
 design notes (ถ้า `needs_ui: true`), การตัดสินใจด้าน solution architecture (ถ้า `needs_sa: true`),
-และการสำรวจโค้ดจริงที่ path ทุกอันถูก verify ว่ามีจริง
+และการสำรวจโค้ดจริงที่ path ทุกอันถูก verify ว่ามีจริง พร้อมไฟล์คู่กัน `acceptance-tests.csv`:
+acceptance criteria ชุดเดียวกันแปลงเป็นขั้นตอนที่คนไม่เห็นโค้ดก็ทำตามได้ — เป็น artifact ที่มนุษย์
+เซ็นรับตอน handoff ซึ่งคือสิ่งที่ทำให้ workflow ที่ generate ออกมารันได้โดยไม่ต้องหยุดขออนุมัติ
+กลางทาง
 
 ในขณะที่กลุ่ม `meta/` แบ่งงานชุดเดียวกันนี้ออกเป็นห้า skill ห้าไฟล์ `kestra-spec` ทำเป็นรอบเดียว
-ต่อเนื่อง ไฟล์เดียว — เพื่อไม่ต้องจำว่าต้อง chain ห้า skill เอง และ stage agent ของ `kestra-build`
+ต่อเนื่อง — เพื่อไม่ต้องจำว่าต้อง chain ห้า skill เอง และ stage agent ของ `kestra-build`
 ก็ไม่ต้องเดาช่องว่างที่หลุดตอน handoff
 
 ### สองโหมด input ตัดสินแบบ mechanical
@@ -100,7 +103,7 @@ content hash คือสิ่งที่ทำให้มันแปลว�
 | คอมมิต | subject | บรรจุอะไร |
 |---|---|---|
 | 1 | `spec(<feature-id>): materialize vetted ticket verbatim` | body ของ ticket เขียนลง `0-spec.md` แบบไม่แก้อะไรเลย บวกสำเนา `requirement_surface.py` และ `validate_spec.py` ของ run นี้เอง ข้อความคอมมิตบันทึก `Spec-ticket: <url>` และ `Ticket-body-sha256: <hex>` |
-| 2 | `spec(<feature-id>): raise vetted ticket into 0-spec.md` | แตะ path เดียวเป๊ะๆ — `0-spec.md` ที่ raise แล้วเขียนทับ body แบบ verbatim ทำให้การ raise เป็น `git diff` อันเดียวจริงๆ ข้อความคอมมิตบันทึก `Spec-ticket:` และ `Vetted-by:` |
+| 2 | `spec(<feature-id>): raise vetted ticket into 0-spec.md` | *แก้* path เดียวเป๊ะๆ — `0-spec.md` ที่ raise แล้วเขียนทับ body แบบ verbatim ทำให้การ raise เป็น `git diff` อันเดียวจริงๆ ส่วน `acceptance-tests.csv` ติดมาเป็นไฟล์ใหม่ล้วน จึงไม่เพิ่มอะไรใน diff นั้น ข้อความคอมมิตบันทึก `Spec-ticket:` และ `Vetted-by:` |
 
 `tr -d '\r'` คือการ normalize อย่างเดียวที่ประกาศไว้ (GitHub คืน body ที่เขียนผ่านเว็บมาเป็น CRLF)
 นอกนั้นไม่ normalize อะไรอีก เพราะยิ่งทำเพิ่มยิ่งทำให้คำว่า "verbatim" ต่อรองได้ หลังคอมมิตที่ 2
@@ -215,8 +218,8 @@ test-hash invariant ทำงานเหมือนเดิมทุกปร
 marker และการเช็คแบบมีเงื่อนไขทั้งห้าข้อจะขึ้น `WARN` กับมัน ซึ่งคือสัญญาของโหมด standalone ที่สาธิต
 บนไฟล์จริง ส่วน template ปัจจุบันอยู่ใน [`kestra-spec/SKILL.md`](kestra-spec/SKILL.md)
 
-**มันไม่เขียนโค้ดและไม่รัน stage ใดๆ** — แค่เขียน `0-spec.md`, commit (สองคอมมิตในโหมด in-chain,
-คอมมิตเดียวในโหมด standalone) แล้วหยุด และเป็น read-only บน tracker ตลอดทั้งรอบ จากนั้นส่งต่อให้
+**มันไม่เขียนโค้ดและไม่รัน stage ใดๆ** — แค่เขียน `0-spec.md` กับ `acceptance-tests.csv`, commit
+(สองคอมมิตในโหมด in-chain, คอมมิตเดียวในโหมด standalone) แล้วหยุด และเป็น read-only บน tracker ตลอดทั้งรอบ จากนั้นส่งต่อให้
 `kestra-build` — ยกเว้นบรรทัด status เป็น `BLOCKED_ON_INTENT` กรณีนั้นให้ส่งกลับต้นทาง ไปหาคนที่เป็น
 เจ้าของกติกาที่ ticket ยังไม่ได้ตัดสิน
 

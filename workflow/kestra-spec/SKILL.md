@@ -252,11 +252,11 @@ Same content, different reader. `0-spec.md` is written for the stage agents; thi
 for whoever has to *approve* what will be tested — a QA lead, a product owner, a client — before
 any test code exists and while a change is still cheap.
 
-Why here and not later: `kestra-build` can generate a `design-tests` stage that stops mid-run for
-the same approval, but that adds a human stop to a pipeline whose default is zero, and it sits
-downstream of a freeze where a rejected row costs a `reworking` bounce. Doing it here folds the
-approval into the moment a human already reads the spec, and leaves the generated workflow fully
-automatic.
+Why here and not later: the only other place this sign-off could live is a `human_approval` stop
+inside the generated workflow — a human stop in a pipeline whose default is zero, sitting where a
+rejected row costs a `reworking` bounce instead of an edit. Doing it here folds the approval into
+the moment a human already reads the spec, and leaves the generated workflow fully automatic
+(`kestra-build` generates no approval-collecting stage precisely because this file exists).
 
 * **One row per scenario, every row carrying the id it came from** — `AC-n`, `BR-n`, `EC-n`,
   `DS-n`. Every id enumerated in the spec appears in at least one row; a row whose id resolves to
@@ -655,8 +655,9 @@ approving it freezes what will be tested, and that a change after `kestra-build`
 
 → Then `kestra-build`, which reads `0-spec.md` directly and can skip straight to deriving stages.
 Its `generate-tests` brief translates each approved row 1:1 into test code with the Test Case ID
-embedded in the test name, so coverage stays checkable by grep — and it generates **no**
-`design-tests` stage, since the approval already happened here.
+embedded in the test name, so coverage stays checkable by grep — and it generates no
+approval-collecting `design-tests` stage, since the approval already happened here. (It may still
+split one out for context size on an oversized spec; that split collects nothing.)
 
 Unless the status line says `BLOCKED_ON_INTENT` — then there is no handoff in either direction; it
 goes back upstream, to whoever owns the rule the ticket didn't decide.

@@ -86,6 +86,15 @@ kestra-build needs a spec with testable acceptance criteria. If the user hands y
   into a short numbered AC list and show it back for a quick confirm before deriving stages — don't
   silently invent ACs the user didn't say.
 
+**`acceptance-tests.csv` next to the spec — check for it before deriving stages.** `kestra-spec`
+emits one: every AC/BR/edge-case/design-state rendered as a row a non-engineer can execute, already
+approved by a human at spec handoff. Two consequences, both mechanical. **Generate no
+approval-collecting `design-tests` stage** — the sign-off that stage would stop the run for already
+happened, upstream and cheaper (a context-size split per step 3's gate table remains legal; it
+collects nothing). And `generate-tests` writes no scenario table of its own; the approved table *is*
+the table, so its brief translates rows rather than inventing scenarios (see step 3's
+`generate-tests` bullets). No such file → nothing changes, follow the default guidance below.
+
 **When a spec arrives without the sections this file expects.** Not every spec comes from
 `kestra-spec` — a perfectly good `0-spec.md` from another tool, or one written before a section
 existed, may carry acceptance criteria and flags but no **Runtime Invariants** and no **Reality
@@ -385,7 +394,7 @@ per-spec.
    | `spec-review` | No — mechanical pre-check only | `write_scope` covers `source_spec`; `exit_criteria.run` chains `validate_spec.py` (a script) + a verdict grep | the script proves presence/existence only (e.g. Files-to-Touch paths exist); judging contradictions/on-violation wording still needs a subagent |
    | `generate-tests` | No | writes real test code | creative work |
    | `design` (`needs_ui: true`) | No | writes `design.md`/artifact | creative work |
-   | `design-tests` (rare split) | No | writes the scenario table | creative work, even though `exit_criteria.type` can be `artifact_exists` |
+   | `design-tests` (rare context-size split) | No | writes the scenario table | creative work, even though its `exit_criteria.type` is `artifact_exists` |
    | `freeze-tests` | **Yes** | `write_scope` = the same test paths (kept only so the hash covers them); the stage itself writes no new diff — `exit_criteria` re-runs `generate-tests`'s own static checks against the exact commit being frozen | mechanical re-check, not a review; `on_fail: reworking`, never `fixing` |
    | `implement-*` | No | writes real code | creative work |
    | `define-shared-contract` | No | writes the shared file | small, but still a design decision |
@@ -414,7 +423,7 @@ per-spec.
    | `mode: lite` **and** `needs_devops: false` | **nothing** | the bullets below are the whole story |
    | `mode: full` | [`references/full-mode-stages.md`](references/full-mode-stages.md) | what `spec-review` must actually check · `test-review`, its risk table, and the condition under which its check folds into `generate-tests` and the stage isn't generated · the harness contract · evidence artifacts · sibling `implement-*` · the shared-contract stage · splitting `review` per component |
    | `needs_devops: true`, **either** mode | that same file's `deploy-readiness` **section only** | the exact trigger wording, the default fold into `review`'s brief, and the two freshness enforcement points that fold depends on |
-   | the user wants to approve the scenario list before any test code exists **and no `acceptance-tests.csv` came with the spec**, **or** the spec is too large for one spawn | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | when a real `design-tests` stage is justified, and what it must look like when it is |
+   | the spec is too large for one spawn to write the scenario table plus all test code | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | the one case where a real `design-tests` stage is justified — context-size decomposition — and what it must look like. A user wanting to *approve* scenarios is not this case: that's `acceptance-tests.csv`, or an approval collected now at build time, never a mid-run stop |
    | the spec is a wide refactor or a batched migration | that same file's §§ 3–4 | the two legal shapes for a batch whose blast radius reaches test files, and how each batch's own gate stays honest |
    | the codebase survey found a pre-merge test gate the repo's own docs declare mandatory | that same file's § 5 | generating it as a stage with `exit_criteria` rather than leaving it as a suggestion in a brief |
 
