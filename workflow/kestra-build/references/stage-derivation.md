@@ -14,9 +14,10 @@ because it applies to every run — nothing sends you there, and skipping it cos
 
 ## 1. Splitting `design-tests` out of `generate-tests`
 
-*Reached when: the user wants to approve the scenario list before any test code exists, or the spec
-is too large for one spawn to write the table plus all test code. Otherwise step 3's default — the
-same-spawn scenario table — is the whole answer.*
+*Reached when: the user wants to approve the scenario list before any test code exists **and no
+`acceptance-tests.csv` came with the spec**, or the spec is too large for one spawn to write the
+table plus all test code. Otherwise step 3's default — the same-spawn scenario table, or a
+translation of the approved CSV — is the whole answer.*
 
 Be honest about what a separate stage with `exit_criteria.type: artifact_exists` actually buys:
 nobody reviews that table (nothing gates on more than its existence, and `kestra-run`'s default
@@ -29,10 +30,13 @@ missing table row — at zero extra spawn cost, and `on_fail.target: generate-te
 edit both the table and the tests together since they're the same stage's `write_scope`.
 
 **Only split into a real, separate `design-tests` stage in two cases**, both narrow: (1) the
-user explicitly asks to approve the scenario list before any test code exists — then give it
-`exit_criteria.type: human_approval` on the table, never `artifact_exists`, so the split
+user explicitly asks to approve the scenario list before any test code exists **and no
+`acceptance-tests.csv` came with the spec** — then give it `exit_criteria.type: human_approval` on
+the table, never `artifact_exists`, so the split
 actually buys the assurance its name implies rather than recreating the same
-assurance-without-a-mechanism gap one level up; or (2) the spec is genuinely too large for one
+assurance-without-a-mechanism gap one level up. With the CSV present this case is already satisfied
+upstream; generating the stage anyway asks a human to approve the same scenarios twice, the second
+time mid-run where rejecting one is far more expensive. Or (2) the spec is genuinely too large for one
 spawn to write the full scenario table plus all test code — context-size decomposition, the one
 benefit user opt-in alone can't reach, since the user won't know to ask for it. Flag this case
 explicitly in the mode/stage audit line ("spec too large for one spawn to write table plus all

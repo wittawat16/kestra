@@ -570,6 +570,7 @@ was taken. Re-measure before relying on one.
 | [`kestra-exam/references/gate-procedure.md`](kestra-exam/references/gate-procedure.md) | The pre-delivery gate — its sweeps and exemption boundary, pointer discipline, and hash-vs-pointer comparison; building the runner itself is out of scope |
 | [`kestra-exam/references/regeneration.md`](kestra-exam/references/regeneration.md) | What moves when the spec moves — the delta map, the fingerprints, the four scopes, carry-over, and the exam-dir commit subjects |
 | [`kestra-run/scripts/stage_transition.py`](kestra-run/scripts/stage_transition.py) | The fixing/reworking/escalation decision as a pure function — an executable spec for kestra-run's steps 1/3/5/6, exhaustively testable without spawning anything, the same way `validate_workflow.py` replaces eyeballing a generated workflow. Single-stage only; sibling-failure combining is deliberately not modeled. **Nothing imports it and its test suite is gone** — restoring one is an open gap, listed here so the file is at least findable |
+| [`docs/kestra-sequence.md`](docs/kestra-sequence.md) | Five mermaid sequence diagrams of the whole pipeline — the spec→build→run handoffs, kestra-run's per-stage loop, the freeze/commit path, the `fixing`→`reworking` escalation, and the three primitives behind the freeze ([`docs/`](docs/README.md)) |
 
 ## What's intentionally "not done"
 

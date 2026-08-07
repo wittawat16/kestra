@@ -414,7 +414,7 @@ per-spec.
    | `mode: lite` **and** `needs_devops: false` | **nothing** | the bullets below are the whole story |
    | `mode: full` | [`references/full-mode-stages.md`](references/full-mode-stages.md) | what `spec-review` must actually check · `test-review`, its risk table, and the condition under which its check folds into `generate-tests` and the stage isn't generated · the harness contract · evidence artifacts · sibling `implement-*` · the shared-contract stage · splitting `review` per component |
    | `needs_devops: true`, **either** mode | that same file's `deploy-readiness` **section only** | the exact trigger wording, the default fold into `review`'s brief, and the two freshness enforcement points that fold depends on |
-   | the user wants to approve the scenario list before any test code exists, **or** the spec is too large for one spawn | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | when a real `design-tests` stage is justified, and what it must look like when it is |
+   | the user wants to approve the scenario list before any test code exists **and no `acceptance-tests.csv` came with the spec**, **or** the spec is too large for one spawn | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | when a real `design-tests` stage is justified, and what it must look like when it is |
    | the spec is a wide refactor or a batched migration | that same file's §§ 3–4 | the two legal shapes for a batch whose blast radius reaches test files, and how each batch's own gate stays honest |
    | the codebase survey found a pre-merge test gate the repo's own docs declare mandatory | that same file's § 5 | generating it as a stage with `exit_criteria` rather than leaving it as a suggestion in a brief |
 
@@ -457,9 +457,27 @@ per-spec.
      discover it from a confusing halt. Its `on_fail` is `reworking`, not `fixing`: if the tests no longer
      pass their own checks at the moment of freezing, something is wrong upstream and quietly
      patching them here would bypass whatever review already approved them.
-   - **Default: have `generate-tests` write its own scenario table as a first artifact in the same
-     spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1 traceable), *before* writing
-     test code — not as a separate `design-tests` stage.
+   - **When `acceptance-tests.csv` sits next to the spec, `generate-tests` translates it instead of
+     planning its own scenarios.** Say so in the brief, in these terms: one approved row → one
+     scenario, the row's Given/When/Then wording preserved, and the row's `Test Case ID` embedded in
+     the test name (`it("[TC-004] then exactly $90 is refunded")`). No scenario the table doesn't
+     list; no row silently dropped. Rows whose `Automation` column reads `Manual — …` are skipped
+     deliberately and named in the stage's report, not treated as missing. Add the coverage check to
+     the stage's own `exit_criteria` so it's mechanical rather than trusted — every `Test Case ID` in
+     the CSV must appear in the test sources:
+     ```
+     cut -d, -f1 <run-folder>/acceptance-tests.csv | tail -n +2 | \
+       while read id; do grep -rq "\[$id\]" <test-path>/ || exit 1; done
+     ```
+     Verify that command runs standalone at step 7's dry-run like any other `exit_criteria.run` —
+     the CSV's quoting can break a naive `cut` on a row whose first field is quoted, and a coverage
+     gate that always passes is worse than none. The CSV joins `generate-tests`'s `write_scope` (a
+     rejected row gets fixed together with its test) but stays **out** of `freeze-tests`'s, unless
+     the user wants the approved table itself hash-frozen — ask rather than assuming; freezing it
+     turns a wording fix into a `reworking` bounce.
+   - **Default, when no such table exists: have `generate-tests` write its own scenario table as a
+     first artifact in the same spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1
+     traceable), *before* writing test code — not as a separate `design-tests` stage.
    - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
      An existence-only check (the file exists, is non-empty, has an acceptance-criteria heading)
      passes for any spec-shaped document, including a confidently wrong one. What it must actually
