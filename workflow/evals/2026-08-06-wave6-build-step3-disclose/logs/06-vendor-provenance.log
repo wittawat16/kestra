@@ -1,0 +1,18 @@
+sweeping compiled bytecode out of the vendored copies before checking them:
+  (nothing listed above = the copies were already clean)
+
+before-skill  vs dd4077d: 13 files, file set equal=True, content mismatches=NONE
+after-skill   vs bcc2bbd: 14 files, file set equal=True, content mismatches=NONE
+
+spec-full/0-spec.md identical to the 2026-07-31 spec: True
+fixture/ identical to the 2026-07-31 fixture: True
+
+spec-lite/0-spec.md is new to this eval; validate_spec.py against the fixture:
+  WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+  WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+  WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+  WARN: no '## Exit Criteria' section — kestra-build copies its 'progress:' fragments onto the owning stages; without them clause 2 of the stop condition can never fire
+  WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+  exit=0   (0 = no FAIL; the WARNs are the same five spec-full gets)
+
+ASSERT OK : both vendored copies are byte-identical to the commits they claim, source files and file set alike

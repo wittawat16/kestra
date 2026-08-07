@@ -3,6 +3,10 @@
 > **Status:** 🟢 READY_FOR_BUILD | **Created:** 2026-07-25
 > **Next:** 🏗️ kestra-build
 
+*(Pre-Wave-2 template shape, kept as the standalone/foreign-shape exemplar — the current template is
+in kestra-spec/SKILL.md; the grown shape is
+workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec.md.)*
+
 ---
 
 ## ☕ Overview
@@ -115,7 +119,7 @@ against.)*
 ## 🗂️ Files to Touch
 | File | Change | Verified? | Why |
 |------|--------|-----------|-----|
-| *(n/a — example spec)* | — | — | Files to Touch requires a real repo; skipped here since this spec isn't wired to an actual codebase. |
+| *(none — illustrative spec, no repo attached)* | n/a | n/a | A real spec lists verified paths here; this one demonstrates Given-When-Then ACs only. |
 
 ## 🔗 Dependencies
 * none new — reuses existing payment-provider refund API and inventory-release path.

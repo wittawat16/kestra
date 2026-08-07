@@ -1,0 +1,9 @@
+--- D1: marking a spec must not move surface_hash ---
+four-obligations-missing     standalone=d17688bebc147598475ad2689ec196c14e55bbfa63f41948e0c68b5089cc008e chained=d17688bebc147598475ad2689ec196c14e55bbfa63f41948e0c68b5089cc008e
+no-external-interface        standalone=0d01c2cae693e2d9ae8fe0ff09db3d5b5e0d5ff1a683ba2f81fddd4f0ae972d0 chained=0d01c2cae693e2d9ae8fe0ff09db3d5b5e0d5ff1a683ba2f81fddd4f0ae972d0
+
+--- D1 on the Wave-1 grown-shape spec: inject the marker on a /tmp copy ---
+$ python3 requirement_surface.py workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec.md --hash
+e1c70ae8e3f6810cd8d85503f91b31e851aa9eb79af1f7da1c3c93dc159acc27
+$ python3 requirement_surface.py /tmp/t35/grown-marked.md --hash
+e1c70ae8e3f6810cd8d85503f91b31e851aa9eb79af1f7da1c3c93dc159acc27

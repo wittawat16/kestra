@@ -1,0 +1,128 @@
+
+=== leg 2 — the same exam at the implemented commit (the flip is real) ===
+
+clone at IMPL=0df9a1b215698f04cbcec1d3b733523cd3f8c3b3
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --repo /tmp/kx36/clone-impl
+exam: tally-refund   seam: cli · python3 src/tally.py
+anchor: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1
+C-0    —        must-hold     pass          -                 0.03s  
+C-1    AC-1     must-flip     pass          -                 0.03s  
+C-2    AC-2     must-flip     pass          -                 0.03s  
+C-3    AC-3     must-hold     pass          -                 0.03s  
+C-4    AC-4     must-flip     pass          -                 0.04s  
+C-5    AC-5     must-hold     pass          -                 0.03s  
+C-6    AC-6     unexaminable  UNEXAMINABLE  -                 0.00s  a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth
+pass 6 · fail 0 · blocked 0 · unexaminable 1 · unproven 3 · exit 0
+exit=0
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam.py --repo /tmp/kx36/clone-impl --json
+{
+  "exam": "tally-refund",
+  "anchor": {
+    "raise_commit": "f59837b1323b009647d266ed99ee35f49b2bb10d",
+    "surface_hash": "7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718",
+    "extractor_version": 1
+  },
+  "seam": {
+    "kind": "cli",
+    "target": "python3 src/tally.py"
+  },
+  "started_at": "2026-08-02T15:22:38Z",
+  "duration_s": 0.2,
+  "harness_version": 1,
+  "smoke": {
+    "id": "C-0",
+    "result": "pass"
+  },
+  "checks": [
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.033,
+      "id": "C-0",
+      "ac": "\u2014",
+      "class": "must-hold",
+      "provenance": "\u2014"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.034,
+      "id": "C-1",
+      "ac": "AC-1",
+      "class": "must-flip",
+      "provenance": "US-1"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.033,
+      "id": "C-2",
+      "ac": "AC-2",
+      "class": "must-flip",
+      "provenance": "US-1"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.033,
+      "id": "C-3",
+      "ac": "AC-3",
+      "class": "must-hold",
+      "provenance": "US-2"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.033,
+      "id": "C-4",
+      "ac": "AC-4",
+      "class": "must-flip",
+      "provenance": "\u26a0 inferred"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.035,
+      "id": "C-5",
+      "ac": "AC-5",
+      "class": "must-hold",
+      "provenance": "US-3"
+    },
+    {
+      "result": "unexaminable",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-6",
+      "ac": "AC-6",
+      "class": "unexaminable",
+      "provenance": "ID\u00a72",
+      "unexaminable": "a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth"
+    }
+  ],
+  "summary": {
+    "pass": 6,
+    "fail": 0,
+    "blocked": 0,
+    "unexaminable": 1,
+    "unproven": 3,
+    "exit_code": 0
+  }
+}
+exit=0
+

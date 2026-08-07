@@ -1,0 +1,66 @@
+NOTE: the extractor-absent blocks in this file are the PRE-FIX measurement (review finding R1-2).
+The current behaviour is the ROUND-1 RE-RUN at the bottom: "cannot run" is a FAIL under the chain
+marker, a WARN without it.
+
+--- conforming standalone = conforming chained minus the marker line ---
+3a4
+> > Spec-ticket: https://github.com/arkaphat/arkaphat-builder/issues/35
+(the only difference)
+$ validate_spec.py /tmp/t35/conforming-standalone.md .
+exit=0
+
+--- D6 step 8: emitted copy-per-run, exact invocation ---
+$ cp workflow/kestra-build/scripts/requirement_surface.py workflow/kestra-build/scripts/validate_spec.py $RUN/
+$ python3 $RUN/validate_spec.py $RUN/0-spec.md <repo-root>
+validate_spec exit=0
+$ python3 $RUN/requirement_surface.py $RUN/0-spec.md >/dev/null
+surface exit=0
+
+--- ImportError fallback: validate_spec.py alone in the run folder ---
+$ python3 $RUN2/validate_spec.py $RUN2/0-spec.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+WARN: delimiter-precondition check skipped — it needs requirement_surface.py
+validate_spec exit=0
+== unclosed-fence-chained, extractor ABSENT beside validate_spec.py
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+WARN: delimiter-precondition check skipped — it needs requirement_surface.py
+exit=0
+== unclosed-fence-chained, extractor PRESENT
+FAIL: unclosed code fence — the requirement surface would be silently truncated (false-fresh hash)
+exit=1
+
+== bare-heading-in-surface-chained, extractor ABSENT beside validate_spec.py
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+WARN: delimiter-precondition check skipped — it needs requirement_surface.py
+exit=0
+== bare-heading-in-surface-chained, extractor PRESENT
+FAIL: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+
+=== ROUND-1 RE-RUN (review finding R1-2 fixed): "cannot run" now reports through the
+=== chain conditional — FAIL when the spec is marked, WARN when it is not. The blocks
+=== above are the pre-fix measurement; these supersede them.
+
+$ python3 /tmp/t35-noext/validate_spec.py <fixtures>/unclosed-fence-chained.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+FAIL: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=1
+
+$ python3 /tmp/t35-noext/validate_spec.py <fixtures>/unclosed-fence-standalone.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+WARN: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=0
+
+$ python3 /tmp/t35-noext/validate_spec.py <fixtures>/bare-heading-in-surface-chained.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+FAIL: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=1
+
+$ python3 /tmp/t35-noext/validate_spec.py <fixtures>/conforming-chained.md .
+WARN: requirement_surface.py not found beside this script — heading matching is approximate
+FAIL: delimiter-precondition check cannot run — requirement_surface.py is not beside this script, so a silently truncated requirement surface would pass as fresh. Copy requirement_surface.py next to validate_spec.py (kestra-spec emits both together) and re-run
+exit=1
+
+(The emitted-copy run at the top of this file is unaffected: step 8 copies both files, so the
+extractor is always beside validate_spec.py on the path kestra-spec actually takes.)

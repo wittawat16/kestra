@@ -1,0 +1,4 @@
+=== leg 5b — recorded surface_hash edited (arm 4): MISMATCH even though recomputes agree ===
+MISMATCH: recorded surface_hash disagrees with the recompute at raise_commit — the anchor was edited
+exit=1
+ASSERT OK: edited recorded surface_hash is a MISMATCH (exit 1)

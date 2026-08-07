@@ -1,0 +1,15 @@
+log                                 FAIL  WARN   exit=0  exit!=0
+01-fold-enactment.log                  0     7       16        0
+02-parsed-brief-loss.log               0     0        1        0
+03-ac-mismatch-refusal.log            10     8        2        3
+04-hand-edit-routes.log               14    26        0        8
+05-refold.log                          3     9        4        2
+06-midrun-refold-refusal.log           1     3        2        1
+07-anchor-matrix.log                  11    38        3       10
+08-progress-copy.log                   3     3        4        3
+09-nonvacuity.log                      8     2       12        4
+10-worked-example.log                  0     6        2        1
+11-unit-suites.log                     0     0        4        0
+12-measured-numbers.log                0     3        3        0
+
+Counts are of lines in the logs, produced by:  grep -c '^FAIL' logs/<file>

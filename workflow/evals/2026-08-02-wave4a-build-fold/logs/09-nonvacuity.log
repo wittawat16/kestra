@@ -1,0 +1,62 @@
+# Leg 9 — three mutants under /tmp (no source file touched). A matrix that cannot fail is
+# not evidence, so each mutant must make one NAMED leg above stop failing.
+=== mutant 1: fold_check's whitespace-normalized block-vs-file compare removed
+===           => leg 4 route (a) (brief-only hand edit) must go green
+$ python3 /tmp/wave4a/mutants/m1.py check /tmp/wave4a/route-a > /tmp/wave4a/o.txt 2>&1; echo mutant_exit=$?; tail -2 /tmp/wave4a/o.txt
+mutant_exit=0
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FOLD OK — 3 slices, 3 embedded blocks, anchor triple present, 3 warning(s).
+exit=0
+
+=== mutant 2: fold_check's verified_against cross-check removed
+===           => a map refreshed against a different raise must go green
+$ sed -i '' 's/verified_against: cc834eb914911fd1f4d92d7f5914271821e8a455/verified_against: 0000000000000000000000000000000000000000/' /tmp/wave4a/wrong-raise/workflow.yaml
+exit=0
+
+$ python3 logs/fold_check.py check /tmp/wave4a/wrong-raise > /tmp/wave4a/o.txt 2>&1; echo fold_check_exit=$?; grep '^FAIL' /tmp/wave4a/o.txt
+fold_check_exit=1
+FAIL: tickets['01-csv-writer'].verified_against 000000000000 ≠ spec_anchor.raise_commit cc834eb91491 — the ticket map was refreshed against a different raise; re-fold
+FAIL: tickets['02-export-endpoint'].verified_against 000000000000 ≠ spec_anchor.raise_commit cc834eb91491 — the ticket map was refreshed against a different raise; re-fold
+FAIL: tickets['03-streaming'].verified_against 000000000000 ≠ spec_anchor.raise_commit cc834eb91491 — the ticket map was refreshed against a different raise; re-fold
+exit=0
+
+$ python3 /tmp/wave4a/mutants/m2.py check /tmp/wave4a/wrong-raise > /tmp/wave4a/o.txt 2>&1; echo mutant_exit=$?; tail -2 /tmp/wave4a/o.txt
+mutant_exit=0
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FOLD OK — 3 slices, 3 embedded blocks, anchor triple present, 3 warning(s).
+exit=0
+
+=== mutant 3: validate_workflow's absent-anchor WARN turned into a FAIL
+===           => leg 10's worked example (unanchored, story 24) must go red
+$ python3 /tmp/wave4a/mutants/validate_workflow.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/runs/order-cancellation-refund
+FAIL: no spec_anchor — this workflow is not anchored to a raise commit (standalone/hand-written spec); staleness cannot be checked mechanically
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1
+
+=== mutant 4: the SHIPPED validator's block-vs-file whitespace compare removed
+===           => leg 4 route (a) (brief-only hand edit) must go green there too
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/validate_workflow.py /tmp/wave4a/route-a > /tmp/wave4a/o.txt 2>&1; echo shipped_exit=$?; grep '^FAIL' /tmp/wave4a/o.txt
+shipped_exit=1
+FAIL: stage 'implement-csv-writer' embedded ticket block does not match tickets/01-csv-writer.md — the brief was hand-edited; re-fold
+exit=0
+
+$ python3 /tmp/wave4a/mutants/m4.py /tmp/wave4a/route-a > /tmp/wave4a/o.txt 2>&1; echo mutant_exit=$?; tail -1 /tmp/wave4a/o.txt
+mutant_exit=0
+PASS — 7 stages, structurally sound.
+exit=0
+
+=== mutant 5: the SHIPPED validator's verified_against cross-check removed
+===           => the map refreshed against a different raise must go green there too
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/validate_workflow.py /tmp/wave4a/wrong-raise > /tmp/wave4a/o.txt 2>&1; echo shipped_exit=$?; grep '^FAIL' /tmp/wave4a/o.txt
+shipped_exit=1
+FAIL: tickets['01-csv-writer'].verified_against 000000000000 ≠ spec_anchor.raise_commit cc834eb91491 — the ticket map was refreshed against a different raise; re-fold
+FAIL: tickets['02-export-endpoint'].verified_against 000000000000 ≠ spec_anchor.raise_commit cc834eb91491 — the ticket map was refreshed against a different raise; re-fold
+FAIL: tickets['03-streaming'].verified_against 000000000000 ≠ spec_anchor.raise_commit cc834eb91491 — the ticket map was refreshed against a different raise; re-fold
+exit=0
+
+$ python3 /tmp/wave4a/mutants/m5.py /tmp/wave4a/wrong-raise > /tmp/wave4a/o.txt 2>&1; echo mutant_exit=$?; tail -1 /tmp/wave4a/o.txt
+mutant_exit=0
+PASS — 7 stages, structurally sound.
+exit=0
+

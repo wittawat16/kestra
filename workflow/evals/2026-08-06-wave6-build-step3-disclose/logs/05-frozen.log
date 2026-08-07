@@ -1,0 +1,14 @@
+the 2026-07-31 ablation is a dated record — its vendored copies must be untouched
+
+commits touching workflow/evals/2026-07-31-build-ablation-antipatterns since dd4077d:
+  (none)
+
+uncommitted changes under that path: 0
+
+its vendored SKILL.md line counts, for the drift note in README.md:
+     897 workflow/evals/2026-07-31-build-ablation-antipatterns/full-skill/SKILL.md
+     723 workflow/evals/2026-07-31-build-ablation-antipatterns/minimal-skill/SKILL.md
+     763 workflow/kestra-build/SKILL.md
+    2383 total
+
+ASSERT OK: frozen copies untouched

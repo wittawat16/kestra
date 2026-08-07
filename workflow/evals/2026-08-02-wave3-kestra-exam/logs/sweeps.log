@@ -1,0 +1,108 @@
+
+=== leg 12 — the leak sweeps (token built at run time, every grep is -q) ===
+
+exit semantics: 1 = clean, 0 = a hit, >=2 = the check itself failed.
+
+--- 12a S1 on this repo, WITHOUT the two path exemptions ---
+$ git grep -q --untracked "$TOK" -- .
+exit=0 (0 = hit)
+
+--- 12b S1 with the exemption boundary (the two skill paths) ---
+$ git grep -q --untracked "$TOK" -- . ":(exclude).claude/skills/kestra-exam/*" ":(exclude)workflow/kestra-exam/*"
+exit=1 (1 = clean)
+
+So the exemption is load-bearing: the skill documents the path it forbids
+elsewhere, and nothing outside those two paths carries the token — including
+this eval, which builds the token at run time for exactly that reason.
+
+--- 12c S2, commit messages, no exemption at all ---
+$ git log --all --grep="$TOK" --oneline | wc -l
+       0
+
+--- 12d S3, history blobs: zsh unwrapped vs sh -c ---
+$ zsh -c <the recipe as written, unwrapped: unquoted $revs>
+fatal: unable to resolve revision: cc834eb914911fd1f4d92d7f5914271821e8a455
+exit=128 (>=2: the check itself failed, so it never ran)
+$ sh -c <the same recipe, guarded and wrapped>
+exit=0 (1 = clean, 0 = a hit)
+
+--- 12d-note FINDING: S3 hits on THIS repo while S1 reports clean, because
+    the token sits in two TRACKED files that `--untracked` silently skips.
+    S3's hit list, paths only, and the commit that added them: ---
+idea/flow-final.excalidraw
+idea/flow-final.svg
+0028bc7 Assemble flow-final: the locked prep-chain design as one diagram
+
+$ git grep -l "$TOK" -- idea/                              # tracked-only
+idea/flow-final.excalidraw
+idea/flow-final.svg
+exit=0 (0 = hit)
+$ git grep -l --untracked "$TOK" -- idea/                  # S1 as written
+exit=1 (1 = a FALSE clean)
+$ git grep -l --untracked --no-exclude-standard "$TOK" -- idea/
+idea/flow-final.excalidraw
+idea/flow-final.svg
+exit=0 (0 = hit, reached again)
+$ git ls-files -v idea/flow-final.svg          # H = tracked, not untracked
+H idea/flow-final.svg
+$ git check-ignore --no-index -v idea/flow-final.svg
+/Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra/.git/info/exclude:8:idea/	idea/flow-final.svg
+
+Mechanism, measured end to end: `idea/` is listed in this repo`s local
+.git/info/exclude, and the two files are tracked anyway (H). `--untracked`
+implies --exclude-standard, whose walk skips excluded paths *including tracked
+ones*, so S1 never reads them. `git check-ignore` without --no-index reports
+them as NOT ignored (it assumes tracked == not ignored), which is why the
+condition is easy to miss by hand.
+
+Consequence for the recipe, sharper than the residual as written: the residual
+says --untracked skips gitignored files. Measured, it also skips TRACKED files
+under an exclude rule, so S1 can report clean over a committed leak. S1 needs
+either --no-exclude-standard (accepting node_modules noise) or a second pass
+without --untracked; and on this repo S3 cannot pass until the two diagram
+exports are re-exported without the path or added to the exemption list.
+
+--- 12e the case S3 exists for: a leak committed at N, removed at N+2 ---
+$ git -C <leakrepo> grep -q --untracked "$TOK" -- .        # S1
+exit=1 (1 = clean worktree)
+$ git -C <leakrepo> log --all --grep="$TOK" --oneline | wc -l   # S2
+       0
+$ sh -c <S3 guarded> in <leakrepo>
+exit=0 (0 = HIT: the blob is still in history)
+
+--- 12f the same leak inside an exempt path stays clean under S3 ---
+S3 with exemption exit=1 (1 = clean)
+S3 without exemption exit=0 (0 = hit)
+
+--- 12g the skill name never self-hits ---
+$ printf "kestra-exam skill" | grep -c "$TOK"
+0
+grep exit=1
+
+--- 12h S4: not applicable to this fixture, and why ---
+the fixture origin is git.example.test, so exam_paths.transport() returns
+`local` and there is no chain tracker to sweep. The GitHub read predicates are
+measured read-only below, against the real trackers.
+
+$ gh auth status
+github.com
+  ✓ Logged in to github.com account arkaphat (keyring)
+  - Active account: true
+  - Git operations protocol: https
+  - Token: gho_************************************
+  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'
+exit=0
+
+$ gh issue list --repo arkaphat/kestra --label kestra-exam --state all --limit 100 --json number,title,url --jq "[.[]|select(.title==\"kestra-exam: tally-refund\")]|length"
+the 'arkaphat/kestra' repository has disabled issues
+exit=1
+
+$ gh issue list --repo arkaphat/arkaphat-builder --state all --limit 5 --search "$TOK" --json number --jq "[.[]|.number]"
+[36,31,27,20,29]
+exit=0
+(design-tracker hits, which is why D5 bounds the sweep to the chain tracker.)
+
+--- 12i this eval directory carries no occurrence of the token ---
+$ grep -rc "$TOK" <eval-dir> | grep -v ":0" | wc -l
+       0
+(0 files with a non-zero count)

@@ -10,7 +10,7 @@ clone แล้วรัน `install.sh` ครั้งเดียวเพื
 
 | กลุ่ม | Skill | ใช้ทำอะไร |
 |---|---|---|
-| [`workflow/`](workflow/README-th.md) | `kestra-spec`, `kestra-build`, `kestra-run` | ตัวลับ spec + ตัวสร้าง + ตัวรัน "stage machine" แบบล็อก TDD — `kestra-spec` แปลงไอเดียที่ลับคมแล้วเป็น `0-spec.md` พร้อมสร้าง (AC เขียนแบบ Given-When-Then/BDD ได้ บวก runtime invariants และ reality constraints ของ dependency ภายนอก), `kestra-build` แปลงเป็น `workflow.yaml`/`state.json` แล้ว `kestra-run` รันจริง ตรวจสอบทุกขั้นตอนแบบ mechanical (ไม่ใช้วิจารณญาณของ AI) |
+| [`workflow/`](workflow/README-th.md) | `kestra-spec`, `kestra-build`, `kestra-run`, `kestra-exam` | ตัวลับ spec + ตัวสร้าง + ตัวรัน "stage machine" แบบล็อก TDD — `kestra-spec` แปลง ticket บน tracker ที่คนตรวจ (vet) แล้ว (โหมด in-chain: สองคอมมิต — ตัว ticket แบบ verbatim แล้วค่อย raise) หรือไอเดียที่เขียนเองที่ลับคมแล้ว (โหมด standalone: คอมมิตเดียว) เป็น `0-spec.md` พร้อมสร้าง (AC เขียนแบบ Given-When-Then/BDD ได้ บวก test seam, เงื่อนไขหยุด, runtime invariants และ reality constraints ของ dependency ภายนอก), `kestra-build` แปลงเป็น `workflow.yaml`/`state.json` แล้ว `kestra-run` รันจริง ตรวจสอบทุกขั้นตอนแบบ mechanical (ไม่ใช้วิจารณญาณของ AI) — บน anchored fold ถ้า requirement surface ฝั่ง raise/current ที่ตรวจใหม่ไม่ตรงกันจะ hard stop แบบ fail-closed ส่วน stage ที่พิสูจน์ได้ว่าครอง ticket เดียวจะได้ slim brief + provision pack และอ่าน spec ตามต้องการ นอกจากนี้ `kestra-build` ยัง *fold* ชุด ticket ที่ถูกซอยและคนตรวจ (vet) แล้วเข้าไปในเวิร์กโฟลว์ได้ (copy ตัว ticket แบบ verbatim และผูก hash ไว้กับคอมมิต raise) ส่วน `kestra-exam` ซึ่งเป็นแบบ opt-in จะสร้าง exam ที่ผ่านการ red-proof จาก spec เดียวกันนั้น — หนึ่ง check ต่อหนึ่ง acceptance criterion — เพื่อให้การตัดสินงานที่ส่งมอบอ้างจากสิ่งที่ถูกสั่งไว้ ไม่ใช่จากรายงานของ AI เอง |
 | [`meta/`](meta/README.md) | `meta-designer`, `meta-dev`, `meta-qa`, `meta-test-review`, `meta-review`, `meta-security`, `meta-devops`, `meta-debug` | 8 skill ตามบทบาทงานส่งมอบ (designer, dev, QA, ตรวจ test double, code review, security, devops, บวก 4-mantra debugging discipline) — เรียกใช้ตัวเดียวโดยตรง chain เอง หรือระบุชื่อใน stage brief ของ `kestra-build` ก็ได้ ส่วนบทบาท spec/plan ที่เคยอยู่กลุ่มนี้ ตอนนี้ `kestra-spec` ทำให้ในตัวแล้ว |
 | [`productivity/`](productivity/README.md) | `givename` | ช่วยตั้งชื่อ (ตัวแปร, ไฟล์, branch, commit, โปรเจกต์/skill ใหม่) โดยหา naming convention จริงที่มีอยู่รอบๆ ก่อน |
 
@@ -33,7 +33,18 @@ cd claude-skills
 ./install.sh --force                # เขียนทับการติดตั้งเดิม
 ./install.sh --update               # ดึงโค้ดล่าสุด (git pull ที่นี่) แล้วรีเฟรชการติดตั้ง
 ./install.sh --uninstall            # ถอนการติดตั้ง (ใส่ flag --project เดียวกับตอนติดตั้ง)
+./install.sh --check                # ตรวจความสดใหม่แบบอ่านอย่างเดียว (ทั้ง copy หรือ symlink canonical)
+./install.sh --check --project ~/code/app  # ตรวจการติดตั้งเฉพาะโปรเจกต์
 ```
+
+`--check` แสดงสถานะของ skill ที่ active ทุกตัว และคืน `0` ต่อเมื่อครบทั้ง 16 ตัวเป็นปัจจุบัน
+และไม่มี skill ที่ retired เหลืออยู่ การตรวจนี้บริสุทธิ์เชิงสังเกตการณ์: ไม่สร้าง, pull, copy,
+ลบ, compile หรือเขียนไฟล์ใด ๆ โดย copy จะเทียบกับ checkout นี้ ส่วน symlink ต้องชี้ไปยัง source
+canonical ของมัน รายการที่หาย, ถูกแก้, เกินและไม่ใช่รายการที่ยกเว้น, ชี้ผิด/ปลายทางหาย,
+อ่านไม่ได้ หรือ retired จะคืน `1` หลังแสดงปัญหาครบทั้งหมด สิ่งที่ยกเว้นมีเฉพาะ `__pycache__/`,
+`*.pyc` และ `.DS_Store`; sibling skill ที่ผู้ใช้ติดตั้งเองจะไม่ถูกตรวจ ใช้ `--check` ร่วมได้
+เฉพาะ `--project`; ถ้าใช้กับ `--link`, `--force`, `--update` หรือ `--uninstall` จะเป็นการใช้คำสั่ง
+ไม่ถูกต้องและคืน `2` ก่อนแตะ path ใด ๆ (exit code: `0`, `1` หรือ `2`)
 
 แต่ละ skill จะถูกติดตั้งแบบ**แบน (flat)** ตามชื่อโฟลเดอร์ของมันเองใน target skills dir ไม่ว่าจะมา
 จากกลุ่มไหนในนี้ — เพราะนั่นคือโครงสร้างที่ Claude Code discover ได้จริง ดังนั้น
@@ -50,9 +61,11 @@ cd claude-skills
 `--force` หรือถอนการติดตั้งก่อน
 
 รีสตาร์ท Claude Code (หรือเริ่ม session ใหม่) หลังจากนั้นเพื่อให้ skill ที่อัปเดตถูกโหลด ไม่มี
-dependency ภายนอกที่ต้องติดตั้งเพิ่ม — สคริปต์ dry-run ของ `kestra-build` (`validate_workflow.py`)
-ต้องการแค่ `python3` เปล่าๆ ไม่ต้องมี PyYAML หรือ package ภายนอกใดๆ ส่วน skill อื่นไม่ต้องมี
-dependency อะไรเลย
+dependency ภายนอกที่ต้องติดตั้งเพิ่ม — ทุกสคริปต์ใน repo ต้องการแค่ `python3` เปล่าๆ ไม่ต้องมี
+PyYAML หรือ package ภายนอกใดๆ ทั้งสคริปต์ dry-run ของ `kestra-build` (`validate_workflow.py`) และ
+คู่ `validate_spec.py` + `requirement_surface.py` ที่ `kestra-spec` รันกับ `0-spec.md` ของตัวเอง
+ก่อนจะ commit การ raise สคริปต์สี่ตัวของ `kestra-exam` กับ exam harness ที่มัน copy เข้าไปในทุก exam
+ก็ใช้แค่ stdlib เหมือนกัน ส่วน skill อื่นไม่ต้องมี dependency อะไรเลย
 
 ## เพิ่ม skill ใหม่
 

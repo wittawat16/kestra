@@ -1,0 +1,34 @@
+                                         lines    words    chars
+SKILL.md before                            921   12,008   79,659
+SKILL.md after                             749    9,633   63,764
+  of which step 3, before                  335    4,581   31,171
+  of which step 3, after                   163    2,206   15,276
+full-mode-stages.md before                 189    2,241   14,271
+full-mode-stages.md after                  275    3,398   21,837
+stage-derivation.md (new)                  163    2,026   12,284
+
+Read budget per branch, three ways:
+branch                                        lines            words            chars
+lite, no devops                       -172 (-18.7%)  -2,375 (-19.8%) -15,895 (-20.0%)
+full, typical                           -86 (-7.7%)   -1,218 (-8.5%)   -8,329 (-8.9%)
+full + refactor + repo gate             +77 (+6.9%)     +808 (+5.7%)   +3,955 (+4.2%)
+
+Words and chars move with lines, slightly further -- so the line count in
+leg 00 does not flatter the wave.  ASSERT below checks that directly.
+
+The read gate itself -- the one place the wave traded prose for a table:
+  before, prose :  15 lines   188 words   1291 chars
+  after,  table :   8 lines   240 words   1494 chars
+  The table is shorter in lines and LONGER in words than the prose gate it
+  replaced.  That is the 'lines are not tokens' effect, isolated: it costs
+  a few hundred characters, against a lite saving three orders up.
+
+What the whole saving is worth against a real run (half B measured 144,954
+tokens for the cheapest run; ~4 chars/token is the usual English rule):
+  lite text saved   : 15,895 chars  ~= 3,974 tokens
+  as a share of one measured lite run (144,954 tokens): 2.7%
+  observed run-to-run delta on the lite pair          : +7.4%
+  So the entire prize is smaller than the noise this design can resolve.
+
+ASSERT OK : the char saving per branch has the same sign as the line saving
+ASSERT OK : lite chars fall by more than 15%

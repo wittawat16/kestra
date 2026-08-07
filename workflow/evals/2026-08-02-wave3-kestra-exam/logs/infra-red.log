@@ -1,0 +1,132 @@
+
+=== leg 4b — an unspawnable seam: SeamUnavailable => infrastructure red ===
+
+$ diff <(exam.py) <(exam-infra/exam.py)
+33c33
+< SEAM = Cli(argv_prefix=["python3", "src/tally.py"], cwd=REPO)
+---
+> SEAM = Cli(argv_prefix=["python3-does-not-exist", "src/tally.py"], cwd=REPO)
+
+$ python3 /tmp/kx36/exam-infra/exam.py --repo /tmp/kx36/clone-impl
+exam: tally-refund   seam: cli · python3-does-not-exist src/tally.py
+anchor: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1
+C-0    —        must-hold     FAIL          infrastructure    0.00s  SeamUnavailable: cannot spawn python3-does-not-exist src/tally.py: [Errno 2] No such file or directory: 'python3-does-no
+C-1    AC-1     must-flip     BLOCKED       -                 0.00s  
+C-2    AC-2     must-flip     BLOCKED       -                 0.00s  
+C-3    AC-3     must-hold     BLOCKED       -                 0.00s  
+C-4    AC-4     must-flip     BLOCKED       -                 0.00s  
+C-5    AC-5     must-hold     BLOCKED       -                 0.00s  
+C-6    AC-6     unexaminable  UNEXAMINABLE  -                 0.00s  a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth
+pass 0 · fail 1 · blocked 5 · unexaminable 1 · unproven 3 · exit 2
+exit=2
+
+$ python3 /tmp/kx36/exam-infra/exam.py --repo /tmp/kx36/clone-impl --json
+{
+  "exam": "tally-refund",
+  "anchor": {
+    "raise_commit": "f59837b1323b009647d266ed99ee35f49b2bb10d",
+    "surface_hash": "7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718",
+    "extractor_version": 1
+  },
+  "seam": {
+    "kind": "cli",
+    "target": "python3-does-not-exist src/tally.py"
+  },
+  "started_at": "2026-08-02T15:22:39Z",
+  "duration_s": 0.003,
+  "harness_version": 1,
+  "smoke": {
+    "id": "C-0",
+    "result": "fail"
+  },
+  "checks": [
+    {
+      "result": "fail",
+      "red_kind": "infrastructure",
+      "signature": "SeamUnavailable: cannot spawn python3-does-not-exist src/tally.py: [Errno 2] No such file or directory: 'python3-does-no",
+      "seam_reached": false,
+      "duration_s": 0.003,
+      "id": "C-0",
+      "ac": "\u2014",
+      "class": "must-hold",
+      "provenance": "\u2014"
+    },
+    {
+      "result": "blocked",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-1",
+      "ac": "AC-1",
+      "class": "must-flip",
+      "provenance": "US-1"
+    },
+    {
+      "result": "blocked",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-2",
+      "ac": "AC-2",
+      "class": "must-flip",
+      "provenance": "US-1"
+    },
+    {
+      "result": "blocked",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-3",
+      "ac": "AC-3",
+      "class": "must-hold",
+      "provenance": "US-2"
+    },
+    {
+      "result": "blocked",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-4",
+      "ac": "AC-4",
+      "class": "must-flip",
+      "provenance": "\u26a0 inferred"
+    },
+    {
+      "result": "blocked",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-5",
+      "ac": "AC-5",
+      "class": "must-hold",
+      "provenance": "US-3"
+    },
+    {
+      "result": "unexaminable",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-6",
+      "ac": "AC-6",
+      "class": "unexaminable",
+      "provenance": "ID\u00a72",
+      "unexaminable": "a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth"
+    }
+  ],
+  "summary": {
+    "pass": 0,
+    "fail": 1,
+    "blocked": 5,
+    "unexaminable": 1,
+    "unproven": 3,
+    "exit_code": 2
+  }
+}
+exit=2
+

@@ -1,0 +1,66 @@
+# Leg 3 — mutate one word of one sliced AC. The fold must refuse, and must not rewrite.
+$ shasum -a 256 /tmp/wave4a/ac-mismatch/workflow.yaml
+0e51cc1f78ab25b3a2e7dae375208bc55df77b0b32d59e7d5a5d3588a4cd2ebd  /tmp/wave4a/ac-mismatch/workflow.yaml
+exit=0
+
+$ diff -u /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/tickets/02-export-endpoint.md /tmp/wave4a/ac-mismatch/tickets/02-export-endpoint.md
+--- /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/tickets/02-export-endpoint.md	2026-08-02 22:55:57
++++ /tmp/wave4a/ac-mismatch/tickets/02-export-endpoint.md	2026-08-02 22:55:58
+@@ -3,7 +3,7 @@
+ the writer produces.
+ 
+ ## Acceptance criteria
+-- [ ] AC-1 a completed export returns 200 with a text/csv body
++- [ ] AC-1 a finished export returns 200 with a text/csv body
+ - [ ] AC-3 two concurrent exports for one filter produce one job
+ 
+ ## Blocked by
+exit=1
+
+$ python3 logs/fold_check.py check /tmp/wave4a/ac-mismatch
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+
+F4 refresh table:
+ticket              body_sha256   ac_hash                verified_against  status
+01-csv-writer       c9a89fea09ac…  3ce0ab14e046…          cc834eb91491…      unchanged
+02-export-endpoint  a28b1eb0d568…  3fa4ea9dd6a4… (was 7b2cbf9f76ee…)  cc834eb91491…      refreshed
+03-streaming        5c348c00f7ab…  d19586d35515…          cc834eb91491…      unchanged
+
+Verified-against: cc834eb91491… · ac_hash: 3ce0ab14e046… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: 3fa4ea9dd6a4… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: d19586d35515… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+
+WARN: AC Coverage Map row "AC-1 a completed export returns 200 with a text/csv body" is covered by no ticket in this set
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: ticket 02-export-endpoint AC 1 "AC-1 a finished export returns 200 with a text/csv body" matches no row in the spec's AC Coverage Map — the slice set and the raised spec disagree. Either the spec moved after slicing (re-run to-tickets over the current spec — a suggestion, if installed), or the AC was edited on the tracker. kestra-build does not reconcile this; it stops.
+FAIL: tickets['02-export-endpoint'].body_sha256 9463b2cb24b7 ≠ sha256(tickets/02-export-endpoint.md) a28b1eb0d568 — re-fold
+FAIL: tickets['02-export-endpoint'].ac_hash 7b2cbf9f76ee ≠ recomputed 3fa4ea9dd6a4 — re-fold
+FAIL: ticket '02-export-endpoint' body changed since the fold (file a28b1eb0d568 ≠ brief 9463b2cb24b7) — re-fold, never hand-edit the brief
+FAIL: stage 'implement-export-endpoint' embedded ticket block does not match tickets/02-export-endpoint.md — the brief was hand-edited; re-fold
+
+5 problem(s) found — the fold refuses.
+exit=1
+
+# and the SHIPPED validator, which now owns the same §A4 checks (ported from fold_check.py):
+$ python3 /tmp/wave4a/ac-mismatch/validate_workflow.py /tmp/wave4a/ac-mismatch
+WARN: AC Coverage Map row "AC-1 a completed export returns 200 with a text/csv body" is covered by no ticket in this set
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: ticket 02-export-endpoint AC 1 "AC-1 a finished export returns 200 with a text/csv body" matches no row in the spec's AC Coverage Map — the slice set and the raised spec disagree. Either the spec moved after slicing (re-run to-tickets over the current spec — a suggestion, if installed), or the AC was edited on the tracker. kestra-build does not reconcile this; it stops.
+FAIL: tickets['02-export-endpoint'].body_sha256 9463b2cb24b7 ≠ sha256(tickets/02-export-endpoint.md) a28b1eb0d568 — re-fold
+FAIL: tickets['02-export-endpoint'].ac_hash 7b2cbf9f76ee ≠ recomputed 3fa4ea9dd6a4 — re-fold
+FAIL: ticket '02-export-endpoint' body changed since the fold (file a28b1eb0d568 ≠ brief 9463b2cb24b7) — re-fold, never hand-edit the brief
+FAIL: stage 'implement-export-endpoint' embedded ticket block does not match tickets/02-export-endpoint.md — the brief was hand-edited; re-fold
+
+5 problem(s) found — fix before treating this workflow as frozen.
+exit=1
+
+$ shasum -a 256 /tmp/wave4a/ac-mismatch/workflow.yaml
+0e51cc1f78ab25b3a2e7dae375208bc55df77b0b32d59e7d5a5d3588a4cd2ebd  /tmp/wave4a/ac-mismatch/workflow.yaml
+exit=0
+
+# Same digest before and after: the refusal happened before anything was rewritten.

@@ -3,12 +3,44 @@
 One file per feature. Read `design-principles.md` before filling in `on_fail` / `freeze_after` —
 the fields only make sense in light of *why* they exist.
 
+**What's in here**, so one field doesn't cost you 700 lines:
+
+- **Paths** — the one repo-root frame `write_scope`, `exit_criteria` and every `brief` share
+- **Top-level** — `feature`, `source_spec`, `mode`, and `spec_anchor` + `tickets` (the anchor triple
+  and the ticket map, for a sliced fold only)
+- **Per-stage fields** — `model` · `effort` · `brief` · `exit_criteria` · the verdict artifact ·
+  `on_fail` · `branches`
+- **Worked example** — csv-export, complete and copyable; the longest section by far
+- **The `design` stage** — not in the worked example, since csv-export has no UI
+
+## Paths — repo-root-relative, all of them
+
+`write_scope` is matched against `git diff --name-only HEAD`, and git prints every path from the
+repo root whatever directory it runs in. The frame is git's, not one this schema picked, so the
+only spelling that can ever match is the repo-root-relative one:
+`workflows/runs/csv-export/spec-verdict.md`, not `spec-verdict.md`. (`<run-folder>` below expands
+the same way — `workflows/runs/csv-export`.) The run's own `validate_workflow.py` FAILs a
+`write_scope` entry starting `./`, `../`, or `/`.
+
+**The orchestrator runs `exit_criteria.run` from the repo root**, so one frame covers the whole
+stage: every path inside `run`, `exit_criteria.artifact`, `branches.artifact_exists`, and every
+file a `brief` tells the stage to write or read. Spell all of them out from the repo root and a
+stage's scope, its gate, and its instructions name the same file — which is what makes the gate a
+gate.
+
+**The run folder lives inside the target repo** — that is what puts its artifacts into
+`git diff --name-only HEAD` at all (`SKILL.md`'s **Output location**). A run folder outside the
+repo never appears there, so `write_scope` cannot bound an artifact-writing stage and that stage
+runs unenforced.
+
 ## Top-level
 
 ```yaml
 feature: <feature-id>              # kebab-case, matches the spec's feature id
 source_spec: <path>                # spec this workflow was derived from
+spec_anchor: { ... }               # optional mapping — which commit of that spec, see below
 mode: lite | full                  # which stage shape was derived — see SKILL.md's lite/full table
+tickets: [ ... ]                   # optional list — the sliced ticket set folded in, see below
 stages: [ ... ]                    # ordered list, see below — order is for readability only,
                                     # actual execution order comes from depends_on
 ```
@@ -21,6 +53,69 @@ value by hand does nothing; the stage list is the truth. If a lite workflow need
 a second component appears, a dependency gets mocked — regenerate from the spec rather than
 hand-editing stages in, so the freeze and the write_scope non-overlap get re-validated by step 7.
 
+### `spec_anchor` and `tickets` — the anchor triple and the ticket map
+
+Both are optional and both are written by the fold, never by hand. `spec_anchor` says *which commit
+of the spec* this workflow was derived from; `tickets` says *which slices* were folded into it. A
+monolithic workflow (no ticket set) carries `tickets` not at all, and carries `spec_anchor` only when
+its spec is chain-marked with a `> Spec-ticket:` preamble line.
+
+`spec_anchor` sits immediately after `source_spec` and before `mode` — literally beside the spec
+reference, so a reader sees which spec and which commit of it in one eyeful.
+
+```yaml
+feature: order-cancellation-refund
+source_spec: workflow/runs/order-cancellation-refund/0-spec.md
+spec_anchor:
+  raise_commit: 4f1c0b9e2d7a5c3b8e6f0a1d2c3b4a5968778899
+  surface_hash: e1c70ae8e3f6810cd8d85503f91b31e851aa9eb79af1f7da1c3c93dc159acc27
+  extractor_version: 1
+mode: full
+
+tickets:
+  - id: issue-47
+    ref: https://github.com/<owner>/<repo>/issues/47
+    body_sha256: 9f2c1a…<64 hex>
+    ac_hash: 7ab13f…<64 hex>
+    verified_against: 4f1c0b9e2d7a5c3b8e6f0a1d2c3b4a5968778899
+    verified_at: 2026-08-02T09:14:03Z
+```
+
+| Field | Grammar | Where the value comes from |
+|---|---|---|
+| `spec_anchor.raise_commit` | `^[0-9a-f]{40}$` — full SHA, never abbreviated | `kestra-spec`'s `references/chain-provenance.md` §2 exactly-one-match predicate |
+| `spec_anchor.surface_hash` | `^[0-9a-f]{64}$` | `extract_surface(<spec at raise_commit>).surface_hash` |
+| `spec_anchor.extractor_version` | `^[1-9][0-9]*$` | `requirement_surface.EXTRACTOR_VERSION` of the run's own copy |
+| `tickets[].id` | the same string as `tickets/<id>.md` and the brief delimiter's id | the tracker's own identifier, normalized (`ticket-fold.md` §1) |
+| `tickets[].ref` | URL, or a repo-relative ticket path; not graded by the validator | the invocation |
+| `tickets[].body_sha256` | `^[0-9a-f]{64}$` over the materialized `tickets/<id>.md` | the fold |
+| `tickets[].ac_hash` | `^[0-9a-f]{64}$` | `ticket-fold.md` §3 F3 — one definition, stated there only |
+| `tickets[].verified_against` | `^[0-9a-f]{40}$`, and must equal `spec_anchor.raise_commit` | the per-ticket last-checked marker |
+| `tickets[].verified_at` | ISO-8601 UTC, `YYYY-MM-DDTHH:MM:SSZ` | the fold clock |
+
+**Full SHAs, never abbreviated:** abbreviations collide, and every use of `raise_commit` /
+`verified_against` is a byte-wise equality compare, not a lookup. An abbreviation would make a real
+mismatch unprovable in exactly the case that matters.
+
+**`verified_against` duplicating `raise_commit` is deliberate, not redundant.** It is the per-ticket
+last-checked marker, it is the tuple the tracker-side `Verified-against:` line mirrors, and a
+divergence between the two is a real checkable defect — a partial re-fold, or a hand edit — rather
+than dead weight. A single shared value could not express "this ticket was checked against a
+different raise than that one."
+
+**Why the ticket map lives here and not in `state.json`:** `workflow.yaml` is the derived definition
+and is immutable for the run's life; `state.json` is mutable run state the orchestrator rewrites at
+every commit. Provenance the orchestrator must never rewrite belongs in the immutable file. See
+`state-schema.md`, which records the same decision from the other side so nobody adds a second copy.
+
+**Validator posture — monolithic absence is a WARN; sliced absence and partial are FAILs.** A
+monolithic workflow from a standalone or hand-written spec may omit `spec_anchor` (story 24). A
+sliced fold may not: its ticket map must bind to the vetted raise. Any present anchor with a missing,
+empty, or malformed key is a FAIL because partial provenance proves nothing. The same split applies to a `tickets[]` entry missing any of its
+five hash/marker fields, and to a `ticket:begin` delimiter with no matching `ticket:end`. This is the
+precedent `validate_spec.py` and `chain-provenance.md` already cite as "validate_workflow.py's
+partial anchor triple."
+
 ## Per-stage fields
 
 | Field | Required | Values | Notes |
@@ -28,7 +123,7 @@ hand-editing stages in, so the freeze and the write_scope non-overlap get re-val
 | `id` | yes | unique string | referenced by other stages' `depends_on` and `branches.goto` |
 | `depends_on` | yes | list of stage ids | `[]` for the first stage(s); a stage only starts once every dependency is `passed` |
 | `brief` | no | free text | plain-language instructions for whatever Claude gets spawned to do this stage's work. **Never a skill name or ID** — see note below |
-| `write_scope` | yes | list of glob patterns | paths this stage's diff may touch. `[]` means the stage produces no code diff (e.g. approval gates). Enforced at apply time by the orchestrator — not a promise the AI makes itself |
+| `write_scope` | yes | list of repo-root-relative glob patterns | paths this stage's diff may touch. `[]` means the stage produces no code diff (e.g. approval gates). Enforced at apply time by the orchestrator against `git diff --name-only HEAD` — not a promise the AI makes itself |
 | `exit_criteria` | yes | object, see below | how the orchestrator decides `verifying` → `passed` vs `fixing` |
 | `freeze_after` | no, default `false` | bool | set `true` **only** on the dedicated freeze stage, whose successful completion snapshots the test-hash into `state.json` and commits the freeze point. Exactly one stage per file has this set, and its `write_scope` must be non-empty — the hash is computed from that scope, so an empty one snapshots nothing and the invariant silently doesn't exist. Not the stage that *writes* the tests: that one stays unfrozen so its output can still be reviewed and fixed cheaply (see `design-principles.md`) |
 | `on_fail` | yes | object, see below | what happens when `exit_criteria` fails |
@@ -114,16 +209,88 @@ it **inside the brief text as a suggestion** — worth trying if it's there, har
 isn't. The stage's enforcement (`write_scope`, `exit_criteria`, `on_fail`) stays entirely
 skill-agnostic; `brief` is the only place that ever mentions a skill by name, and only as a hint.
 
+#### Embedded ticket blocks (sliced folds only)
+
+On a sliced fold, the stage that owns a slice carries **the whole ticket file, verbatim, between
+machine-readable delimiters, as a literal block scalar**:
+
+```yaml
+    brief: |
+      <!-- ticket:begin issue-47 sha256:9f2c1a…<64 hex> -->
+      ## What to build
+      …the byte content of tickets/issue-47.md, unaltered…
+      ## Acceptance criteria
+      - [ ] Refund is issued in full within the same request
+      <!-- ticket:end issue-47 -->
+
+      Folded in at build time from tickets/issue-47.md. Do not edit this block — see
+      workflow-schema.md "re-fold, never hand-edit". Source for each AC above: the spec's AC
+      Coverage Map (AC-3 → US-3, AC-4 → ID§refunds).
+
+      <the stage's own instructions go here, BELOW the block>
+```
+
+Every rule here is mechanically checkable, which is the reason each one is shaped the way it is:
+
+- **The whole file, not selected sections.** One rule, one hash, no extraction ambiguity to argue
+  about later. `## Blocked by` riding along is harmless, and informative next to `depends_on`.
+- **`|` literal, never `>` folded.** Both parse, but `|` keeps the checkbox lines readable for the
+  human reading the diff — a folded body silently reflows the acceptance criteria into a paragraph.
+- **The delimiter carries the id and the full 64-hex `sha256` of `tickets/<id>.md`**, not a 12-char
+  short form: the check is an exact-match compare, and 64 characters once per stage is nothing next to
+  a body that is re-pasted on every spawn.
+- **The only permitted transform is the block-scalar indentation.** No re-wrapping, no whitespace
+  normalization, no `#`-escaping, no trimming. Byte provenance dies the moment a transform is
+  negotiable, and the `sha256` is what would stop meaning anything.
+- **The stage's own instructions live strictly below `ticket:end`**, never interleaved, so the block
+  stays one contiguous extractable region.
+- **One ticket per stage, one stage-set per ticket.** Two stages may embed the *same* ticket (an
+  `implement-*` / `verify-*` pair over one slice); a stage never embeds two tickets, because a brief
+  with two blocks has no unambiguous owner for `on_fail.target` routing.
+- **The `Source:` line under the block is derived, not authored** — the `AC → Source` pairs are read
+  out of the spec's AC Coverage Map at fold time (see `ticket-fold.md` §2), so a reader can trace a
+  requirement to its intent-layer origin without opening the spec.
+
+##### Two parser traps that decide how this is verified
+
+1. **`parse_yaml`'s pre-pass runs `_strip_comment` and drops `---` / blank lines over *every* raw
+   line, block-scalar bodies included.** `_strip_comment` cuts at a `#` preceded by a space, and a
+   block-scalar body is indented by definition, so **every `## …` heading in an embedded ticket loses
+   itself in the parsed value** — this is a standing property of sliced briefs, not a rare case
+   involving a `#47` reference (measured: 3 of 3 briefs in
+   `../../evals/2026-08-02-wave4a-build-fold/logs/02-parsed-brief-loss.log`). A `---` horizontal rule
+   goes the same way. The file on disk is intact throughout. Consequence: **the raw `workflow.yaml`
+   text is the truth for an embedded block; the parsed brief is a lossy view.** Every check compares
+   raw text, and `validate_workflow.py` emits one `WARN` per affected stage, so on a normal sliced
+   fold expect one per embedded block — a standing note that the parsed view is lossy, not an alarm
+   about that particular ticket. Blank-line collapse is accepted and harmless for prose.
+2. **Do not "fix" trap 1 by escaping the ticket body.** Escaping breaks byte-identity, which is the
+   only thing the `sha256` is protecting — trading a documented, warned-about parse loss for an
+   undetectable content change.
+
+#### re-fold, never hand-edit
+
+An embedded block, its delimiter hash, and the matching `tickets[]` entry are **derived** — the
+`tickets/<id>.md` file is the truth. A ticket that changes is re-folded (a plain re-run of
+kestra-build over the same run folder); there is no hand-edit path, and `validate_workflow.py` FAILs
+on every **inconsistent** hand edit rather than trusting the instruction — an edit made consistently
+across all three copies is caught at the next fold's F0 re-materialization, not by the validator. The reason is the same one
+`mode` gives above, one step stronger: a re-fold is what re-runs the freeze / `write_scope`
+non-overlap validation, the anchor recompute, and the `ac_hash` refresh, so a hand-patched brief
+holds current words behind a stale anchor and an un-revalidated freeze. Full detection matrix, the
+four hand-edit routes it closes, and the mid-run refusal: `ticket-fold.md` §4.
+
 ### `exit_criteria`
 
 ```yaml
 exit_criteria:
   type: command             # command | artifact_exists | human_approval
   run: "npm test"           # required when type: command — the orchestrator's verifying step
-  artifact: "path/to/file"  # required when type: artifact_exists
+  artifact: "<run-folder>/design.md"  # required when type: artifact_exists
+  progress: "<one spec bullet, verbatim>"   # optional — see below; absent is the normal case
 ```
 
-- `command` — orchestrator runs `run`, exit code 0 = pass. When `run` executes a real test suite
+- `command` — orchestrator runs `run` **from the repo root**, exit code 0 = pass. When `run` executes a real test suite
   (a `verify` stage, or any stage whose exit_criteria re-runs the frozen tests), prefer the test
   runner's own parallel-execution flag over a plain serial invocation — e.g. `pytest -n auto`
   (pytest-xdist), `jest --maxWorkers=<n>`, `go test -parallel <n>`, `vitest --pool=threads`. This
@@ -142,6 +309,65 @@ exit_criteria:
   stages (spec sanity, review, security) default to `command` against a verdict artifact instead
   (see the worked example below) — the fix loop and `fixing → reworking` remain the one place a
   human is always in the loop.
+
+#### `exit_criteria.progress`
+
+The number a `fixing` loop has to move. Division of labor: **the spec declares it, kestra-build copies
+it, kestra-run compares it** across attempt rounds — that is what makes clause 2 of the spec's
+two-clause stop condition ("two consecutive attempt rounds without the number moving") mechanical
+instead of a feeling.
+
+```yaml
+    exit_criteria:
+      type: command
+      run: "npm test -- csv-export"
+      progress: "number of failing assertions reported by `npm test` — must reach 0, from a baseline of 2 passing / 0 failing"
+```
+
+**The copy rule is exact and mechanical:**
+
+- Source: the spec's `## Exit Criteria` section, every bullet matching
+  `^\s*[-*]\s+progress:\s*(.+)$`. The captured group is the value.
+- **Verbatim** — including the trailing period and the backticks. The only permitted transform is
+  joining a wrapped continuation line with a single space, the same join `requirement_surface._units`
+  does. No rewording, no shortening, no re-quoting: kestra-run compares a *number* across rounds, and
+  a reworded metric is a different metric.
+- The section's head line (the two-clause stop condition) is **not** copied anywhere. It is a
+  spec-level fact about the whole run; duplicating it per stage would create N copies to drift.
+- The closing "single-shot pass/fail, no progress number" bullet generates nothing. A stage without
+  `progress:` is the normal case.
+
+**Owner resolution — deterministic first, then ask; never guess:**
+
+1. **Exact match** — the bullet's backticked command, whitespace-collapsed, equals some stage's
+   `exit_criteria.run`, whitespace-collapsed ⇒ that stage.
+2. **Unique containment** — exactly one stage's `exit_criteria.run` contains that command as a
+   substring ⇒ that stage.
+3. **Named stage** — the bullet text contains a stage id verbatim ⇒ that stage.
+4. **0 or >1 candidates after 1–3 ⇒ ask the user once**, quoting the bullet and listing the candidate
+   stage ids. Never attach it to the nearest-looking stage: a metric on the wrong stage is compared
+   forever against a number that stage cannot move.
+5. **Still unassignable ⇒ stop the fold:**
+   ```
+   FAIL: the spec declares a loop-shaped check ("progress: …") that no stage owns — kestra-run would
+   have nothing to compare across attempts, so clause 2 of the stop condition could never fire.
+   ```
+   A declared metric silently dropped is exactly the "logs it, then continues" shape this design
+   rejects everywhere else.
+
+**Two fold-time consistency checks, both cheap:**
+
+- Owner resolved but `on_fail.action != fixing` ⇒ WARN in the audit line: *"the metric on `<stage>`
+  will never be compared — this stage does not retry."*
+- Every `progress:` bullet lands on exactly one stage. A bullet assigned twice is a fold-time stop —
+  two stages comparing the same number is two answers to one question.
+- Expand–contract: a **suite-level** metric belongs on the final `integrate-and-verify` stage, never
+  on an individual migrate batch, because a batch structurally cannot move the suite's number.
+
+**Validator:** `progress` present but empty ⇒
+`FAIL: stage '<id>' exit_criteria.progress is empty — omit the field or give it the spec's own
+progress fragment` — same family as the existing "type is `command` but `run` is empty". Nothing
+more: comparing the metric is kestra-run's job, and the validator must not pre-empt its semantics.
 
 ### The verdict artifact
 
@@ -180,18 +406,24 @@ on_fail:
                                # nothing prior to compare against), so at the conventional value of
                                # 2 there is no actual grace window — a repeat escalates immediately.
                                # Set 3+ if you want a real grace window; 2 is "no tolerance."
-  target: implement-x        # required when action: fixing AND this stage's own write_scope is []
-                               # (a review/verify-only stage) — names the upstream stage whose
-                               # write_scope the fix attempt is allowed to touch. Omit when the
-                               # stage has its own non-empty write_scope (fixes apply to itself).
+  target: implement-x        # required when action: fixing AND this stage owns no code — a
+                               # review/verify stage, whose write_scope holds only the verdict
+                               # artifact it writes (or nothing at all). Names the upstream stage
+                               # whose write_scope the fix attempt may touch. Omit when the stage
+                               # owns the code its own fix would edit.
   reason: "short phrase"     # required when action: reworking or blocked — shown to the human
 ```
 
 - `fixing` — orchestrator lets the stage retry, touching only `write_scope`, up to `max_attempts`.
   Every `fixing` stage must set both `max_attempts` and `escalate_at`; never leave it unbounded.
-  A stage whose own `write_scope: []` (review, verify) can still use `action: fixing` — set
-  `target` to the upstream implementation stage id. The orchestrator then: checks the fix attempt's
-  diff against `target`'s `write_scope` (not this stage's own `[]`), tells the fix subagent what
+  A stage that owns no code (review, verify) can still use `action: fixing` — set `target` to the
+  upstream implementation stage id. **`target`, not an empty `write_scope`, is what marks such a
+  stage**: writing a verdict *is* a diff, so a stage whose brief orders one lists that path in its
+  own `write_scope`, and `[]` is reserved for a stage that writes literally nothing. Get that wrong
+  and the orchestrator reverts the verdict as a scope violation before `exit_criteria` greps it —
+  the stage then cannot pass at all, on any attempt. The orchestrator: checks the fix attempt's
+  diff against `target`'s `write_scope` **plus this stage's own** (the fix writes code, then this
+  stage re-runs and rewrites its verdict), tells the fix subagent what
   this stage's failure output said (e.g. the `CHANGES_REQUESTED` findings), and re-runs *this*
   stage's own work + `exit_criteria` again afterward. `attempt`/`seen_diffs` are still tracked
   against this stage's own entry in `state.json`, same as any other `fixing` stage.
@@ -217,7 +449,7 @@ on_fail:
 branches:
   - when: { exit_code: 0 }
     goto: implement-happy-path
-  - when: { artifact_exists: "design.md" }
+  - when: { artifact_exists: "<run-folder>/design.md" }
     goto: generate-tests-with-ui-cases
 ```
 
@@ -248,15 +480,17 @@ stages:
       the brief above — review the inference itself, don't assume a human already approved it. Any
       numeric finding must name the exact quantity measured, the inputs, and the command/script used
       — paste its output; a numeric claim without them isn't a finding yet. Write the verdict to
-      spec-verdict.md, first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed
-      by findings.
-    write_scope: ["workflows/runs/csv-export/0-spec.md"]
+      workflows/runs/csv-export/spec-verdict.md, first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: ["workflows/runs/csv-export/0-spec.md", "workflows/runs/csv-export/spec-verdict.md"]
     exit_criteria:
       type: command
       # validate_spec.py is emitted into this run folder at generation time (see SKILL.md's
       # spec-review bullet) — it FAILs only on format-independent, spec-fixable facts (an
-      # edit/exists row whose path is absent); everything else WARNs without failing.
-      run: "python3 validate_spec.py workflows/runs/csv-export/0-spec.md . && grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+      # edit/exists row whose path is absent); everything else WARNs without failing. Its second
+      # argument is the repo root the spec's Files-to-Touch paths resolve against; the command
+      # runs from there, so `.` is it.
+      run: "python3 workflows/runs/csv-export/validate_spec.py workflows/runs/csv-export/0-spec.md . && grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/spec-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -294,16 +528,16 @@ stages:
       shared logic, non-determinism), each marked applicable or n/a with file:line evidence. Add
       rows this codebase's own conventions imply and say which you added. Judgment only — the
       mechanical checks already ran in generate-tests' exit_criteria; don't re-derive them. Write
-      the verdict to test-verdict.md, first line exactly "VERDICT: CLEAR" or
+      the verdict to workflows/runs/csv-export/test-verdict.md, first line exactly "VERDICT: CLEAR" or
       "VERDICT: CHANGES_REQUESTED", followed by findings. On a re-review after a fixing attempt
       (the context pack will include the fix diff and your own prior findings), verify the findings
       are addressed and review the changed lines and their interactions with the rest of the suite;
       do not re-derive relations between unchanged files already cleared, which write_scope
       enforcement guarantees are unchanged.
-    write_scope: []
+    write_scope: ["workflows/runs/csv-export/test-verdict.md"]   # the verdict it writes, nothing else
     exit_criteria:
       type: command
-      run: "grep -q '^VERDICT: CLEAR$' test-verdict.md"
+      run: "grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/test-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 3
@@ -371,8 +605,9 @@ stages:
       target: implement-csv-export
 
   # Sibling of verify-acceptance-criteria, not its successor — both depend on implement-csv-export
-  # directly so kestra-run can run them concurrently (neither writes code: write_scope: [] on both,
-  # so there's nothing for them to collide on, and review's diff is already final the moment
+  # directly so kestra-run can run them concurrently (neither writes code — verify writes nothing at
+  # all, review writes only its own verdict — so there's nothing for them to collide on, and
+  # review's diff is already final the moment
   # implement-csv-export passes — it doesn't need verify to finish first).
   - id: review
     depends_on: [implement-csv-export]
@@ -381,12 +616,13 @@ stages:
       injection/authn/secrets risk. Passing tests only prove the spec's own acceptance criteria —
       this stage exists to catch what the spec never thought to test for. Whatever code-review and
       security-review skills you have available both fit this stage well; try them, proceed with a
-      direct review if none are available. Write the verdict to review-verdict.md as the first
-      line, exactly: "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED", followed by findings.
-    write_scope: []
+      direct review if none are available. Write the verdict to
+      workflows/runs/csv-export/review-verdict.md as the first line, exactly: "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED", followed by findings.
+    write_scope: ["workflows/runs/csv-export/review-verdict.md"]   # the verdict it writes, not the code it judges
     exit_criteria:
       type: command
-      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+      run: "grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/review-verdict.md"
     on_fail:
       action: fixing
       max_attempts: 3
@@ -396,9 +632,10 @@ stages:
   # Conditional on the spec's needs_devops flag alone (never on scanning the spec text for
   # deploy-related keywords — see full-mode-stages.md's deploy-readiness section). DEFAULT shape:
   # fold this into `review` above instead of a standalone stage — review already writes
-  # review-verdict.md, so it additionally writes deploy-checklist.md and its exit_criteria becomes
-  # `grep -q '^VERDICT: CLEAR$' review-verdict.md && test -f deploy-checklist.md`, with freshness
-  # mechanically enforced (see full-mode-stages.md for both enforcement points). This standalone
+  # workflows/runs/csv-export/review-verdict.md, so it additionally writes
+  # workflows/runs/csv-export/deploy-checklist.md and its exit_criteria becomes
+  # `grep -q '^VERDICT: CLEAR$' workflows/runs/csv-export/review-verdict.md && test -f workflows/runs/csv-export/deploy-checklist.md`,
+  # with freshness mechanically enforced (see full-mode-stages.md for both enforcement points). This standalone
   # block is the FALLBACK shape — use it only when that freshness enforcement can't be wired into
   # the target project/CI, or the user explicitly wants a distinct deploy milestone. When using the
   # fallback: depends on BOTH siblings, not just review — it needs the full diff to be
@@ -411,10 +648,10 @@ stages:
       feature flags, infra changes, deploy order, rollback trigger, monitoring. Whatever
       devops-focused skill you have fits this stage well; try it, proceed with a direct checklist
       if not available.
-    write_scope: []
+    write_scope: ["workflows/runs/csv-export/deploy-checklist.md"]   # the checklist it produces
     exit_criteria:
       type: artifact_exists
-      artifact: "deploy-checklist.md"
+      artifact: "workflows/runs/csv-export/deploy-checklist.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -423,12 +660,13 @@ stages:
   - id: done
     depends_on: [deploy-readiness]   # or [review, verify-acceptance-criteria] when deploy-readiness was omitted
     brief: >
-      Every upstream stage passed. Write a one-page completion-summary.md: what shipped, which
-      commits, the review/security verdicts, and (if present) the deploy checklist location.
-    write_scope: ["completion-summary.md"]
+      Every upstream stage passed. Write a one-page workflows/runs/csv-export/completion-summary.md:
+      what shipped, which commits, the review/security verdicts, and (if present) the deploy
+      checklist location.
+    write_scope: ["workflows/runs/csv-export/completion-summary.md"]
     exit_criteria:
       type: artifact_exists
-      artifact: "completion-summary.md"
+      artifact: "workflows/runs/csv-export/completion-summary.md"
     on_fail:
       action: fixing
       max_attempts: 2
@@ -440,15 +678,18 @@ Notice: `generate-tests` and `freeze-tests` are the only stages with `write_scop
 point, which is why owning test paths is legitimate for them — that's how tests get written and
 revised while revising them is still a bounded `fixing` loop rather than a `reworking` bounce. Every
 stage from the freeze onward is forbidden those paths: if `implement-csv-export`'s diff touches
-`test/**`, the orchestrator rejects it regardless of intent. `test-review`,
-`verify-acceptance-criteria`, `review`, and `deploy-readiness` all have `write_scope: []` — they
-judge or report on work they don't produce. `test-review` still directs fixes through
+`test/**`, the orchestrator rejects it regardless of intent. `test-review`, `review` and
+`deploy-readiness` own **only the artifact each one writes** — they judge or report on work they
+don't produce, and the artifact is the report, not the work. `verify-acceptance-criteria` is the
+one true `[]`: it writes nothing at all, its `exit_criteria` command *is* the verification.
+`test-review` still directs fixes through
 `on_fail.target: generate-tests`, the same mechanism `review` uses against the implement stage; a
 reviewer that could edit what it reviews wouldn't be an independent check at all.
 
 `verify-acceptance-criteria` and `review` both `depends_on: [implement-csv-export]` directly — they
 are **siblings, not a chain**. kestra-run's rule for running independent stages in parallel ("their
-`write_scope`s can't collide by construction") applies to them directly: both are `[]`, so there's
+`write_scope`s can't collide by construction") applies to them directly: one is `[]` and the other
+owns only its own verdict file, so there's
 nothing to collide on, and neither needs the other's result to do its own job. Confirmed by direct
 benchmarking: chaining them the "obvious" way (`review: depends_on: [verify-acceptance-criteria]`)
 pays for a whole extra sequential subagent round-trip whenever both stages happen to need one, for
@@ -465,6 +706,14 @@ though it ran alongside review rather than after it. No stage in this example st
 unless `reworking` is reached; see `design-principles.md`'s "Default HITL posture" for why that's
 now the default, not the exception.
 
+**This example is a monolithic, unanchored workflow, and stays one on purpose** — no `spec_anchor`,
+no `tickets:`, no embedded ticket blocks, no `exit_criteria.progress`. That shape is still fully
+valid: it is what a fold over a spec with no sliced ticket set produces, and what a hand-written or
+standalone spec produces. The sliced-fold additions are all optional and all field-local — read
+`spec_anchor` / `tickets` above for the map, "Embedded ticket blocks" for what an owning stage's
+`brief` looks like, `exit_criteria.progress` for the copied metric, and
+[`ticket-fold.md`](ticket-fold.md) for the procedure that fills them in.
+
 ---
 
 ## The `design` stage (not in the example above — csv-export has no UI)
@@ -480,7 +729,7 @@ pattern; here it is written down so it stops being a guess:
   - id: design
     depends_on: [spec-review]
     brief: >
-      The spec sets needs_ui: true. Produce design.md: a component audit (reuse vs. new, with real
+      The spec sets needs_ui: true. Produce <run-folder>/design.md: a component audit (reuse vs. new, with real
       import paths read from this codebase's actual component library), real token names read from
       the actual token source rather than invented hex values, and all four screen states
       (empty/loading/success/error) for every view this feature touches — including any state the

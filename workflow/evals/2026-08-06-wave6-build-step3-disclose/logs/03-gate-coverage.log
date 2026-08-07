@@ -1,0 +1,20 @@
+gate table, step 3 (lines 398-560):
+  | Fact, already settled in step 2 | Open | For |
+  |---|---|---|
+  | `mode: lite` **and** `needs_devops: false` | **nothing** | the bullets below are the whole story |
+  | `mode: full` | [`references/full-mode-stages.md`](references/full-mode-stages.md) | what `spec-review` must actually check · `test-review`, its risk table, and the condition under which its check folds into `generate-tests` and the stage isn't generated · the harness contract · evidence artifacts · sibling `implement-*` · the shared-contract stage · splitting `review` per component |
+  | `needs_devops: true`, **either** mode | that same file's `deploy-readiness` **section only** | the exact trigger wording, the default fold into `review`'s brief, and the two freshness enforcement points that fold depends on |
+  | the user wants to approve the scenario list before any test code exists, **or** the spec is too large for one spawn | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | when a real `design-tests` stage is justified, and what it must look like when it is |
+  | the spec is a wide refactor or a batched migration | that same file's §§ 3–4 | the two legal shapes for a batch whose blast radius reaches test files, and how each batch's own gate stays honest |
+  | the codebase survey found a pre-merge test gate the repo's own docs declare mandatory | that same file's § 5 | generating it as a stage with `exit_criteria` rather than leaving it as a suggestion in a brief |
+
+stage-derivation.md sections named by a gate row: [1, 3, 4, 5]
+stage-derivation.md sections that exist:          [1, 2, 3, 4, 5]
+rows pointing at a missing section: NONE
+sections with no gate row:         [2] (2 by design; anything else is a defect)
+
+full-mode-stages.md has ## `spec-review`:          True
+full-mode-stages.md has ## `test-review`:          True
+full-mode-stages.md has ## `deploy-readiness`:     True
+
+ASSERT OK : every gate row resolves and section 2 is the only ungated one

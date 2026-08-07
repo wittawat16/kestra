@@ -1,0 +1,30 @@
+
+=== leg 6 — the verdict a gate runner would emit, and its two sharp edges ===
+
+manifest ## Coverage: ACs in surface: 6 · executably covered: 5 · unexaminable: 1 · must-flip: 3 (unproven: 1) · must-hold: 3
+red-proof.json summary: {"pass": 4, "fail": 2, "blocked": 0, "unexaminable": 1, "unproven": 1, "exit_code": 1}
+gate-run summary:       {"pass": 6, "fail": 0, "blocked": 0, "unexaminable": 1, "unproven": 3, "exit_code": 0} exit 0
+
+--- the verdict block, computed from the artifacts ---
+--- verdict (appended by the gate runner; unfilled above this line) ---
+verdict:   PASS
+evidence:  degraded — 1 unproven of 3 must-flip
+coverage:  5/6 ACs executably covered; unexaminable: AC-6
+run:       2026-08-02T15:22:40Z · exam.py sha256 202404e5e49f · exit 0
+
+SHARP EDGE 1 — which U the evidence clause must use.
+  red-proof.json summary.unproven = 1 (1 born-green must-flip)
+  gate-run    summary.unproven = 3 (every must-flip passes on a green tree)
+  A gate reading U from its own run would report `degraded — 3 unproven of 3 must-flip` on a perfect delivery.
+  exam_harness.summarize's docstring says the manifest's cells come only from
+  red-proof.json; gate-procedure.md §6 says `whenever U > 0` without naming which.
+
+SHARP EDGE 2 — appending the verdict invalidates the pointer's manifest_sha256.
+  pointer manifest_sha256: 4959697282289d3c4dfbb9ff1218b3d106627504461f2843486e182171d7b565
+  sha256 manifest.md now : 4959697282289d3c4dfbb9ff1218b3d106627504461f2843486e182171d7b565 (match: True )
+  sha256 after appending : 1bf43b3114f333b9d183723ed03ec7ab536bb97c405bae2661539759c540cb7d (match: False )
+  gate-procedure.md §5 reads that mismatch as `the evidence table was edited
+  after recording` => refusal. So the first gate run's own append makes every
+  later gate run refuse, unless the runner rewrites the pointer after appending.
+
+exit=0

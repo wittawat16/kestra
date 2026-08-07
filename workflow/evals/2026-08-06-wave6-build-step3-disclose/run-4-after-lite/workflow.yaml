@@ -1,0 +1,294 @@
+# kestra-build output for the [retry-cap] spec.
+#
+# AUDIT LINE
+# mode: lite (no row of the lite/full condition table fired: 1 component, no test doubles per
+# Reality Constraints "External dependencies: None", Runtime Invariants explicitly stated as
+# non-silent, user asked for nothing) - root-cause override not needed, the base table already
+# said lite; needs_devops: false so no deploy-readiness; references opened: none from step 3's
+# table (lite + no devops), plus design-principles.md, workflow-schema.md and state-schema.md as
+# the pre-generation mandate and steps 5-6 require.
+#
+# Form B (monolithic): one 0-spec.md, no sliced ticket set was named, so no tickets: map, and no
+# spec_anchor because the spec carries no "> Spec-ticket:" preamble marker. validate_workflow.py
+# reports the absent anchor as a WARN, which is the correct posture for a standalone spec.
+#
+# PATH CONVENTION for this run. The eval harness placed the run folder OUTSIDE the target repo,
+# so every exit_criteria.run executes with the REPO ROOT as its cwd (the sibling fixture/
+# directory). Repo files are therefore repo-relative (src/queue.js, test/queue.test.js) and
+# run-folder artifacts are reached as ../run-4-after-lite/<name>. In the normal layout the run
+# folder lives inside the repo and these would be plain workflows/runs/retry-cap/<name> paths.
+#
+# mode is a record of a decision, not a switch - nothing reads it to change behaviour. If this
+# workflow needs to become full (a second component appears, a dependency gets mocked),
+# regenerate from the spec rather than hand-editing stages in, so the freeze and the write_scope
+# non-overlap get re-validated.
+
+feature: retry-cap
+source_spec: ../spec-lite/0-spec.md
+mode: lite
+
+stages:
+  # Start stage. mode lite has no separate spec-review stage, so this one carries both halves of
+  # it: the mechanical half is chained into exit_criteria.run (validate_spec.py, verified to exit
+  # 0 against this spec at generation time), and the judgment half is the first instruction in
+  # the brief. write_scope owns the test path plus the scenario table; it does NOT own
+  # package.json, which needs no change - the runner is already collectible as-is.
+  - id: generate-tests
+    depends_on: []
+    brief: >
+      Two jobs, in this order, in one spawn.
+
+      (1) Folded-in spec review. This workflow is mode lite, so there is no separate spec-review
+      stage - its checks run here, before you write a single test. Read ../spec-lite/0-spec.md
+      and reconcile its Acceptance Criteria against its Runtime Invariants, its Edge Cases table
+      and its Reality Constraints. Say plainly, at the top of the scenario table below, if any
+      two of them contradict each other or if an acceptance criterion is not testable without a
+      follow-up question. Do not paper over a gap by inventing a value the spec does not state.
+      The mechanical half of this check already ran inside exit_criteria.run, so do not
+      re-derive it; your half is the judgment half.
+
+      (2) Write the frozen test suite. The first artifact, before any test code, is
+      ../run-4-after-lite/test-scenarios.md: one row per acceptance criterion and per Edge Cases
+      row, mapping it to a scenario title and a Given/When/Then, traceable one-to-one in both
+      directions. exit_criteria.run checks that this file exists.
+
+      The acceptance criteria are written as Given-When-Then, so mirror that structure
+      one-to-one in the tests. This stack has no Gherkin tooling and CLAUDE.md forbids adding
+      any third-party dependency, so the idiomatic form here is one node:test test() per
+      scenario, named after the scenario, with the Given, When and Then steps as the three
+      movements of the body. Do not add a runner, a framework or a config file.
+
+      Facts already verified at generation time, so you do not have to rediscover the project
+      setup. The runner needs no plumbing files at all: package.json already declares the module
+      type and the test script node --test test/*.test.js, and this repo has no
+      conftest/jest.config/pythonpath equivalent to create. All four exports the tests need
+      (registerHandler, createQueue, enqueue, step) already exist in src/queue.js, so plain
+      named imports are safe here and a namespace import is not needed - there is no
+      not-yet-existing export to reference, which is the one case that would otherwise collapse
+      the entire file into a single link-time SyntaxError instead of failing scenario by
+      scenario. Keep it that way: if you do end up referencing an export that does not exist
+      yet, import the module as a namespace rather than by name.
+
+      No implementation exists yet. Every new test must fail for the right reason - the cap
+      behaviour is missing - and must not error out at collection. The two existing tests in
+      test/queue.test.js must keep passing completely unmodified; the last acceptance criterion
+      depends on that. exit_criteria.run enforces exactly this polarity, and the exact command
+      was verified standalone at generation time against three cases: a correct red suite passes
+      it, a whole-file export collapse fails it, and an all-green suite fails it too.
+
+      Three things this codebase will punish you for, all named in the Risks and Watch-outs
+      section of the spec. HANDLERS is a process-lifetime module global, so every new test must
+      register a unique type string or tests will see each other registrations. Assert the
+      length identity pending plus done plus failed equals the number enqueued after every
+      step() call, in every test, per the Runtime Invariants section. And do not introduce a
+      running counter beside failed - that identity has to stay derivable from the arrays.
+
+      Comment discipline. Default to no comments. Write one only where the reason is genuinely
+      not readable off the code - a hidden constraint, or why a simpler assertion does not work
+      - never a line that restates what the test name already says, never a multi-line block
+      where one line covers it, and never a reference to this run, this spec, a criterion id or
+      a path you copied from. That belongs in the commit message. Every comment written here is
+      re-pasted verbatim into every later stage that reads the diff of this file.
+    write_scope: ["test/queue.test.js", "../run-4-after-lite/test-scenarios.md"]
+    exit_criteria:
+      type: command
+      run: "python3 ../run-4-after-lite/validate_spec.py ../spec-lite/0-spec.md . > /dev/null || exit 1; test -f ../run-4-after-lite/test-scenarios.md || exit 1; node --test test/*.test.js > /tmp/kestra-retry-cap-polarity.txt 2>&1; grep -q 'does not provide an export named' /tmp/kestra-retry-cap-polarity.txt && exit 1; grep -q '^not ok ' /tmp/kestra-retry-cap-polarity.txt || exit 1; [ $(grep -c '^ok ' /tmp/kestra-retry-cap-polarity.txt) -ge 2 ] || exit 1; exit 0"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # The freeze point, deliberately a separate stage from the one that wrote the tests: locking at
+  # write time would defend against nothing (no implementation exists yet) while giving up the
+  # only cheap window to fix a defect in the tests themselves. write_scope is the test source
+  # alone - the test-hash is computed from this scope, so package.json is kept out of it on
+  # purpose: it holds the test script and the dependency list in one file, and freezing it would
+  # turn an unrelated version bump during implementation into a hard tampering halt. The
+  # exit_criteria command is byte-identical to generate-tests, re-run against the exact commit
+  # being frozen. on_fail is reworking, never fixing.
+  - id: freeze-tests
+    depends_on: [generate-tests]
+    brief: >
+      No edits. This stage exists to snapshot and commit the reviewed test suite as the frozen
+      baseline every later stage is held to, and to be the commit a rollback resets to. The
+      exit_criteria re-runs the same static checks the writing stage ran, byte-identical, against
+      the exact commit being frozen, because that commit is the one every stage after it is
+      measured against. If those checks fail here, something is wrong upstream: on_fail is
+      reworking rather than fixing, because quietly patching a test at the freeze point would
+      bypass the review that just accepted it.
+    write_scope: ["test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "python3 ../run-4-after-lite/validate_spec.py ../spec-lite/0-spec.md . > /dev/null || exit 1; test -f ../run-4-after-lite/test-scenarios.md || exit 1; node --test test/*.test.js > /tmp/kestra-retry-cap-polarity.txt 2>&1; grep -q 'does not provide an export named' /tmp/kestra-retry-cap-polarity.txt && exit 1; grep -q '^not ok ' /tmp/kestra-retry-cap-polarity.txt || exit 1; [ $(grep -c '^ok ' /tmp/kestra-retry-cap-polarity.txt) -ge 2 ] || exit 1; exit 0"
+    on_fail:
+      action: reworking
+      reason: "the frozen tests no longer pass their own static checks at the freeze point - resolve upstream, do not patch here"
+
+  # Exactly one implement stage: the lite condition table already established a single component.
+  # effort: low is automatic under mode lite (that same table is the evidence this stage needs no
+  # heavy reasoning, and verify plus review both re-check it at the orchestrator own level, so a
+  # low-effort mistake just fails and loops through fixing). model is deliberately unset - nobody
+  # asked for faster or cheaper runs, and omitting it inherits the safe default.
+  - id: implement-retry-cap
+    depends_on: [freeze-tests]
+    brief: >
+      Implement the retry cap in src/queue.js against the frozen tests. Do not modify test/** -
+      write_scope forbids it and the orchestrator rejects the diff regardless of intent.
+
+      What the spec asks for, in its own terms. createQueue() takes an optional options object
+      and returns pending, done, failed and maxAttempts, with maxAttempts defaulting to 3 and
+      clamped to a minimum of 1 so a message can never be failed before it has been attempted
+      once. In the catch block of step(), increment attempts exactly as today, then branch: under
+      the cap, push to the tail of pending and return the retry shape unchanged; at or past the
+      cap, push to queue.failed and return the failed shape. A message on failed carries the
+      thrown error message on a new error field, and a non-Error throw must land there as its
+      string form rather than as undefined. Nothing else about step() changes - the idle path,
+      the no-handler path and the success path keep their current behaviour and their current
+      return shapes, and the no-handler path must not consult the cap at all.
+
+      Runtime invariants, from the section of the spec by that name. Two hold here: a message is
+      on exactly one of pending, done and failed, never two and never none; and a message on
+      failed has attempts of at least 1 and a non-empty string error. The spec states directly
+      that neither can fail silently, because both are properties of values a caller already
+      receives or can read off the queue object and both are asserted in the frozen suite after
+      every step() - so this feature needs no separate production guard bolted on, and adding one
+      to a 40-line in-memory module would be dead weight. What it does need is that your branch
+      structure makes them true by construction: exactly one push per path through step(), never
+      two and never zero. If your implementation introduces any path where either invariant could
+      hold falsely - a second push, an early return that drops the message, an error field that
+      can be undefined - that path needs an explicit check which halts or refuses rather than
+      proceeding. Do not add a check that logs and continues; that satisfies the letter of the
+      section and provides none of its value. Say so in your report if you conclude no such path
+      exists, rather than leaving it unaddressed.
+
+      Constraints this repo already settled. CLAUDE.md mandates plain ES modules, named exports
+      only, and zero third-party dependencies. maxAttempts lives on the queue object rather than
+      being passed to step(), decided in the Codebase Survey so the (queue) call shape both
+      existing tests rely on does not widen. Out of scope and not to be touched: retrying or
+      resurrecting failed messages, backoff or scheduling of any kind, a per-message maxAttempts
+      override, and the spread order in enqueue().
+
+      Comment discipline. Default to no comments. One line only where the reason is genuinely not
+      obvious from the code - a hidden constraint, a workaround, why a simpler approach does not
+      work - never a restatement of a well-named identifier, never a multi-line block where one
+      line covers it, and never a reference to this run, this spec, a criterion id or a
+      copy-provenance path. That belongs in the commit message, and every comment here is
+      re-pasted into every later stage that reads this diff.
+
+      An implementation-focused skill fits this stage well if you have one installed. No
+      preference was named for this run, so use your own judgement rather than treating any
+      skill as required.
+    write_scope: ["src/queue.js"]
+    effort: low
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # Sibling of review, not its predecessor: both depend on implement-retry-cap directly. Neither
+  # writes code (write_scope: [] on both), so there is nothing for them to collide on and the
+  # diff review reads is already final the moment implement passes - chaining them would buy a
+  # sequential subagent round-trip for no correctness reason.
+  - id: verify-acceptance-criteria
+    depends_on: [implement-retry-cap]
+    brief: >
+      Before doing anything else, check the frozen test suite - now real, unlike at generation
+      time - against the AC Coverage Map in ../spec-lite/0-spec.md: does every acceptance
+      criterion map to an assertion that actually exists and actually runs under
+      exit_criteria.run? If yes for all of them, there is no judgment work left here. Say so
+      plainly and stop: running exit_criteria.run and reading its real exit code IS the
+      verification, and kestra-run can execute it directly without spawning you on a future run
+      of the same shape. Note in particular that the last acceptance criterion in the spec is
+      literally npm test exiting 0 with the two pre-existing tests unmodified, which is exactly
+      what exit_criteria.run measures - do not re-run the suite by hand and paste its output on
+      top of that. If one or more criteria are NOT covered by any frozen assertion, name exactly
+      which ones and exercise only those at runtime by hand, reporting what you observed against
+      what the criterion requires.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-retry-cap
+
+  # Unconditional, and the one judgment stage mode lite keeps: a green suite says nothing about
+  # code quality or about a guard the acceptance criteria never thought to ask for. If this and
+  # verify both fail at once, that is still ONE fix attempt on implement-retry-cap with both sets
+  # of findings combined, not two competing ones.
+  - id: review
+    depends_on: [implement-retry-cap]
+    brief: >
+      Review the real diff since the last stage commit for correctness, edge cases, and
+      injection, authn and secrets risk. Passing tests only prove the acceptance criteria the
+      spec thought to write down; this stage exists to catch what the spec never thought to test
+      for, and it is the one judgment stage mode lite keeps for exactly that reason.
+
+      Read the diff specifically against the Runtime Invariants section of
+      ../spec-lite/0-spec.md: whether the branch structure in step() really makes both invariants
+      true by construction, or whether some path can leave a message on two lists or on none, or
+      leave error undefined on a failed entry. That is a judgment on the diff which verify
+      structurally cannot make, because the criteria verify runs against are the tests and the
+      tests came only from the anticipated cases. Check the three watch-outs the spec names too:
+      unique handler type strings against the process-lifetime HANDLERS global, the length
+      identity staying derivable from the arrays with no running counter beside failed, and the
+      two pre-existing tests still passing byte-unmodified.
+
+      Whatever code-review and security-review skills you have available both fit this stage
+      well; try them, and proceed with a direct review if neither is installed.
+
+      Write the verdict to ../run-4-after-lite/review-verdict.md, in this order. First line
+      exactly VERDICT: CLEAR or VERDICT: CHANGES_REQUESTED, with nothing else on that line -
+      exit_criteria greps it. Then a findings table with one row per finding: severity, the claim
+      in one line, and file:line. Then paths into ../run-4-after-lite/evidence/ for anything that
+      took real computation to establish, with the producing command recorded inside the file. A
+      numeric finding names the quantity it measured, the inputs, and the exact command, with the
+      output pasted - a numeric finding without them is not a finding yet. Any other blocking row
+      carries a command whose exit code flips once the finding is addressed, where such a command
+      exists; a judgment-only finding has none, and must not have a fake one invented to satisfy
+      the format. Report every finding you have - the shape exists to cut narration, never to cap
+      how much gets reported.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' ../run-4-after-lite/review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-retry-cap
+
+  # Mechanical terminal stage, not a human approval gate: by the time execution reaches here
+  # every judgment-bearing check has already run and already had its own escalation path. Waits
+  # on BOTH siblings - the diff is not finished-and-passed until verify has passed too, even
+  # though it ran alongside review rather than after it.
+  - id: done
+    depends_on: [verify-acceptance-criteria, review]
+    brief: >
+      Every upstream stage passed. Write ../run-4-after-lite/completion-summary.md: what shipped,
+      which commits, the review verdict, and the frozen test hash. This stage is script-eligible
+      - kestra-run writes the summary itself from state.json and git log and spawns nothing.
+
+      Include a per-stage cost table sourced from what kestra-run already tracked while running
+      this workflow; do not re-derive it and do not spawn anything to measure it. Columns: stage
+      id, subagent tokens, wall time, attempt count, and spawn type (fresh, resumed or none).
+      Populate the spawn-type column only for a stage whose attempts all happened inside one
+      session; across a pause and resume, write that it is not tracked for a multi-session resume
+      rather than reconstructing a guess. A stage whose metric is missing gets an absent row,
+      never a fabricated one and never a stage failure. This table is the only place the
+      mode-versus-cost trade-off of this run becomes visible after the fact, which is why it is
+      in the summary by default instead of waiting for someone to ask for it.
+    write_scope: ["../run-4-after-lite/completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "../run-4-after-lite/completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

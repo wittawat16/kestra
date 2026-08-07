@@ -1,0 +1,19 @@
+# Leg 10 — story 24: the monolithic, unanchored path is still valid.
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_spec.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/runs/order-cancellation-refund/0-spec.md /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream
+WARN: Files to Touch row 1 names no file path ('*(none — illustrative spec, no repo attached)*') — the path-existence check cannot run on it
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_workflow.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/runs/order-cancellation-refund
+WARN: no spec_anchor — this workflow is not anchored to a raise commit (standalone/hand-written spec); staleness cannot be checked mechanically
+PASS — 11 stages, structurally sound.
+exit=0
+
+# zero matches => grep exits 1; that IS the claim: no anchor, no ticket blocks.
+$ grep -c 'spec_anchor\|ticket:begin' /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/runs/order-cancellation-refund/workflow.yaml
+0
+exit=1
+

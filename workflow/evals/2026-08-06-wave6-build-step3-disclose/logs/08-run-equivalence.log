@@ -1,0 +1,28 @@
+========================================================================
+full: run-1-before-full  vs  run-2-after-full
+  mode           : full  vs  full   AGREE
+  stage count    : 8 vs 8
+  freeze_after=1 : 1 vs 1
+  renamed stages : [('implement-tier-retry-policy', 'implement-tier-retry')]
+  differences    : none, after normalising path frame and renames
+========================================================================
+lite: run-3-before-lite  vs  run-4-after-lite
+  mode           : lite  vs  lite   AGREE
+  stage count    : 6 vs 6
+  freeze_after=1 : 1 vs 1
+  renamed stages : [('verify', 'verify-acceptance-criteria')]
+  differences after normalising path frame and renames:
+    [0] generate-tests               write_scope   ["queue.test.js"]  ->  ["queue.test.js", "test-scenarios.md"]
+========================================================================
+validate_workflow.py on all four, each under BOTH vendored validators:
+  run-1-before-full    under before-skill exit=0  PASS — 8 stages, structurally sound.
+  run-1-before-full    under after-skill  exit=0  PASS — 8 stages, structurally sound.
+  run-2-after-full     under before-skill exit=0  PASS — 8 stages, structurally sound.
+  run-2-after-full     under after-skill  exit=0  PASS — 8 stages, structurally sound.
+  run-3-before-lite    under before-skill exit=0  PASS — 6 stages, structurally sound.
+  run-3-before-lite    under after-skill  exit=0  PASS — 6 stages, structurally sound.
+  run-4-after-lite     under before-skill exit=0  PASS — 6 stages, structurally sound.
+  run-4-after-lite     under after-skill  exit=0  PASS — 6 stages, structurally sound.
+
+ASSERT OK : full pair is equivalent on mode, topology, one freeze point, on_fail wiring and exit types
+ASSERT OK : lite pair is equivalent on mode, topology, one freeze point, on_fail wiring and exit types

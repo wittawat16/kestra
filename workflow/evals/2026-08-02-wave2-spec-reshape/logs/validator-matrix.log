@@ -1,0 +1,326 @@
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/bare-heading-in-surface-chained.md .
+FAIL: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/bare-heading-in-surface-standalone.md .
+WARN: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/conforming-chained.md .
+(no output)
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-external-interface-chained.md .
+FAIL: '## External Interface' is empty — name the seam tests may drive, the seams deliberately absent, and what is not an interface
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-external-interface-standalone.md .
+WARN: '## External Interface' is empty — name the seam tests may drive, the seams deliberately absent, and what is not an interface
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-source-cells-chained.md .
+FAIL: 2 AC Coverage Map row(s) have an empty 'Source' cell — a green column that lies
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/empty-source-cells-standalone.md .
+WARN: 2 AC Coverage Map row(s) have an empty 'Source' cell — a green column that lies
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-chained.md .
+FAIL: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+FAIL: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+FAIL: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/four-obligations-missing-standalone.md .
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: '## Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-below-preamble.md .
+FAIL: 'Spec-ticket:' line outside the preamble — it must sit above the first '## ' or it can land inside a requirement-surface section and move surface_hash.
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-duplicate-chained.md .
+FAIL: 2 'Spec-ticket:' marker lines in the preamble — exactly one is allowed
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-malformed-chained.md .
+FAIL: chain marker 'Spec-ticket:' present but malformed ('<ticket-url>') — a partial marker is a FAIL (same rule as validate_workflow.py's partial anchor triple); give the full ticket URL or remove the line.
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/marker-valueless-chained.md .
+FAIL: chain marker 'Spec-ticket:' present but malformed ('') — a partial marker is a FAIL (same rule as validate_workflow.py's partial anchor triple); give the full ticket URL or remove the line.
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/mode-without-reason-chained.md .
+WARN: the mode-prediction line records no reason for the mode
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-ac-coverage-map-chained.md .
+FAIL: no 'AC Coverage Map' section found — the Source column check cannot run
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-ac-coverage-map-standalone.md .
+WARN: no 'AC Coverage Map' section found — the Source column check cannot run
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-external-interface-chained.md .
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-external-interface-standalone.md .
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-mode-prediction-chained.md .
+FAIL: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-mode-prediction-standalone.md .
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-precondition-line-chained.md .
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-source-column-chained.md .
+FAIL: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/no-source-column-standalone.md .
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/plural-external-interfaces-chained.md .
+FAIL: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+FAIL: '## External Interfaces' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/two-mode-lines-chained.md .
+FAIL: 2 mode-prediction lines — exactly one is allowed
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/two-mode-lines-standalone.md .
+WARN: 2 mode-prediction lines — exactly one is allowed
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/unclosed-fence-chained.md .
+FAIL: unclosed code fence — the requirement surface would be silently truncated (false-fresh hash)
+exit=1
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-wave2-spec-reshape/fixtures/unclosed-fence-standalone.md .
+WARN: unclosed code fence — the requirement surface would be silently truncated (false-fresh hash)
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/runs/order-cancellation-refund/0-spec.md .
+WARN: Files to Touch row 1 names no file path ('*(none — illustrative spec, no repo attached)*') — the path-existence check cannot run on it
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=1 WARN=0 exit=1
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec.md workflow/evals/2026-08-02-spec-instrumented-rerun/fixture
+(no output)
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-spec-instrumented-rerun/spec-pass/0-spec-verbatim.md workflow/evals/2026-08-02-spec-instrumented-rerun/fixture
+WARN: no 'Files to Touch' section found — skipping path-existence check
+WARN: no 'Runtime Invariants' section found
+WARN: no 'Reality Constraints' section found
+WARN: no 'Acceptance Criteria' section found
+WARN: no 'AC Coverage Map' section found — the Source column check cannot run
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: '## Solution' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## User Stories' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Implementation Decisions' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Testing Decisions' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Further Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=4 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-08-02-spec-instrumented-rerun/to-spec-pass/spec-ticket.md workflow/evals/2026-08-02-spec-instrumented-rerun/fixture
+WARN: no 'Files to Touch' section found — skipping path-existence check
+WARN: no 'Runtime Invariants' section found
+WARN: no 'Reality Constraints' section found
+WARN: no 'Acceptance Criteria' section found
+WARN: no 'AC Coverage Map' section found — the Source column check cannot run
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: '## Solution' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## User Stories' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Implementation Decisions' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Testing Decisions' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: '## Further Notes' is not a template section heading — a bare '## ' inside a requirement-surface section body truncates the surface; use '### ' for a subsection, or fence a literal
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=4 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-28-batch-chunk-lite/0-spec.md workflow/evals/2026-07-28-dlq-retry-cap/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-28-dlq-retry-cap/new/0-spec.md workflow/evals/2026-07-28-dlq-retry-cap/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-28-dlq-retry-cap/old/0-spec.md workflow/evals/2026-07-28-dlq-retry-cap/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-build-ablation-antipatterns/spec/0-spec.md workflow/evals/2026-07-31-build-ablation-antipatterns/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-build-model-compare/0-spec.md workflow/evals/2026-07-31-build-model-compare/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny/full/0-spec.md workflow/evals/2026-07-31-spec-ablation-cherny/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny/minimal/0-spec.md workflow/evals/2026-07-31-spec-ablation-cherny/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny-2/full/0-spec.md workflow/evals/2026-07-31-spec-ablation-cherny-2/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-ablation-cherny-2/minimal/0-spec.md workflow/evals/2026-07-31-spec-ablation-cherny-2/fixture
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-model-compare/opus/0-spec.md .
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+
+$ python3 workflow/kestra-build/scripts/validate_spec.py workflow/evals/2026-07-31-spec-model-compare/sonnet/0-spec.md workflow/evals/2026-07-31-spec-model-compare
+WARN: no 'Source' column in the AC Coverage Map header — every AC must cite its intent-layer origin (US-n / ID§x / ⚠ inferred)
+WARN: no '## External Interface' section — kestra-exam must run at the seam this section declares; without it the exam guesses (permanent false-fail risk)
+WARN: no recorded mode-prediction fact — '## Mode Prediction' must carry a line 'kestra-build mode: `full`|`lite`' with the reason
+WARN: no 'Delimiter precondition:' line in the preamble — prose only, but the template asks for it
+exit=0
+
+  [HEAD validator, same args] FAIL=0 WARN=0 exit=0
+

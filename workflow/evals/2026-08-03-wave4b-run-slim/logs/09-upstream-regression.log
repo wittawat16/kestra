@@ -1,0 +1,9 @@
+=== leg 9 — nothing upstream broke: tests + validator on the worked example ===
+OK
+exit=0
+OK
+exit=0
+WARN: no spec_anchor — this workflow is not anchored to a raise commit (standalone/hand-written spec); staleness cannot be checked mechanically
+PASS — 11 stages, structurally sound.
+exit=0
+ASSERT OK: worked example still PASSes (exit 0)

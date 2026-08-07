@@ -1,0 +1,59 @@
+
+=== leg 13 — the installer's SKILLS array and a --project install ===
+
+$ grep -n "kestra-" /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/install.sh
+43:  workflow/kestra-spec workflow/kestra-build workflow/kestra-run workflow/kestra-exam
+50:# Retired: meta-pm, meta-ba, meta-sa, meta-architect — workflow/kestra-spec does all four inline
+
+Whether the SKILLS array lists kestra-exam decides whether install.sh can carry
+it at all: a skill not listed there is invisible to the installer. The grep above
+is the whole evidence and the test below is the consequence — this leg measures
+the array rather than asserting a state, because the entry is owned by another
+agent and moved during the wave. First measured 2026-08-02 with the entry absent
+(`test -d` = 1); re-run 2026-08-02 after the entry landed.
+
+$ bash /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/install.sh --project /tmp/kx36/projinstall
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-spec -> /tmp/kx36/projinstall/.claude/skills/kestra-spec
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build -> /tmp/kx36/projinstall/.claude/skills/kestra-build
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-run -> /tmp/kx36/projinstall/.claude/skills/kestra-run
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-exam -> /tmp/kx36/projinstall/.claude/skills/kestra-exam
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/productivity/givename -> /tmp/kx36/projinstall/.claude/skills/givename
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-designer -> /tmp/kx36/projinstall/.claude/skills/meta-designer
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-dev -> /tmp/kx36/projinstall/.claude/skills/meta-dev
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-qa -> /tmp/kx36/projinstall/.claude/skills/meta-qa
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-test-review -> /tmp/kx36/projinstall/.claude/skills/meta-test-review
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-review -> /tmp/kx36/projinstall/.claude/skills/meta-review
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-security -> /tmp/kx36/projinstall/.claude/skills/meta-security
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-devops -> /tmp/kx36/projinstall/.claude/skills/meta-devops
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-debug -> /tmp/kx36/projinstall/.claude/skills/meta-debug
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-spec -> /tmp/kx36/projinstall/.claude/skills/meta-spec
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-test-writer -> /tmp/kx36/projinstall/.claude/skills/meta-test-writer
+copied: /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/meta/meta-orc -> /tmp/kx36/projinstall/.claude/skills/meta-orc
+sanity check: scripts compile OK
+
+Installed kestra-spec, kestra-build, kestra-run, kestra-exam, givename, meta-designer, meta-dev, meta-qa, meta-test-review, meta-review, meta-security, meta-devops, meta-debug, meta-spec, meta-test-writer, meta-orc under: /tmp/kx36/projinstall/.claude/skills
+Available in project: /tmp/kx36/projinstall
+exit=0
+
+$ ls /tmp/kx36/projinstall/.claude/skills
+givename
+kestra-build
+kestra-exam
+kestra-run
+kestra-spec
+meta-debug
+meta-designer
+meta-dev
+meta-devops
+meta-orc
+meta-qa
+meta-review
+meta-security
+meta-spec
+meta-test-review
+meta-test-writer
+
+$ test -d /tmp/kx36/projinstall/.claude/skills/kestra-exam ; echo $?
+0 (0 = installed, 1 = absent)
+$ ls /tmp/kx36/projinstall/.claude/skills | wc -l
+      16

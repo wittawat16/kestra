@@ -1,0 +1,8 @@
+=== leg 6 — slim pack for implement-csv-writer: brief + provision only, spec on demand ===
+      41 /tmp/kx38/pack-implement-csv-writer.txt
+1
+ASSERT OK: pack carries the embedded ticket block (exit 0)
+ASSERT OK: pack carries write_scope (exit 0)
+ASSERT OK: pack carries the on-demand spec line (exit 0)
+ASSERT OK: spec body is NOT pasted (sentinel line absent) (exit 1)
+ASSERT OK: …while the sentinel does exist in the spec (exit 0)

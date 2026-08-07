@@ -1,0 +1,9 @@
+<!-- kestra-exam-pointer v1 -->
+exam_dir: /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/
+exam_script_sha256: a403e490b02f7e0b025b0775d2409978b2f3b57c50fc5cfe343b2e88c137be54
+manifest_sha256: 8784a6ee021a165e5e5be1fd6cfea5dd9ec06e62afea75d8ae7e19d9b69ebd05
+raise_commit: f59837b1323b009647d266ed99ee35f49b2bb10d
+surface_hash: 7f2b7f2fa39846c3e572676b9c0abe0b1b903cfafddbdc1ac9f7241f87423c58
+extractor_version: 1
+recorded_at: 2026-08-02T15:22:43Z
+generation: 2

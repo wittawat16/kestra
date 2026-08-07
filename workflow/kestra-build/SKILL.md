@@ -3,7 +3,10 @@ name: kestra-build
 description: >
   This skill should be used when the user asks to "generate a workflow from this spec", "turn this
   spec into a workflow.yaml", "produce a workflow.yaml + state.json", "design a TDD-locked pipeline
-  definition", "make a generator output with stages, exit criteria, and on_fail blocks", references
+  definition", "make a generator output with stages, exit criteria, and on_fail blocks", "fold this
+  sliced ticket set into one long-run workflow", "embed the ticket bodies into the stage briefs",
+  "re-fold — issue #47 changed", "record the anchor triple / Verified-against / ac_hash for these
+  slices", references
   the Hermes orchestration notes, or wants a feature spec turned into an executable plan file
   before any code is written. Writes a workflow.yaml + state.json — a TDD-first stage machine with
   write-scope allowlists, a test-hash freeze, and a fixing→reworking escalation — then stops. Does
@@ -21,13 +24,6 @@ application code, and never commits — that's kestra-run's job, not the generat
 If the user actually wants agents dispatched and running right now — spec sharpened, code written,
 verified — chain whatever specialized spec/plan/build/review skills or agents you have available
 directly, not this. kestra-build is for when the shape of the pipeline itself is the deliverable.
-
-**Suggested model, if spawning this as a subagent with a model to choose:** Sonnet 5. Measured
-same-effort against Opus 5 on this same skill: cost came out roughly a wash, and Sonnet's one real
-defect found (a wrong claim about ESM import failure behavior baked into a generated brief) is now
-fixed in this file's own `generate-tests` guidance below, narrowing the gap that motivated Opus
-elsewhere. A suggestion to offer the user, not a default to pick silently — ask before spawning.
-Doesn't apply when running inline in an already-active session.
 
 ---
 
@@ -92,12 +88,12 @@ kestra-build needs a spec with testable acceptance criteria. If the user hands y
 
 **`acceptance-tests.csv` next to the spec — check for it before deriving stages.** `kestra-spec`
 emits one: every AC/BR/edge-case/design-state rendered as a row a non-engineer can execute, already
-approved by a human at spec handoff. Two consequences, both mechanical. **Generate no `design-tests`
-stage** — the approval that stage exists to collect already happened, upstream and cheaper, and
-adding it back means stopping a run to re-approve what someone signed. And `generate-tests` writes
-no scenario table of its own; the approved table *is* the table, so its brief translates rows rather
-than inventing scenarios (see step 3's `generate-tests` bullets). No such file → nothing changes,
-follow the default guidance below.
+approved by a human at spec handoff. Two consequences, both mechanical. **Generate no
+approval-collecting `design-tests` stage** — the sign-off that stage would stop the run for already
+happened, upstream and cheaper (a context-size split per step 3's gate table remains legal; it
+collects nothing). And `generate-tests` writes no scenario table of its own; the approved table *is*
+the table, so its brief translates rows rather than inventing scenarios (see step 3's
+`generate-tests` bullets). No such file → nothing changes, follow the default guidance below.
 
 **When a spec arrives without the sections this file expects.** Not every spec comes from
 `kestra-spec` — a perfectly good `0-spec.md` from another tool, or one written before a section
@@ -111,6 +107,129 @@ specified** when you show the workflow to the user. That distinction carries wei
 spec stated is a decision a human made and stands behind, while something you inferred is a
 plausible guess that deserves a second look before it hardens into a stage's `exit_criteria`.
 Presenting the two as equivalent is how a guess quietly acquires the authority of a requirement.
+
+**A spec plus a sliced ticket set is a third input shape** — one `0-spec.md`, N tickets, one
+`workflow.yaml` whose stages each own one slice. Decide which of three forms you were handed before
+doing anything else, the same way `kestra-spec` decides in-chain vs. standalone:
+
+| Form | The invocation names | Do |
+|---|---|---|
+| **A — sliced fold** | a run folder with `0-spec.md` **plus** the slice set: GitHub refs (`#N` / URLs) with the repo, or a directory of local-file tickets | **G1–G2 below**, then the fold, then the Process |
+| **B — monolithic fold** | a run folder with `0-spec.md` only | **G1–G2 below**, then the ordinary Process; no `tickets:` block, and `spec_anchor` only if the spec carries a `> Spec-ticket:` preamble marker |
+| **C — chain-marked, no set named** | a chain-marked `0-spec.md`, no slices | ask **once**: "this spec is chain-marked `<url>` — name the sliced ticket set, or fold monolithically?" |
+
+**Never search the tracker for tickets nobody named.** No named set *is* the monolithic signal, and
+guessing a set is how scope no human vetted gets frozen into a workflow. This is verbatim the rule
+`kestra-spec`'s Input section already holds, kept identical on purpose.
+
+---
+
+## Before any run — G1 and G2, both forms
+
+These two are **run-lifecycle** rules, not fold mechanics: they protect the run folder and the
+frozen tooling, which every run has regardless of how the spec arrived. Labelled G so they never
+read as fold steps or as the numbered Process steps. **Form B runs exactly these two, then goes
+straight to the Process** and skips the fold section entirely.
+
+**G1. Guard an existing run before overwriting it.** If `state.json` exists, its frozen tooling must
+exist too; run `python3 "$RUN"/validate_workflow.py "$RUN" --refold-guard`. Any non-`pending` stage
+refuses the run. A first run has no `state.json` and skips this command; an existing state without
+the run's validator is unreadable, not permission to continue. **G1 reads the tooling G2 overwrites,
+so the order is fixed** — emit first and the missing-validator signal is gone before it is checked.
+
+**G2. Emit this run's frozen tooling and commit it with the workflow:**
+
+```bash
+cp <skill-scripts-dir>/requirement_surface.py <skill-scripts-dir>/validate_spec.py \
+   <skill-scripts-dir>/validate_workflow.py "$RUN"/
+```
+
+All three, on **every** run in **either** form — this is the single owner of that `cp`, referenced
+by the `spec-review` bullet, by F1 below, and by step 7 rather than repeated. `kestra-spec` already
+emits the first two; overwriting them is idempotent, and a genuine skill-version difference then
+shows up as a git diff instead of hiding. The third is not optional: `validate_workflow.py` imports
+`requirement_surface` as a same-directory sibling with no path setup, so run from the skill directory
+it would bind the *skill's* extractor and quietly defeat the per-run freeze. A check that reads this
+run in six months must not change its answer because a skill was reinstalled since — and step 7's
+dry-run and `kestra-run`'s own `--separation-guard` both execute the run's copies, so a run that
+skips G2 produces a workflow that can be neither validated nor executed, on any machine.
+
+---
+
+## Folding a sliced ticket set — run F0–F4 after G1–G2, before the Process below
+
+Form A only; form B skips this whole section. These are the **fold-start** steps, labelled F0–F4 so
+they never read as the numbered Process steps further down. Exact commands, regexes, hashes and
+refusal texts: [`references/ticket-fold.md`](references/ticket-fold.md) — open it now if you are
+folding a set, it is the file this section points at for every detail it deliberately doesn't repeat.
+
+**F0. Materialize the slices, then resolve the raise commit.** Copy every slice into
+`<run>/tickets/<id>.md` with `tr -d '\r'` and nothing else — the same one declared normalization
+`kestra-spec` step 0b uses, so "verbatim" means the same thing at both ends of the chain. This is the
+**only** point in the whole run where the tracker is read; everything downstream reads
+`tickets/*.md`, which is what lets `kestra-run` work with no network and no `gh`. `id` is the
+tracker's own identifier (`issue-<N>`, or the local file's basename), never derived from the title —
+a retitled ticket must not orphan its file on the next fold. Then resolve the raise commit with
+`kestra-spec`'s `references/chain-provenance.md` §2 exactly-one predicate; 0 or >1 matches ⇒ that
+file's hard-fail messages verbatim, never a hand-picked SHA.
+
+**F1. Prove the spec hasn't moved since the raise** — recompute both sides, never compare a stored
+hash to a fresh one:
+
+```bash
+python3 "$RUN"/requirement_surface.py "$RUN"/0-spec.md --hash                   # working tree
+git show <raise>:<spec-path> > /tmp/kestra-fold-raise-spec.md
+python3 "$RUN"/requirement_surface.py /tmp/kestra-fold-raise-spec.md --hash     # as raised
+```
+
+Different ⇒ **stop**, print both hashes plus the extract diff, and name the two honest paths:
+re-raise (`kestra-spec`), or re-anchor to the current raise if the human judges the slice boundaries
+still intact. **Whether the boundaries survived is never automated** — the hash says the surface
+moved, the diff says which rows, the human says whether the slicing still holds.
+
+**F2. Match every ticket AC against the spec's `## AC Coverage Map`, and read each AC's Source off
+the matched row.** Normalize the ticket line exactly as `requirement_surface._units` does, then strip
+a trailing label with `\s*\(Source:\s*[^()]*\)\s*$` and nothing wider. An unmatched ticket AC **refuses
+the fold** (the slice set and the raised spec disagree, and reconciling them is a human's call); an
+empty `Source` cell on a matched row stops too; a ticket label contradicting the row stops, printing
+both. Map rows covered by no ticket, or by two, are WARNs that must appear in the audit line. The map
+is the single owner of the AC→Source mapping — a slice may echo it, never restate it independently,
+because a second copy can drift while both still look populated.
+
+**F3–F4. Compute `ac_hash` per slice, then refresh and *print* the marker table** — `body_sha256`,
+`ac_hash`, `verified_against` (= F0's raise SHA), `verified_at` (ISO-8601 UTC) for every slice,
+including rows whose status is `unchanged`. A refresh nobody can see is indistinguishable from a
+refresh that did not run.
+
+**Then record what F0–F4 produced, in `workflow.yaml`:** the `spec_anchor` triple beside
+`source_spec`, the `tickets:` map, and each owning stage's `brief` carrying its ticket body verbatim
+between `<!-- ticket:begin <id> sha256:<64 hex> -->` / `<!-- ticket:end <id> -->` delimiters, with the
+stage's own instructions strictly below the block. Field grammars, the embedded-block rules, and the
+two parser traps that decide how it's all verified:
+[`references/workflow-schema.md`](references/workflow-schema.md). Stage `depends_on` ordering comes
+from each slice's `## Blocked by`, never from filename order.
+
+**Any ticket-body change ⇒ re-fold; there is no hand-edit path.** A re-fold is a plain re-run of
+kestra-build over the same run folder (no flag, no CLI) and overwrites `workflow.yaml`,
+`tickets/*.md`, the emitted scripts, and `state.json`. It has to be a re-fold rather than a patched
+brief because only the fold re-runs the freeze/`write_scope` validation, the anchor recompute, and the
+`ac_hash` refresh — a hand-patched brief carries current words behind a stale anchor. Say that in the
+brief's own footer too, so the rule travels with the artifact into every spawn.
+
+**One hard guard: refuse to re-fold a live run.** If any stage in the existing `state.json` is past
+`pending`, stop and print the refusal in `ticket-fold.md` §4 — the honest paths are letting
+`kestra-run` escalate to `reworking`, or a destructive reset to the pre-run commit. Overwriting
+`state.json` mid-run destroys the resume checkpoints and orphans the commits that were the rollback
+points, so this is a `reworking`-class event, not a regeneration: G1 above already enforces it with
+the run's `validate_workflow.py --refold-guard` — escalate upward, never patch sideways. G1 runs on
+a monolithic regeneration too, which overwrites the same `state.json` for the same reason.
+
+**Print the tracker-side line; never post it.** One line per slice in the closing report —
+`Verified-against: <sha…> · ac_hash: <hex…> · extractor: v<N> · fold: <ISO-8601>` — for a human to
+paste. kestra-build produces artifacts and stops; it doesn't even commit, so writing to an external
+tracker is outside its contract, and its sibling `kestra-spec` is read-only on the tracker for the
+same reason. Named residual: a human who never pastes leaves that ticket anchorless, visible only at
+the next fold.
 
 ---
 
@@ -198,7 +317,7 @@ generate-tests → freeze-tests (freeze point) → implement → {verify, review
 | `test-review` | **dropped** | its trigger is the presence of test doubles, and the lite condition table already established there are none |
 | `freeze-tests` | kept, unchanged | the freeze is the point of the whole thing; a "lite" mode that skips it is not this skill |
 | `implement-*` | kept, exactly one, `effort: low` | the lite condition table already established there's one component and nothing heavy to reason about — set `effort: low` automatically here (never `model`, that stays opt-in — see the `effort`/`model` sections in `references/workflow-schema.md`) |
-| `verify` | kept | script-eligible by default (see the script-eligibility table above) — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
+| `verify` | kept | script-eligible by default (see the script-eligibility table in step 2 below) — `write_scope: []` with an `exit_criteria.run`, which kestra-run executes directly (see its efficiency notes) |
 | `review` | kept, unconditional | passing tests say nothing about injection/authn/secrets or a missing runtime guard. This is the one judgment stage lite keeps, and the reason lite is still safe to use |
 | `deploy-readiness` | **appended when `needs_devops: true`** | not a lite/full distinction — see below |
 
@@ -257,50 +376,61 @@ per-spec.
    show the user alongside the final workflow.yaml/state.json, so the inconsistency is visible to
    them too if you miss one.
 
-### Script-eligibility — check this before deriving stages, not per-stage as you go
+   **Then settle script-eligibility, here and once — not per-stage as you go.** Same
+   mechanical-table pattern as the flags above, checked once so the per-stage bullets in step 3
+   don't each re-derive it. A stage is **script-eligible** — no subagent, `exit_criteria` alone
+   decides pass/fail — only when **both** hold: it produces no real diff of new work
+   (`write_scope: []`; or a `write_scope` holding only the report the stage emits, as `done` does;
+   or for `freeze-tests`, one kept only so the test-hash covers it
+   while the stage's own diff stays empty), **and** its `exit_criteria` settles pass/fail without
+   anyone judging content. Missing either condition means a real subagent every time. This table is
+   the single source of truth — the per-stage bullets below point back to it instead of re-arguing
+   eligibility; they still carry the implementation-specific instructions (what a script-only
+   stage's brief should say, what its `exit_criteria.run` should invoke) that this table doesn't
+   repeat.
 
-Same mechanical-table pattern as the flags above, checked once so the per-stage bullets in step 3
-don't each re-derive it. A stage is **script-eligible** — no subagent, `exit_criteria` alone decides
-pass/fail — only when **both** hold: it produces no real diff of new work (`write_scope: []`, or for
-`freeze-tests`, a `write_scope` kept only so the test-hash covers it while the stage's own diff stays
-empty), **and** its `exit_criteria` settles pass/fail without anyone judging content. Missing either
-condition means a real subagent every time. This table is the single source of truth — the per-stage
-bullets below point back to it instead of re-arguing eligibility; they still carry the
-implementation-specific instructions (what a script-only stage's brief should say, what its
-`exit_criteria.run` should invoke) that this table doesn't repeat.
-
-| Stage type | Script-eligible? | Condition | Notes |
-|---|---|---|---|
-| `spec-review` | No — mechanical pre-check only | `write_scope` covers `source_spec`; `exit_criteria.run` chains `validate_spec.py` (a script) + a verdict grep | the script proves presence/existence only (e.g. Files-to-Touch paths exist); judging contradictions/on-violation wording still needs a subagent |
-| `generate-tests` | No | writes real test code | creative work |
-| `design` (`needs_ui: true`) | No | writes `design.md`/artifact | creative work |
-| `design-tests` (rare split) | No | writes the scenario table | creative work, even though `exit_criteria.type` can be `artifact_exists` |
-| `freeze-tests` | **Yes** | `write_scope` = the same test paths (kept only so the hash covers them); the stage itself writes no new diff — `exit_criteria` re-runs `generate-tests`'s own static checks against the exact commit being frozen | mechanical re-check, not a review; `on_fail: reworking`, never `fixing` |
-| `implement-*` | No | writes real code | creative work |
-| `define-shared-contract` | No | writes the shared file | small, but still a design decision |
-| `verify` | **Usually yes** | `write_scope: []`; `exit_criteria.run` is the frozen suite's own exit code | a subagent is only needed for the genuinely-uncovered ACs the brief's binary check flags — see step 4's `verify` brief guidance |
-| `review` | No | `write_scope: []`, but the verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
-| `test-review` | No, or dropped entirely | `write_scope: []`; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
-| `deploy-readiness` | No | reads diff + spec, judges devops risk | folded into `review`'s brief by default; still judgment either way |
-| repo-declared pre-merge test gate (sibling) | **Yes** | `write_scope: []`; `exit_criteria.run` invokes the repo's own documented command | give it no work-describing brief — "kestra-run runs `exit_criteria.run` directly; spawn nothing" |
-| `done` | **Yes** | `write_scope` scoped to one summary file; `exit_criteria.type: artifact_exists` | `kestra-run` writes the summary itself from `state.json`/`git log`, no spawn |
+   | Stage type | Script-eligible? | Condition | Notes |
+   |---|---|---|---|
+   | `spec-review` | No — mechanical pre-check only | `write_scope` covers `source_spec`; `exit_criteria.run` chains `validate_spec.py` (a script) + a verdict grep | the script proves presence/existence only (e.g. Files-to-Touch paths exist); judging contradictions/on-violation wording still needs a subagent |
+   | `generate-tests` | No | writes real test code | creative work |
+   | `design` (`needs_ui: true`) | No | writes `design.md`/artifact | creative work |
+   | `design-tests` (rare context-size split) | No | writes the scenario table | creative work, even though its `exit_criteria.type` is `artifact_exists` |
+   | `freeze-tests` | **Yes** | `write_scope` = the same test paths (kept only so the hash covers them); the stage itself writes no new diff — `exit_criteria` re-runs `generate-tests`'s own static checks against the exact commit being frozen | mechanical re-check, not a review; `on_fail: reworking`, never `fixing` |
+   | `implement-*` | No | writes real code | creative work |
+   | `define-shared-contract` | No | writes the shared file | small, but still a design decision |
+   | `verify` | **Usually yes** | `write_scope: []`; `exit_criteria.run` is the frozen suite's own exit code | a subagent is only needed for the genuinely-uncovered ACs the brief's binary check flags — see step 4's `verify` brief guidance |
+   | `review` | No | owns no code — `write_scope` holds only its own verdict — but that verdict requires reading the diff for correctness/security judgment | the one judgment stage lite keeps; never script-only |
+   | `test-review` | No, or dropped entirely | owns only its own verdict; judges test-double fidelity | when the fold-in condition holds (real fixtures + a cross-file self-check in `generate-tests`'s own brief), drop the stage rather than trying to script it |
+   | `deploy-readiness` | No | reads diff + spec, judges devops risk | folded into `review`'s brief by default; still judgment either way |
+   | repo-declared pre-merge test gate (sibling) | **Yes** | `write_scope: []`; `exit_criteria.run` invokes the repo's own documented command | give it no work-describing brief — "kestra-run runs `exit_criteria.run` directly; spawn nothing" |
+   | `done` | **Yes** | `write_scope` scoped to one summary file; `exit_criteria.type: artifact_exists` | `kestra-run` writes the summary itself from `state.json`/`git log`, no spawn |
 
 3. **Derive the stage list from what the spec actually needs** — don't default to a fixed phase set.
    **If step 2 settled on `mode: lite`, the stage list is already fixed** by the lite shape above —
    generate exactly those stages and skip ahead to step 4; the per-stage guidance below still
    applies in full to each stage lite keeps (`generate-tests`'s exit_criteria polarity,
    `freeze-tests`'s write_scope, `review`'s verdict artifact and `on_fail.target`), so read it for
-   those, not for whether to add more stages. **Do not open
-   [`references/full-mode-stages.md`](references/full-mode-stages.md) for a lite spec with
-   `needs_devops: false`** — every stage it covers other than `deploy-readiness`
-   (`test-review`, sibling `implement-*`, shared-contract) is structurally impossible under the lite
-   shape, so reading it costs real tokens for nothing a lite workflow can use. Measured directly:
-   skipping it is the difference between `kestra-build` staying flat-cost on a trivial spec and
-   paying a fixed tax for guidance that never applied. If the spec sets `needs_devops: true`, open
-   only that file's `deploy-readiness` section (below), which appends to lite too — nothing else in
-   the file applies. The
-   rest of this step is the `mode: full` path, and it's where that file's content is actually
-   needed — open it once you reach the bullets below that say so.
+   those, not for whether to add more stages.
+
+   **Then settle which references this spec needs, here and once** — off the facts step 2 already
+   recorded, same mechanical-table pattern as step 2's own two tables. Open the rows that fired and
+   nothing else: measured directly, skipping a file whose branch this spec cannot reach is the
+   difference between `kestra-build` staying flat-cost on a trivial spec and paying a fixed tax on
+   every one for guidance that never applied.
+
+   | Fact, already settled in step 2 | Open | For |
+   |---|---|---|
+   | `mode: lite` **and** `needs_devops: false` | **nothing** | the bullets below are the whole story |
+   | `mode: full` | [`references/full-mode-stages.md`](references/full-mode-stages.md) | what `spec-review` must actually check · `test-review`, its risk table, and the condition under which its check folds into `generate-tests` and the stage isn't generated · the harness contract · evidence artifacts · sibling `implement-*` · the shared-contract stage · splitting `review` per component |
+   | `needs_devops: true`, **either** mode | that same file's `deploy-readiness` **section only** | the exact trigger wording, the default fold into `review`'s brief, and the two freshness enforcement points that fold depends on |
+   | the spec is too large for one spawn to write the scenario table plus all test code | [`references/stage-derivation.md`](references/stage-derivation.md) § 1 | the one case where a real `design-tests` stage is justified — context-size decomposition — and what it must look like. A user wanting to *approve* scenarios is not this case: that's `acceptance-tests.csv`, or an approval collected now at build time, never a mid-run stop |
+   | the spec is a wide refactor or a batched migration | that same file's §§ 3–4 | the two legal shapes for a batch whose blast radius reaches test files, and how each batch's own gate stays honest |
+   | the codebase survey found a pre-merge test gate the repo's own docs declare mandatory | that same file's § 5 | generating it as a stage with `exit_criteria` rather than leaving it as a suggestion in a brief |
+
+   **Name what you opened in the mode/stage audit line** — "references opened: none (lite, no
+   devops)", "references opened: full-mode-stages.md + stage-derivation.md §5". A table consulted
+   silently leaves nothing behind to check, which is the same reason step 2's flag table has to
+   appear in your output rather than being filled in mentally.
    A minimal TDD-honest skeleton looks like:
    `spec-review → generate-tests → freeze-tests (freeze point) → implement[-per-component] →
    {verify, review} → done`. Add stages only when the spec calls for them (e.g. a UI-facing spec
@@ -355,93 +485,17 @@ implementation-specific instructions (what a script-only stage's brief should sa
      the user wants the approved table itself hash-frozen — ask rather than assuming; freezing it
      turns a wording fix into a `reworking` bounce.
    - **Default, when no such table exists: have `generate-tests` write its own scenario table as a
-     first artifact in the same spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1 traceable), *before* writing
-     test code — not as a separate `design-tests` stage. Be honest about what a separate stage with
-     `exit_criteria.type: artifact_exists` actually buys: nobody reviews that table (nothing gates
-     on more than its existence, and `kestra-run`'s default HITL posture auto-advances through an
-     `artifact_exists` check), so a coverage gap in the table would translate 1:1 into the frozen
-     tests exactly as it would without the split — the split buys decomposition (a smaller, focused
-     spawn per stage), not assurance, and presenting it as the latter is the defect this bullet used
-     to have. The same-spawn table still gets you the traceability benefit — `test-review` and a
-     human glancing at the diff can recognize a missing scenario as a missing table row — at zero
-     extra spawn cost, and `on_fail.target: generate-tests` can legally edit both the table and the
-     tests together since they're the same stage's `write_scope`.
-   - **Only split into a real, separate `design-tests` stage in two cases**, both narrow: (1) the
-     user explicitly asks to approve the scenario list before any test code exists **and no
-     `acceptance-tests.csv` came with the spec** — then give it `exit_criteria.type: human_approval`
-     on the table, never `artifact_exists`, so the split
-     actually buys the assurance its name implies rather than recreating the same
-     assurance-without-a-mechanism gap one level up. With the CSV present this case is already
-     satisfied upstream; generating the stage anyway asks a human to approve the same scenarios
-     twice, the second time mid-run where rejecting one is far more expensive. Or (2) the spec is genuinely too large for one
-     spawn to write the full scenario table plus all test code — context-size decomposition, the one
-     benefit user opt-in alone can't reach, since the user won't know to ask for it. Flag this case
-     explicitly in the mode/stage audit line ("spec too large for one spawn to write table plus all
-     test code — splitting for context size, not for coverage assurance") rather than silently
-     defaulting to it. In either case: `design-tests` writes nothing but the table,
-     `write_scope`d to that artifact only, `depends_on` the same stage `generate-tests` would have;
-     `generate-tests` then `depends_on: [design-tests]` and translates the approved table into real
-     test code 1:1 — its own judgment burden shrinks to "does this code match the plan," not "did I
-     think of everything." Two traps either way: if the `generate-tests` brief could already
-     enumerate every scenario by name up front (BRs, edge cases, states), a separate table just
-     duplicates the brief at the cost of a full extra spawn; and on a `needs_ui` spec, `design-tests`
-     must stay downstream of `design`, because design.md's screen states can't appear in a plan
-     written before design.md exists, while `generate-tests` is simultaneously forbidden from
-     inventing rows the plan lacks — a coverage gap with no legal path to close it.
+     first artifact in the same spawn** (AC/BR/edge-case → scenario title → Given/When/Then, 1:1
+     traceable), *before* writing test code — not as a separate `design-tests` stage.
    - **`spec-review` is the cheapest gate in the whole file — don't generate it as a formality.**
-     The obvious version of this stage checks that the spec file exists, is non-empty, and contains
-     an acceptance-criteria heading. That passes for any spec-shaped document, including one that's
-     confidently wrong, which makes it a stage that costs a step and buys nothing. Consider where
-     this stage sits: it runs before a single test exists, so a defect it catches costs one edit to
-     one document, while the same defect caught after the freeze costs a `reworking` bounce, and
-     caught after release costs whatever the release costs. Nothing else in the file has that ratio.
-     Give it real content to check: that the spec's **Runtime Invariants** each name what actually
-     happens on violation (and that none of them resolve to "log it and carry on," which is the
-     absence of an invariant described in the vocabulary of having one); that its **Reality
-     Constraints** are either filled in or explicitly marked not-applicable with a reason —
-     especially what each external dependency does *not* guarantee, since an empty answer there is
-     the seed of a test double that is never wrong in testing and never right in production; and
-     that these don't contradict the acceptance criteria or each other (an AC asserting an exact
-     result while a dependency is documented as not guaranteeing completeness is a contradiction
-     someone has to resolve now, not during implementation). Keep the enforcement mechanical the
-     same way `review` does it: the brief asks for the analysis and a written verdict artifact, and
-     `exit_criteria` greps that artifact for the verdict line. This is the same list `kestra-spec`'s
-     own step-6 self-check runs before handing the spec over — deliberately, so a spec produced by
-     that skill arrives having already cleared it and this stage costs one cheap pass instead of a
-     bounce; keep the two lists in sync if you change either. When the spec lacked these sections
-     and you inferred them (see **Inputs**), say so in the brief so this stage reviews the inference
-     rather than assuming a human already blessed it.
-
-     **Chain a mechanical pre-check ahead of the verdict grep.** Emit
-     `scripts/validate_spec.py` (ships with `kestra-build`) into the run folder alongside
-     `workflow.yaml`/`state.json` — same convention as `harness/` and `evidence/` — so the frozen
-     `exit_criteria` field carries no dependency on the `kestra-build` skill being installed on
-     whatever machine later executes the workflow. Set `exit_criteria.run` to
-     `python3 <run-folder>/validate_spec.py <source_spec> <repo-root> && grep -q '^VERDICT: CLEAR$' spec-verdict.md`.
-     The script only FAILs (non-zero exit) on facts that are both format-independent and fixable
-     within spec-review's own `write_scope` (the spec file itself) — a Files-to-Touch row marked
-     `edit`/`exists` whose path is absent; everything else (missing sections, empty columns, an
-     unparseable table) prints as `WARN` and never fails, so a foreign-format spec or `kestra-build`'s
-     own inferred-sections path still passes the mechanical layer. Because `kestra-run`'s context
-     pack already runs `exit_criteria.run` before every spawn (see its step 2), a `FAIL` line lands
-     in the reviewer's hands before it burns a single turn discovering the same thing itself. State
-     the delineation explicitly in the brief — **do not** reuse `test-review`'s "the mechanical checks
-     already ran, don't re-derive them" sentence verbatim, because the two stages' mechanical and
-     judgment layers don't split the same way: `test-review`'s script and its subagent check disjoint
-     things, while `validate_spec.py` and this stage's subagent read the *same* columns at different
-     depths. Say instead: "the mechanical layer verified presence/existence only — the semantic
-     content of every column is still yours to judge: no on-violation resolving to log-and-continue,
-     no contradiction between invariants/edge-cases/ACs, every AC testable, every checkable claim
-     actually run." A reviewer told the checks "already ran" in the borrowed phrasing can rationally
-     skip that semantic read, which is exactly the false-CLEAR-over-a-real-defect failure this whole
-     stage exists to prevent. Give it the same `on_fail` shape as `review`
-     too: `action: fixing`, `max_attempts: 2`, `escalate_at: 2`, `write_scope` covering `source_spec`
-     itself (there's no separate stage to `target` the way `review` targets an `implement-*` stage),
-     falling through to `reworking` only once that's exhausted or the same diff repeats — see
-     `references/design-principles.md`'s "Default HITL posture" for why a brief this substantive
-     shouldn't skip straight to the one human stop on its first finding.
-   - **`test-review`, the harness contract, evidence-artifact reuse, and sibling `implement-*` /
-     shared-contract stages are covered in
+     An existence-only check (the file exists, is non-empty, has an acceptance-criteria heading)
+     passes for any spec-shaped document, including a confidently wrong one. What it must actually
+     check, the `validate_spec.py` pre-check chained ahead of the verdict grep, and its `on_fail`
+     shape are in [`references/full-mode-stages.md`](references/full-mode-stages.md)'s
+     `spec-review` section.
+   - **`test-review` — including the condition under which its check folds into `generate-tests`
+     and the stage isn't generated at all — plus the harness contract, evidence-artifact reuse,
+     and sibling `implement-*` / shared-contract stages are covered in
      [`references/full-mode-stages.md`](references/full-mode-stages.md) — open it now, this is the
      point in the process where you need it.** In short: add `test-review` only when the spec's
      Reality Constraints list external dependencies or a pair of paths that must agree; give any
@@ -453,40 +507,11 @@ implementation-specific instructions (what a script-only stage's brief should sa
      in which case a small upstream `define-shared-contract` stage isolates just that file. The
      reference file has the full reasoning, the risk table `test-review`'s brief should use, and the
      measured evidence behind each rule — read it there rather than here.
-   - **Reality Constraints listing an external dependency triggers `test-review` by the table above
-     — but check what the *actual chosen test design* does before assuming that pass has real work
-     to do.** A spec can name an external dependency while `generate-tests` legitimately sidesteps
-     it (a real temp git repo instead of a mocked one, a real subprocess instead of a stub) — the
-     trigger condition is about what the spec's Reality Constraints *list*, not about what the tests
-     *actually contain*, so the two can diverge. Measured on a real run: a `test-review` stage
-     predicted in its own workflow-generation audit comment to be "fast/CLEAR-on-first-pass because
-     the test design uses real temp git repos, not mocks" ran twice anyway (~119k then ~105k tokens)
-     and was right both times — CLEAR with nothing to find. This is a *generation-time* decision, not
-     a run-time one: `kestra-build` makes it while writing `generate-tests`'s own brief, not after —
-     there is no run-time path where `kestra-run` drops or skips an already-generated `test-review`
-     stage; the stage list you emit is the stage list that runs (see design-principles.md and
-     `mode`'s "record of a decision" framing in `workflow-schema.md`). So: when the brief you are
-     writing for `generate-tests` mandates real fixtures (a real temp-repo helper, a real subprocess)
-     and its `exit_criteria` already enforces the absence of mock imports mechanically, don't generate
-     a `test-review` stage at all — fold its check into `generate-tests`'s own `exit_criteria` instead
-     (a static grep/check for real-fixture patterns — `execFile`, a real temp-repo helper — vs. mock-library
-     imports) rather than paying for a full separate subagent pass to confirm what the brief already
-     predicted. **This fold-in has one condition, not a blanket green light:** a real measured run
-     with no doubles at all still had its first `test-review` pass catch a genuine test-vs-test
-     contradiction (two frozen test files disagreeing about the same behavior) — a defect that is
-     double-independent and not something a mock-import grep can ever detect, since nothing about it
-     involves a double. So only take the fold when `generate-tests`'s own brief also gains an
-     explicit cross-file consistency self-check: "before finishing, cross-check assumptions shared
-     across test files — formats, fixtures, orderings — and name each pair you checked." If you omit
-     that instruction, say so plainly in the mode/stage audit line shown to the user ("test-review
-     folded in; cross-test-consistency is no longer independently reviewed") rather than letting the
-     loss pass silently — a self-check by the same stage that wrote the contradiction is weaker than
-     an independent reader catching it, and the user should get to see that trade-off, not just its
-     absence.
    - **`verify` and `review` are siblings, not a chain — both `depends_on` the implement stage
      directly, not each other.** Confirmed by direct benchmarking: chaining them
      (`review: depends_on: [verify]`) costs a whole extra sequential subagent round-trip for no
-     reason, because neither stage writes code (`write_scope: []` on both) — `review`'s diff is
+     reason, because neither stage writes code (`verify` writes nothing at all, `review` only its
+     own verdict, so their scopes can't collide) — `review`'s diff is
      already final the moment `implement` passes, so it doesn't need to wait for `verify` to
      finish reading the same, unchanging diff. Making them siblings lets kestra-run's existing
      "independent stages with non-overlapping `write_scope` run in parallel" rule apply to them
@@ -505,7 +530,8 @@ implementation-specific instructions (what a script-only stage's brief should sa
      when the user explicitly asks for a manual milestone (e.g. "I want to sign off myself before
      this touches prod") — ask, don't assume, the same as any other scope decision.
    - **`review` is not optional — always include it, right before the terminal stage.** It's a
-     mechanical exit_criteria stage (`write_scope: []`, no `freeze_after`) whose brief asks whatever
+     mechanical exit_criteria stage (owns no code — `write_scope` holds only the verdict it writes
+     — and no `freeze_after`) whose brief asks whatever
      gets spawned to review the real diff for correctness/edge-cases *and* injection/authn/secrets
      risk, writing a `VERDICT: CLEAR` / `VERDICT: CHANGES_REQUESTED` artifact that `exit_criteria`
      greps — naming whatever code-review and security-review skills you have available as suggested
@@ -517,64 +543,24 @@ implementation-specific instructions (what a script-only stage's brief should sa
      bounded number of attempts to address the findings before this escalates to `reworking` — see
      `workflow-schema.md`'s `on_fail.target` field.
      - **Specify the verdict artifact's shape in the brief — every stage that writes one
-       (`spec-review`, `test-review`, `review`).** Left unspecified, these come back as multi-page
-       prose, and the stage spends turns composing something no one reads that way: the gate greps a
-       single line, and the only other consumer is a later stage that needs the claims and where to
-       check them. Ask for, in order: the verdict line, exactly `VERDICT: CLEAR` or
-       `VERDICT: CHANGES_REQUESTED` as the first line; then a findings table with one row per
-       finding — severity, the claim in one line, and `file:line`; then paths into `<run-folder>/evidence/`
-       for anything that took real computation to establish. Give the reason in the brief rather
-       than just the format, because a reviewer told only "be brief" will drop findings to comply.
-       The shape has room for as many rows as there are findings; what it cuts is narration, not
-       substance. And say explicitly that a finding needing more explanation than a row holds gets
-       its row *plus* a short paragraph below the table — a format that suppresses a real finding
-       has cost more than the prose ever did.
-     - **A reviewer challenging a numeric claim must state the quantity it measured and paste the
-       command.** On a real run, one `spec-review` pass (179,460 tokens) existed solely because a
-       reviewer measured a different quantity than the spec did — an `abs()`-symmetric, ungated
-       deviation where the spec meant a one-sided shortfall at the decisive comparison — reported it
-       as a defect, and withdrew it when asked to show its work. The asymmetry is what makes this
-       worth a line in the brief: stating the quantity costs the reviewer one sentence, while a
-       mismeasured finding costs a whole extra stage cycle to resolve. So: a numeric finding names
-       the quantity, the inputs, and the exact command or script, with the output pasted. A numeric
-       finding without them isn't a finding yet. **Widen this to any blocking finding that admits a
-       runnable check, not just numeric ones** — where possible, a blocking row carries a command
-       whose exit code flips once the finding is addressed. Keep it to "where possible": a
-       judgment-only finding (missing error handling, an unclear naming choice) has no such command,
-       and forcing one invites a reviewer to invent a fake one just to comply with the format. The
-       payoff shows up on a `fixing` retry: `kestra-run`'s scope-capped recheck (see its step 6) can
-       run that command directly instead of asking the reviewer to re-derive whether the finding was
-       addressed, which is exactly the "mechanical confirmation costs zero subagent turns" saving
-       that recheck cap exists to realize.
+       (`spec-review`, `test-review`, `review`).** Ask for, in order: the verdict line, exactly
+       `VERDICT: CLEAR` or `VERDICT: CHANGES_REQUESTED` as the first line; then a findings table with
+       one row per finding — severity, the claim in one line, and `file:line`; then paths into
+       `<run-folder>/evidence/` for anything that took real computation to establish.
+       A blocking finding that admits a runnable check carries one: a numeric finding names the
+       quantity, the inputs, and the exact command or script, with the output pasted — a numeric
+       finding without them isn't a finding yet — and any other blocking row carries a command whose
+       exit code flips once the finding is addressed, **where possible**. Keep that qualifier: a
+       judgment-only finding (missing error handling, an unclear name) has no such command, and
+       forcing one invites a reviewer to invent a fake one to satisfy the format.
+       Why the shape is that shape, what to tell the brief so a reviewer doesn't drop findings to
+       comply, and the measured cost of getting this wrong:
+       [`references/stage-derivation.md`](references/stage-derivation.md) section 2.
      - **When there are 2+ sibling `implement-*` stages**, `review` (and sometimes `verify`) needs
        splitting one-per-component so `on_fail.target` has an unambiguous single stage to route a
        fix to — see the "Splitting `review`" section of
        [`references/full-mode-stages.md`](references/full-mode-stages.md) for the full reasoning.
        Never applies under `mode: lite`, which has exactly one `implement-*` stage by definition.
-   - **If the target repo declares its own mandatory pre-merge test gate, generate a stage that
-     runs it — don't leave it as a suggestion in a brief.** This is the canonical script-eligible
-     sibling stage (see the table above). Projects that have been burned by
-     doubles drifting from reality often already have the fix: a recorded contract suite, a local
-     fake of the real service, an integration target that must pass before merge, written down in
-     `CLAUDE.md` or the repo's own docs. Whether it exists is a fact to look up during the codebase
-     survey, not something to assume either way. When it does exist, the difference between a
-     mention in a `brief` and a stage with `exit_criteria` is the difference between a convention an
-     agent may recall and one it cannot skip — and a gate the project already declared mandatory is
-     exactly the kind that shouldn't depend on recall. Give it `write_scope: []`, an
-     `exit_criteria.run` that invokes whatever command the repo documents, and
-     `on_fail.action: fixing` with `target` pointing at the implement stage. Place it as a sibling
-     of `verify`/`review` — all three read the same finished diff and none of them writes, so
-     chaining them only costs wall-clock. Name the gate as the repo documents it rather than
-     inventing a name, and if the documented command doesn't run standalone, say so instead of
-     generating a stage that can never pass. **Give this stage no work-describing brief** — or a
-     one-line brief stating only "kestra-run runs `exit_criteria.run` directly; spawn nothing" —
-     rather than judgment-sounding prose. `write_scope: []` means a subagent can change nothing here,
-     the exit code is identical no matter who runs it, kestra-run re-runs it unconditionally in step
-     3 regardless, and on failure the command's own output already feeds the fixing attempt's
-     context pack. A brief that reads like there's something to reason about triggers a spawn under
-     kestra-run's own "do the stage's work if the brief describes any" rule for zero benefit — this
-     is the canonical case that rule's efficiency note (see `kestra-run`'s
-     `references/efficiency-notes.md`) exists to let the orchestrator skip.
    - **If the spec's `needs_devops` flag is true, add the deploy checklist** — see
      [`references/full-mode-stages.md`](references/full-mode-stages.md)'s `deploy-readiness` section
      for the exact trigger wording, what the checklist checks, and the default: fold it into
@@ -732,18 +718,42 @@ implementation-specific instructions (what a script-only stage's brief should sa
      implementation file gets re-pasted, verbatim, into every subsequent spawn that reads that file's
      diff (`test-review`, `verify`, `review`, and any `fixing` retry), so a comment that costs one
      line to write costs that line again on every stage downstream of it.
-5. **Write `workflow.yaml`** — schema and a full worked example in `references/workflow-schema.md`.
+5. **Write `workflow.yaml`** — path frame, schema, and a full worked example in `references/workflow-schema.md`.
+   - **Copy every `progress:` bullet out of the spec's `## Exit Criteria` onto the one stage that
+     owns it**, as `exit_criteria.progress`, verbatim. The spec declares the metric, kestra-build
+     copies it, `kestra-run` compares it across attempt rounds — so a reworded metric is a different
+     metric, and a dropped one leaves clause 2 of the spec's stop condition unable to ever fire. The
+     owner-resolution ladder (exact match → unique containment → named stage → ask the user once →
+     stop the fold), the two fold-time consistency checks, and the exact FAIL text are in
+     `references/workflow-schema.md`'s `exit_criteria.progress` section. A stage with no `progress:`
+     is the normal case; don't invent one.
 6. **Write `state.json`** — initial state matching the stage list, schema + example in
    `references/state-schema.md`. All stages start `pending`, `test_hash: null`, `seen_diffs: []`.
 7. **Dry-run it before showing it to the user.** Run
-   `python3 <skill-dir>/scripts/validate_workflow.py <output-dir>` — a dependency-free, zero-LLM
+   `python3 <run-folder>/validate_workflow.py <run-folder>` — the run's **own** copy, emitted by step
+   G2 (which every form runs; if the copy is missing, G2 was skipped — run its `cp` now rather than
+   falling back to the skill's), not the skill's: the checker imports `requirement_surface` as a same-directory sibling with no
+   path setup, so running it from the skill directory binds the skill's extractor and defeats the
+   per-run freeze the emit exists to create. (The in-place `python3
+   workflow/kestra-build/scripts/validate_workflow.py <dir>` invocation documented in `CLAUDE.md`
+   stays valid as a convenience; if it reports an extractor-version mismatch, that is a true signal
+   about this run, not a bug in the check.) It is a dependency-free, zero-LLM
    structural check (no third-party packages, works with a plain `python3`) that catches structural
    mistakes mechanically: a post-freeze `write_scope`
    overlapping the frozen test paths (pre-freeze stages are correctly exempt — they own those paths
    on purpose), a missing `on_fail.target` on a `write_scope: []` fixing stage, a dependency cycle,
    a stage unreachable from any start stage, `freeze_after: true` on more than one stage or on a
    stage whose `write_scope` is empty (which would snapshot nothing), and independent stages with
-   colliding `write_scope`s that kestra-run might run in parallel. This is a
+   colliding `write_scope`s that kestra-run might run in parallel. On a sliced fold it additionally
+   re-runs the fold's own arithmetic: the anchor triple's shape and freshness (absent ⇒ WARN, partial
+   or stale ⇒ FAIL), every embedded ticket block against `tickets/<id>.md` and against
+   `tickets[].body_sha256`, each `verified_against` against `spec_anchor.raise_commit`, each `ac_hash`
+   against a recomputed surface, and `exit_criteria.progress` being non-empty where present. **This is
+   where a first fold's refusal actually bites** — on a re-fold F0–F4 refuse before anything is
+   overwritten, but on a first fold there is no prior `workflow.yaml` to check against, so the
+   mechanical half of F1–F3 lands here: after the artifacts are written, and before they are shown,
+   committed, or handed off. Accepted cost, worth stating rather than hiding: a first fold over a
+   mismatched slice set wastes one derivation pass. This is a
    mechanical graph/set check, not a judgment call — the same "run the real command, don't eyeball
    the diff" standard kestra-run's own enforcement holds itself to, just applied here before the
    first stage ever executes instead of after. If it reports `FAIL`, fix the stage list and re-run
@@ -760,11 +770,22 @@ implementation-specific instructions (what a script-only stage's brief should sa
 
 Default to `<repo>/<feature-id>/workflow.yaml` and `<repo>/<feature-id>/state.json` next to the
 spec you generated from (e.g. alongside `workflows/runs/<feature-id>/0-spec.md` if that's where the
-spec lives). Ask if the repo has a different convention already.
+spec lives). Ask if the repo has a different convention already. Every run also writes the three
+emitted scripts (step G2), and a sliced fold adds `<run-folder>/tickets/<id>.md` per slice — all of
+them committed with the workflow, because a hash recorded against a file that isn't in the commit
+proves nothing later.
 
 ## What kestra-build does not do
 
 - Does not execute the workflow, call any skill, write application code, or commit anything.
+- Does not write to the tracker. It reads a ticket once, at F0, to materialize `tickets/<id>.md`, and
+  it *prints* the `Verified-against:` line for a human to paste — it never comments, labels, edits or
+  closes, the same read-only posture `kestra-spec` holds.
+- Does not edit a ticket body, and does not slice a spec into tickets. Whatever produced the slices
+  (`to-tickets` is the suggested tool, *if installed*) owns their shape; a mismatch between a slice and
+  the spec is a stop, not something to reconcile by rewriting either side.
+- Does not re-fold a run whose `state.json` shows any stage past `pending` — that is a
+  `reworking`-class event (see the fold section's hard guard), not a regeneration.
 - Does not add a `human_approval` stage on its own initiative — the default template has none (see
   `references/design-principles.md`'s "Default HITL posture"). If the user wants a manual milestone
   beyond that default, ask, don't assume.

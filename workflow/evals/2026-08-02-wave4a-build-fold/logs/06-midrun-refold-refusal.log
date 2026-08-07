@@ -1,0 +1,34 @@
+# Leg 6 — a re-fold while stages are past 'pending' is a reworking-class event.
+$ python3 -c "import json;print({k:v['status'] for k,v in json.load(open('/tmp/wave4a/midrun/state.json'))['stages'].items()})"
+{'spec-review': 'pending', 'generate-tests': 'pending', 'freeze-tests': 'passed', 'implement-csv-writer': 'running', 'implement-export-endpoint': 'pending', 'implement-streaming': 'pending', 'integrate-and-verify': 'pending'}
+exit=0
+
+$ python3 logs/fold_check.py check /tmp/wave4a/midrun --refold
+FAIL: refusing to re-fold — stages [freeze-tests, implement-csv-writer] are past 'pending'. A ticket
+changed mid-run; the honest paths are (a) let kestra-run escalate to reworking (the design's one
+guaranteed human stop, which resets counters and unlocks the freeze), or (b) git reset --hard to the
+pre-run commit and re-fold from there (destructive — confirm first). kestra-build does not
+reconcile a live run with a moved ticket.
+exit=1
+
+# Without --refold (i.e. a plain validation of a live run) the guard does not fire:
+$ python3 logs/fold_check.py check /tmp/wave4a/midrun
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+
+F4 refresh table:
+ticket              body_sha256   ac_hash                verified_against  status
+01-csv-writer       c9a89fea09ac…  3ce0ab14e046…          cc834eb91491…      unchanged
+02-export-endpoint  9463b2cb24b7…  7b2cbf9f76ee…          cc834eb91491…      unchanged
+03-streaming        5c348c00f7ab…  d19586d35515…          cc834eb91491…      unchanged
+
+Verified-against: cc834eb91491… · ac_hash: 3ce0ab14e046… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: 7b2cbf9f76ee… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: d19586d35515… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FOLD OK — 3 slices, 3 embedded blocks, anchor triple present, 3 warning(s).
+exit=0
+

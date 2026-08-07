@@ -1,0 +1,15 @@
+{
+  "feature": "install-check",
+  "current_stage": [],
+  "test_hash": "f2648effc5519ff518c82a209e8154714ea1c394d4d97a195893ea9e71ee7498",
+  "stages": {
+    "spec-review": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "spec-review", "spawn_type": "inline-controller", "attempt": 0 } },
+    "generate-tests": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "generate-tests", "spawn_type": "inline-controller-fallback-after-luna-timeout", "attempt": 0 } },
+    "test-review": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "test-review", "spawn_type": "inline-controller", "attempt": 0 } },
+    "freeze-tests": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "freeze-tests", "spawn_type": "inline-controller", "attempt": 0 } },
+    "implement-install-check": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "implement-install-check", "spawn_type": "controller-fallback-after-luna-max-timeout", "attempt": 0 } },
+    "verify": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "verify", "spawn_type": "inline-controller", "attempt": 0 } },
+    "review": { "status": "passed", "attempt": 1, "seen_diffs": [], "metrics": { "stage": "review", "spawn_type": "sol-xhigh-scrutinize", "attempt": 1, "rounds": 2, "critical": 0, "major": 0, "minor": 0 } },
+    "done": { "status": "passed", "attempt": 0, "seen_diffs": [], "metrics": { "stage": "done", "spawn_type": "inline-controller", "attempt": 0 } }
+  }
+}

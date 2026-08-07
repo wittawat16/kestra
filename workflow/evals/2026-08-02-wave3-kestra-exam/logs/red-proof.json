@@ -1,0 +1,121 @@
+{
+  "exam": "tally-refund",
+  "anchor": {
+    "raise_commit": "f59837b1323b009647d266ed99ee35f49b2bb10d",
+    "surface_hash": "7e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718",
+    "extractor_version": 1
+  },
+  "seam": {
+    "kind": "cli",
+    "target": "python3 src/tally.py"
+  },
+  "started_at": "2026-08-02T15:22:36Z",
+  "duration_s": 0.23,
+  "harness_version": 1,
+  "smoke": {
+    "id": "C-0",
+    "result": "pass"
+  },
+  "checks": [
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.035,
+      "id": "C-0",
+      "ac": "\u2014",
+      "class": "must-hold",
+      "provenance": "\u2014",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    },
+    {
+      "result": "fail",
+      "red_kind": "behavioral",
+      "signature": "CheckFailure: exit 1 != 0 @ tally --refund",
+      "seam_reached": true,
+      "duration_s": 0.035,
+      "id": "C-1",
+      "ac": "AC-1",
+      "class": "must-flip",
+      "provenance": "US-1",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    },
+    {
+      "result": "fail",
+      "red_kind": "behavioral",
+      "signature": "CheckFailure: exit 1 != 2 @ tally bad.csv",
+      "seam_reached": true,
+      "duration_s": 0.046,
+      "id": "C-2",
+      "ac": "AC-2",
+      "class": "must-flip",
+      "provenance": "US-1",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.032,
+      "id": "C-3",
+      "ac": "AC-3",
+      "class": "must-hold",
+      "provenance": "US-2",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.035,
+      "id": "C-4",
+      "ac": "AC-4",
+      "class": "must-flip",
+      "provenance": "\u26a0 inferred",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    },
+    {
+      "result": "pass",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": true,
+      "duration_s": 0.046,
+      "id": "C-5",
+      "ac": "AC-5",
+      "class": "must-hold",
+      "provenance": "US-3",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    },
+    {
+      "result": "unexaminable",
+      "red_kind": null,
+      "signature": "",
+      "seam_reached": false,
+      "duration_s": 0.0,
+      "id": "C-6",
+      "ac": "AC-6",
+      "class": "unexaminable",
+      "provenance": "ID\u00a72",
+      "unexaminable": "a single-pass / resident-memory invariant is not observable at the declared seam: the CLI exposes only stdout, stderr and an exit code, none of which can induce or witness memory growth",
+      "red_proof_at": "2026-08-02T15:22:36Z"
+    }
+  ],
+  "summary": {
+    "pass": 4,
+    "fail": 2,
+    "blocked": 0,
+    "unexaminable": 1,
+    "unproven": 1,
+    "exit_code": 1
+  },
+  "generations": [
+    {
+      "generation": 1,
+      "started_at": "2026-08-02T15:22:36Z",
+      "only": null
+    }
+  ]
+}

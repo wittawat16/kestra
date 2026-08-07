@@ -1,0 +1,9 @@
+=== leg 7 — progress metric stalls two rounds: clause-2 escalation to reworking ===
+attempt 1: value=2 (baseline, nothing to compare)
+attempt 2: value=2 prev=2 moved=False consecutive_no_progress=1
+attempt 3: value=2 prev=2 moved=False consecutive_no_progress=2
+ESCALATE: reworking — two consecutive attempt rounds without the number moving (clause 2)
+exit=3
+ASSERT OK: clause 2 fires on the second stalled round (exit 3)
+$ python3 -c 'json… progress_history'   # the field as persisted in state.json
+[{'attempt': 1, 'value': '2'}, {'attempt': 2, 'value': '2'}, {'attempt': 3, 'value': '2'}]

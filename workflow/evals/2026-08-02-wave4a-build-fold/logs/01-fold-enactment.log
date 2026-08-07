@@ -1,0 +1,139 @@
+# Leg 1 — the fold, enacted by hand against SKILL.md / ticket-fold.md F0-F5.
+# Form A(b): a run folder with 0-spec.md plus a directory of local-file slices.
+
+## F0 — resolve the raise commit.
+# The fixture spec is not committed (this agent may not commit; the orchestrator does),
+# so chain-provenance.md §2's exactly-one predicate has no raise commit to find and is NOT
+# exercised here. The branch tip stands in as the anchor, and that substitution is the one
+# thing in this leg that is a stand-in rather than the real F0.
+$ git -C /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream branch --show-current
+arkaphat/prep-chain-impl
+exit=0
+
+$ git -C /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream rev-parse HEAD
+cc834eb914911fd1f4d92d7f5914271821e8a455
+exit=0
+
+## F5/materialization — the documented commands, verbatim (tr -d '\r' only).
+$ tr -d '\r' < fixtures/spec/0-spec.md > runs/wave4a-fixture/0-spec.md
+exit=0
+
+$ tr -d '\r' < fixtures/ticket-set/01-csv-writer.md > runs/wave4a-fixture/tickets/01-csv-writer.md
+exit=0
+
+$ tr -d '\r' < fixtures/ticket-set/02-export-endpoint.md > runs/wave4a-fixture/tickets/02-export-endpoint.md
+exit=0
+
+$ tr -d '\r' < fixtures/ticket-set/03-streaming.md > runs/wave4a-fixture/tickets/03-streaming.md
+exit=0
+
+$ cp /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/requirement_surface.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_spec.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_workflow.py runs/wave4a-fixture/
+exit=0
+
+$ cmp runs/wave4a-fixture/requirement_surface.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/requirement_surface.py && cmp runs/wave4a-fixture/validate_workflow.py /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_workflow.py && echo 'emitted copies byte-identical to the skill'
+emitted copies byte-identical to the skill
+exit=0
+
+## The spec itself, through the spec-side validator (unchanged by this ticket).
+$ python3 /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream/workflow/kestra-build/scripts/validate_spec.py runs/wave4a-fixture/0-spec.md /Users/arkaphatp/Documents/HUN/dev/hun-registry-skill/kestra-upstream
+WARN: Files to Touch row 1 names no file path ('*(none — illustrative fixture spec, no repo attached)*') — the path-existence check cannot run on it
+exit=0
+
+## F1-F4 — compute. This is what the fold reads its recorded values off.
+$ python3 logs/fold_check.py values runs/wave4a-fixture
+F1  extractor_version: 1
+F1  surface_hash(0-spec.md): 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+F2  ac_rows in the map: 5
+F2  01-csv-writer: 2 AC(s) matched, sources=['US-1', 'ID§csv-quoting']
+F3  01-csv-writer.body_sha256 = c9a89fea09ac36e028eb0924fc6ceea3b80cd991ae72d8f07f39c7acaf80a956
+F3  01-csv-writer.ac_hash     = 3ce0ab14e0463624c64acb1a7c0399b4cdec4b179f38029359c7343c22f5822b
+F2  02-export-endpoint: 2 AC(s) matched, sources=['US-1', 'US-2']
+F3  02-export-endpoint.body_sha256 = 9463b2cb24b7bb1e1ea7c8f8bbca180fed19a5ccf9ffd1c400458a248e9eb6ec
+F3  02-export-endpoint.ac_hash     = 7b2cbf9f76ee85b8bcda653d5582ad061cbb5f07813be7a5e418259c0a34ac77
+F2  03-streaming: 1 AC(s) matched, sources=['NFR-1']
+F3  03-streaming.body_sha256 = 5c348c00f7abd346f6780302e9c97381732da42f61b8479ab688d0b8f0e93df3
+F3  03-streaming.ac_hash     = d19586d355151ce4a1a8fae37a976c513312dccbd9f0ac3496f976576727371e
+
+F4 refresh table (first fold — nothing recorded yet):
+ticket              body_sha256   ac_hash                verified_against  status
+01-csv-writer       c9a89fea09ac…  3ce0ab14e046…          <F0 raise co…      new
+02-export-endpoint  9463b2cb24b7…  7b2cbf9f76ee…          <F0 raise co…      new
+03-streaming        5c348c00f7ab…  d19586d35515…          <F0 raise co…      new
+exit=0
+
+## F1 recompute-vs-recompute, same script, both sides (the fixture stands in for 'as raised').
+$ cp fixtures/spec/0-spec.md /tmp/wave4a-raise-spec.md
+exit=0
+
+$ python3 logs/fold_check.py check runs/wave4a-fixture --raise-copy /tmp/wave4a-raise-spec.md
+F1  working tree 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+F1  as raised    2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f   [equal — proceed]
+progress → 'implement-csv-writer' by unique containment: byte-equal to the spec bullet
+progress → 'integrate-and-verify' by exact match: byte-equal to the spec bullet
+
+F4 refresh table:
+ticket              body_sha256   ac_hash                verified_against  status
+01-csv-writer       c9a89fea09ac…  3ce0ab14e046…          cc834eb91491…      unchanged
+02-export-endpoint  9463b2cb24b7…  7b2cbf9f76ee…          cc834eb91491…      unchanged
+03-streaming        5c348c00f7ab…  d19586d35515…          cc834eb91491…      unchanged
+
+Verified-against: cc834eb91491… · ac_hash: 3ce0ab14e046… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: 7b2cbf9f76ee… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+Verified-against: cc834eb91491… · ac_hash: d19586d35515… · extractor: v1 · fold: 2026-08-02T14:55:47Z
+
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FOLD OK — 3 slices, 3 embedded blocks, anchor triple present, 3 warning(s).
+exit=0
+
+## Step 7's dry-run, in the documented form (run folder's own copy, run folder as target).
+$ python3 runs/wave4a-fixture/validate_workflow.py runs/wave4a-fixture
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+PASS — 7 stages, structurally sound.
+exit=0
+
+## The anchor triple and the ticket map as committed.
+$ sed -n '1,25p' runs/wave4a-fixture/workflow.yaml
+feature: csv-export
+source_spec: workflow/evals/2026-08-02-wave4a-build-fold/runs/wave4a-fixture/0-spec.md
+spec_anchor:
+  raise_commit: cc834eb914911fd1f4d92d7f5914271821e8a455
+  surface_hash: 2f2e17eda1f05b60b310aca3ab72cd3565772dd56207f6007248f38dd871d42f
+  extractor_version: 1
+# full: three slices, two independent components over one shared writer.
+mode: full
+
+tickets:
+  - id: 01-csv-writer
+    ref: fixtures/ticket-set/01-csv-writer.md
+    body_sha256: c9a89fea09ac36e028eb0924fc6ceea3b80cd991ae72d8f07f39c7acaf80a956
+    ac_hash: 3ce0ab14e0463624c64acb1a7c0399b4cdec4b179f38029359c7343c22f5822b
+    verified_against: cc834eb914911fd1f4d92d7f5914271821e8a455
+    verified_at: "2026-08-02T14:55:47Z"
+  - id: 02-export-endpoint
+    ref: fixtures/ticket-set/02-export-endpoint.md
+    body_sha256: 9463b2cb24b7bb1e1ea7c8f8bbca180fed19a5ccf9ffd1c400458a248e9eb6ec
+    ac_hash: 7b2cbf9f76ee85b8bcda653d5582ad061cbb5f07813be7a5e418259c0a34ac77
+    verified_against: cc834eb914911fd1f4d92d7f5914271821e8a455
+    verified_at: "2026-08-02T14:55:47Z"
+  - id: 03-streaming
+    ref: fixtures/ticket-set/03-streaming.md
+    body_sha256: 5c348c00f7abd346f6780302e9c97381732da42f61b8479ab688d0b8f0e93df3
+exit=0
+
+$ grep -c 'ticket:begin' runs/wave4a-fixture/workflow.yaml
+3
+exit=0
+
+$ grep -n 'ticket:begin\|ticket:end' runs/wave4a-fixture/workflow.yaml
+79:      <!-- ticket:begin 01-csv-writer sha256:c9a89fea09ac36e028eb0924fc6ceea3b80cd991ae72d8f07f39c7acaf80a956 -->
+90:      <!-- ticket:end 01-csv-writer -->
+111:      <!-- ticket:begin 02-export-endpoint sha256:9463b2cb24b7bb1e1ea7c8f8bbca180fed19a5ccf9ffd1c400458a248e9eb6ec -->
+125:      <!-- ticket:end 02-export-endpoint -->
+145:      <!-- ticket:begin 03-streaming sha256:5c348c00f7abd346f6780302e9c97381732da42f61b8479ab688d0b8f0e93df3 -->
+154:      <!-- ticket:end 03-streaming -->
+exit=0
+

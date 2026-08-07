@@ -1,0 +1,97 @@
+
+=== leg 7 — staleness: one refusal per fail-closed arm, all three fields shown ===
+
+--- 7a fresh baseline ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+FRESH: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1 — manifest, pointer and exam.py agree.
+exit=0
+
+--- 7b an in-surface change: one AC row's Source cell ---
+$ diff <(pristine) <(mutated)
+87c87
+< | AC-1 | US-1 | `src/tally.py` — the `--refund` branch |
+---
+> | AC-1 | US-1, US-4 | `src/tally.py` — the `--refund` branch |
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+REFUSED: exam is stale — no verdict emitted.
+  cause:             surface or raise moved since the exam was written
+  surface_hash:      recorded 7e47c7ab7978 != current 7f2b7f2fa398
+  raise_commit:      recorded f59837b1 == current f59837b1
+  extractor_version: recorded 1 == current 1
+A verdict here would certify the delivered work against a superseded requirement.
+Regenerate the affected checks (kestra-exam regeneration is delta-scoped by the
+AC->check map), then re-run the gate. Do not edit the anchor to match.
+exit=2
+
+--- 7c out-of-surface changes only: Files to Touch + Out of Scope ---
+$ diff <(pristine) <(mutated)
+117c117
+< | `data/mixed.csv` | — (already carries a refund row; unchanged) |
+---
+> | `data/mixed.csv` | — (unchanged; the refund row already exists) |
+127a128
+> Also out of scope: a --csv-dialect flag.
+
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+FRESH: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1 — manifest, pointer and exam.py agree.
+exit=0
+
+Both halves of story 21 in one leg: an AC row moves the anchor, the whole
+provision layer does not.
+
+--- 7d anchor copies disagree: the pointer is tampered ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+REFUSED: exam is stale — no verdict emitted.
+  cause:             anchor copies disagree — manifest vs pointer on surface_hash; pointer says surface_hash=0e47c7ab797892606d6c70a72bc5fd54f991d2ca3008ef92bef161fab1388718
+  surface_hash:      recorded 7e47c7ab7978 == current 7e47c7ab7978
+  raise_commit:      recorded f59837b1 == current f59837b1
+  extractor_version: recorded 1 == current 1
+A verdict here would certify the delivered work against a superseded requirement.
+Regenerate the affected checks (kestra-exam regeneration is delta-scoped by the
+AC->check map), then re-run the gate. Do not edit the anchor to match.
+exit=2
+
+--- 7e the pointer body loses its v1 marker ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+pointer body is malformed — its first line must be exactly `<!-- kestra-exam-pointer v1 -->`
+exit=2
+
+--- 7f a partial anchor: manifest raise_commit truncated ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+REFUSED: exam is stale — no verdict emitted.
+  cause:             partial anchor — malformed or absent: raise_commit
+  surface_hash:      recorded 7e47c7ab7978 == current 7e47c7ab7978
+  raise_commit:      recorded f59837b1 == current f59837b1
+  extractor_version: recorded 1 == current 1
+A verdict here would certify the delivered work against a superseded requirement.
+Regenerate the affected checks (kestra-exam regeneration is delta-scoped by the
+AC->check map), then re-run the gate. Do not edit the anchor to match.
+exit=2
+
+--- 7g exam.py's own ANCHOR disagrees with the manifest ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+REFUSED: exam is stale — no verdict emitted.
+  cause:             anchor copies disagree — manifest vs exam.py on raise_commit; exam.py says raise_commit=059837b1323b009647d266ed99ee35f49b2bb10d
+  surface_hash:      recorded 7e47c7ab7978 == current 7e47c7ab7978
+  raise_commit:      recorded f59837b1 == current f59837b1
+  extractor_version: recorded 1 == current 1
+A verdict here would certify the delivered work against a superseded requirement.
+Regenerate the affected checks (kestra-exam regeneration is delta-scoped by the
+AC->check map), then re-run the gate. Do not edit the anchor to match.
+exit=2
+
+--- 7h the extractor resolves nowhere (all four candidates) ---
+$ HOME=/tmp/kx36/fakehome python3 exam_anchor.py <run> <exam>
+extractor missing — no requirement_surface.py at any of:
+    /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/requirement_surface.py
+    /tmp/kx36/repo/workflows/runs/tally-refund/requirement_surface.py
+    /private/tmp/kx36/repo/workflow/kestra-build/scripts/requirement_surface.py
+    /tmp/kx36/fakehome/.claude/skills/kestra-build/scripts/requirement_surface.py
+exit=2
+
+--- 7i back to fresh, nothing left mutated ---
+$ python3 /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund/exam_anchor.py /tmp/kx36/repo/workflows/runs/tally-refund /tmp/kx36/exams/git.example.test__kx-fixture__tally/tally-refund
+FRESH: surface 7e47c7ab7978 @ raise f59837b1323b · extractor v1 — manifest, pointer and exam.py agree.
+exit=0
+

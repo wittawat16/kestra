@@ -1,0 +1,6 @@
+=== leg 8 — write_scope violation: snapshot to evidence/, then revert, tree clean ===
+ M run/state.json
+?? src/
+ASSERT OK: snapshot copy exists in evidence/ (exit 0)
+ASSERT OK: violating file is gone from the worktree (exit 1)
+ASSERT OK: worktree clean outside the run folder (exit 1)

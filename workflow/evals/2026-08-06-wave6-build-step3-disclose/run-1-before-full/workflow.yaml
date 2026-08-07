@@ -1,0 +1,369 @@
+# Path conventions for this run folder (stated once because this layout is unusual):
+#   * Every exit_criteria.run executes with cwd = THIS run folder. The target repo is ../fixture
+#     and the spec is ../spec-full/0-spec.md — both siblings of this folder, not parents of it.
+#     Normally the run folder sits inside the repo and this note is unnecessary.
+#   * write_scope paths are REPO-relative (that is what the orchestrator diffs), with one forced
+#     exception: spec-review owns the spec, which lives outside the repo tree in this layout, so
+#     its single glob is written run-folder-relative. Flagged rather than smoothed over.
+#   * Verdict artifacts, evidence/ and completion-summary.md live in this run folder.
+#
+# Monolithic fold (form B): 0-spec.md only, no sliced ticket set was named — so no `tickets:` map,
+# no embedded ticket blocks, and no `spec_anchor` (the spec carries no `> Spec-ticket:` preamble
+# marker). The validator WARNs on the absent anchor; for a monolithic workflow that WARN is the
+# expected shape, not a defect.
+#
+# No exit_criteria.progress anywhere: the spec has no `## Exit Criteria` section, so there is no
+# `progress:` bullet to copy. A stage without one is the normal case; none was invented.
+
+feature: priority-tier
+source_spec: ../spec-full/0-spec.md
+mode: full
+
+# mode: full was forced by TWO rows of the lite/full condition table, not by preference:
+#   * "the tests will contain test doubles" — the spec's Reality Constraints ### External
+#     dependencies table has a populated row (`HANDLERS` module-level Map).
+#   * "Runtime Invariants is non-trivial" — two rows, both halting, and both guard a failure that
+#     is SILENT in production (a wrong-tier drop loses a message with no error surfaced).
+# The root-cause override does not apply: this is a feature spec, not a diagnosed defect — there is
+# no pasted, executed repro command with real output, so guard (a) fails before (b)/(c) are reached.
+
+stages:
+  - id: spec-review
+    depends_on: []
+    brief: >
+      Review ../spec-full/0-spec.md for the defects that are cheap to fix now and expensive to fix
+      after the tests are frozen. The mechanical layer already verified presence/existence only —
+      the semantic content of every column is still yours to judge: no on-violation resolving to
+      log-and-continue, no contradiction between invariants / edge cases / ACs, every AC testable
+      without a follow-up question, every checkable claim actually run. Specifically: (1) both
+      Runtime Invariants say "halt" — confirm each one actually names a detection point in real
+      code and that throwing is reachable, given the spec's own claim that nothing in this codebase
+      wraps step() in a try/catch; (2) the Reality Constraints ### External dependencies row for
+      HANDLERS says it does NOT guarantee that a handler won't throw a non-Error value, and Open
+      Items leaves the resulting `error: undefined` unresolved — check whether that collides with
+      Runtime Invariant #1's "non-empty error string" requirement, because as written a handler
+      throwing a string turns a drop into a halt, and decide whether the spec must settle that
+      before tests are written rather than leaving it to implement; (3) AC "unrecognized tier
+      defaults to paid" is marked in Edge Cases as an INFERRED extension of the idea's stated rule
+      rather than literal idea text — review the inference itself, do not assume a human already
+      blessed it; (4) the AC Coverage Map has no Source column, so no AC cites its intent-layer
+      origin — say whether that blocks traceability for this fold or is acceptable for a monolithic
+      run. Any numeric finding must name the exact quantity measured, the inputs, and the
+      command/script used, with its output pasted; a numeric claim without them is not a finding
+      yet. Where a blocking finding admits a runnable check, give it a command whose exit code
+      flips once the finding is addressed — skip that only for genuinely judgment-only findings.
+      Write the verdict to spec-verdict.md: first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED"; then a findings table, one row per finding, columns
+      severity / claim in one line / file:line; then paths into evidence/ for anything that took
+      real computation. A finding needing more than a row gets its row plus a short paragraph
+      below the table — the format cuts narration, never substance.
+    write_scope: ["../spec-full/0-spec.md"]
+    exit_criteria:
+      type: command
+      # This run's own copy of validate_spec.py (emitted beside workflow.yaml), so the frozen
+      # criterion does not depend on kestra-build being installed on whatever machine runs it.
+      # Verified standalone at generation time: exit 0 with 5 WARNs, no FAIL.
+      run: "python3 validate_spec.py ../spec-full/0-spec.md ../fixture && grep -q '^VERDICT: CLEAR$' spec-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2
+      reason: >
+        bounded attempt to fix the spec in place — falls through to reworking if unresolved after
+        2 attempts or the same diff repeats without progress
+
+  - id: generate-tests
+    depends_on: [spec-review]
+    brief: >
+      Write the frozen test suite for the tier-based retry policy. No implementation exists yet:
+      these tests must fail for the right reason (missing feature), never error out as a file.
+
+      FIRST, in this same spawn and before any test code, write a scenario table at the top of the
+      test file as a comment block: one row per AC / Business Rule / Edge Case, mapping it 1:1 to a
+      scenario title and its Given/When/Then. Every row must trace to something in the spec; do not
+      invent rows, and do not leave an AC without a row.
+
+      The spec's ACs are already written as Given-When-Then, so mirror that structure one-to-one.
+      This repo has no Gherkin tooling and CLAUDE.md mandates zero third-party dependencies, so use
+      node:test `test('...')` blocks with the Given/When/Then visible in the test name and the body
+      layout — a format instruction only; it changes nothing about the mechanics.
+
+      Runner facts already verified at generation time, so you do not need to rediscover them:
+      the suite is collected by `npm --prefix ../fixture test`, which runs `node --test
+      test/*.test.js` with cwd = the repo. The ONLY runner plumbing is package.json's
+      `"type": "module"` and its `test` script — both already present, so there is no conftest /
+      jest.config / pythonpath equivalent to create. package.json is deliberately NOT in your
+      write_scope and NOT in the freeze: it is a dependency manifest, and freezing it would turn an
+      unrelated future version bump into a halt about tampered tests.
+
+      Reference `getMetrics` — which does not exist yet — through a NAMESPACE import
+      (`import * as queue from '../src/queue.js'`, then `queue.getMetrics`), never a named import.
+      Verified directly at generation time on this exact repo: a named import of a missing export is
+      a link-time SyntaxError that collapses the ENTIRE file into one failure, so every scenario in
+      it stops failing on its own assertion. `node --check` does not catch this. The exit_criteria
+      greps the runner's own "does not provide an export named" text for exactly that reason.
+
+      Use real fixtures only — register real handler functions through the real `registerHandler`.
+      Do not import any mocking facility, including node:test's own `mock`; exit_criteria enforces
+      that mechanically.
+
+      HANDLERS is process-global state with no isolation between test cases (spec's Reality
+      Constraints), and the existing suite already occupies the `type` strings 'email' and 'boom'.
+      Pick `type` strings used nowhere else in test/queue.test.js.
+
+      Before finishing, cross-check the assumptions your scenarios share — `type`-string
+      allocation, queue-shape expectations, the exact result-object fields asserted, ordering of
+      pending after a retry — against each other AND against the two pre-existing tests in the same
+      file, and name each pair you checked. This file is the only test file, so a contradiction here
+      is a contradiction between tests in one file, which is the shape most easily missed.
+
+      The spec's Open Items leaves undecided what happens when a handler throws a non-Error value
+      (`err.message` would be undefined, tripping Runtime Invariant #1). Do not silently pick a
+      side in an assertion: if spec-review settled it, follow that; if not, say so plainly in the
+      scenario table and leave that case unasserted rather than freezing a guess.
+
+      Comment discipline: default to no comments. Write one only where the *why* is genuinely
+      non-obvious from the code (a hidden constraint, a workaround, why a simpler approach fails) —
+      never one restating what a well-named identifier already says, never a multi-line block where
+      one line does, and never a reference to this run, this spec, an AC id, or a copy-provenance
+      path. The scenario table is the one deliberate exception. Every comment line here gets
+      re-pasted verbatim into every downstream spawn that reads this file's diff.
+
+      A test-writing / TDD-focused skill fits this stage well; `tdd` is installed in the session
+      that generated this workflow — try it if it is available where this runs, and proceed
+      directly if not.
+    write_scope: ["test/queue.test.js"]
+    exit_criteria:
+      type: command
+      # Polarity gate, verified standalone at generation time against three planted scenarios:
+      # named-import collapse -> exit 1; honest namespace-import red (2 pass / 2 fail) -> exit 0;
+      # a smuggled `mock` import -> exit 1. `|| true` absorbs the expected non-zero from the red
+      # suite; every clause after it is a boolean, so the chain's own exit code is the verdict.
+      run: "mkdir -p evidence && npm --prefix ../fixture test > evidence/generate-tests-red.log 2>&1 || true && ! grep -qEi 'mock|jest|sinon|proxyquire|testdouble' ../fixture/test/queue.test.js && grep -qF 'import * as' ../fixture/test/queue.test.js && ! grep -q 'does not provide an export named' evidence/generate-tests-red.log && grep -qE '^# fail [1-9]' evidence/generate-tests-red.log && grep -qE '^# pass [1-9]' evidence/generate-tests-red.log"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  # Kept, not folded in. The doubles row of the lite/full table fires (Reality Constraints lists
+  # HANDLERS), and the chosen test design uses real fixtures — which is normally the cue to fold
+  # this stage's check into generate-tests' exit_criteria. It is NOT folded here, deliberately:
+  # the defect an independent reader catches on this spec is a test-vs-test contradiction over
+  # process-global HANDLERS state (the spec's own Reality Constraints say it does not guarantee
+  # isolation between test cases; its Risks name registry collision across tests by name). That
+  # class is double-independent — no mock-import grep can ever see it — and every new test lands
+  # in the SAME file as the two existing ones, so the cross-file self-check that would justify
+  # folding has no second file to cross against and is structurally weaker here than in the
+  # general case. Everything mechanically detectable stayed in generate-tests' exit_criteria.
+  # It sits BEFORE the freeze on purpose: a finding here is a bounded fixing loop against
+  # generate-tests, where the same finding after the freeze would cost a reworking bounce.
+  - id: test-review
+    depends_on: [generate-tests]
+    brief: >
+      Read the tests just written against the spec's Reality Constraints and report a table with
+      one row per risk — ordering/preconditions, response realism, type/shape drift, path parity,
+      own shared logic, non-determinism — each marked applicable or n/a with file:line evidence. A
+      prose reviewer reports what it noticed; the table forces an answer for the rows it did not.
+      Add rows this codebase's own conventions imply and say which you added — at minimum:
+      HANDLERS registration order versus step() (the spec's stated precondition), `type`-string
+      collision between new tests and the pre-existing 'email'/'boom' registrations, and
+      contradictions BETWEEN tests in this single file about queue shape, result-object fields, or
+      pending ordering. Judgment only — generate-tests' exit_criteria already ran the mechanical
+      checks (no mock imports, namespace import present, no whole-file export collapse, suite
+      genuinely red with the existing tests still green); do not re-derive them. On a re-review
+      after a fixing attempt (the context pack will include the fix diff and your own prior
+      findings), verify the findings are addressed and review the changed lines and their
+      interactions with the rest of the suite; do not re-derive relations between unchanged files
+      already cleared, which write_scope enforcement guarantees are unchanged. Any numeric finding
+      names the quantity measured, the inputs, and the command, with output pasted; a blocking
+      finding that admits a runnable check carries a command whose exit code flips once it is
+      addressed. Write the verdict to test-verdict.md: first line exactly "VERDICT: CLEAR" or
+      "VERDICT: CHANGES_REQUESTED"; then a findings table (severity / claim in one line /
+      file:line); then evidence/ paths for anything that took real computation. A finding needing
+      more than a row gets its row plus a short paragraph below the table.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' test-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: generate-tests
+
+  # The freeze is its own act, separate from writing the tests: writing and freezing in one stage
+  # would lock the tests at the only moment no implementation exists to be protected against,
+  # while giving up the one cheap window to fix a defect IN the tests. This stage writes nothing —
+  # it owns the test paths solely so the test-hash has something to snapshot, and re-runs
+  # generate-tests' own static checks against the exact commit being frozen. write_scope is the
+  # test source alone: package.json is excluded on purpose (dependency manifest, churn-prone), so
+  # a later unrelated version bump cannot halt the run as frozen-test tampering.
+  - id: freeze-tests
+    depends_on: [test-review]
+    brief: >
+      No edits. This stage exists to snapshot and commit the approved test suite as the frozen
+      baseline every later stage is held to. kestra-run runs exit_criteria.run directly; spawn
+      nothing.
+    write_scope: ["test/queue.test.js"]
+    freeze_after: true
+    exit_criteria:
+      type: command
+      run: "mkdir -p evidence && npm --prefix ../fixture test > evidence/freeze-tests-red.log 2>&1 || true && ! grep -qEi 'mock|jest|sinon|proxyquire|testdouble' ../fixture/test/queue.test.js && grep -qF 'import * as' ../fixture/test/queue.test.js && ! grep -q 'does not provide an export named' evidence/freeze-tests-red.log && grep -qE '^# fail [1-9]' evidence/freeze-tests-red.log && grep -qE '^# pass [1-9]' evidence/freeze-tests-red.log"
+    on_fail:
+      action: reworking
+      reason: "tests no longer pass their own checks at the freeze point — resolve upstream, don't patch here"
+
+  - id: implement-tier-retry-policy
+    depends_on: [freeze-tests]
+    brief: >
+      Implement the tier-based retry policy in src/queue.js against the frozen tests. Do NOT modify
+      test/** — those paths are frozen and the orchestrator will reject a diff that touches them
+      regardless of intent.
+
+      Scope, per the spec's Files to Touch: add `dropped: []` to createQueue(); add the tier branch
+      to step()'s catch block; add a new named export getMetrics(queue). Named exports only, ES
+      modules, zero third-party dependencies (CLAUDE.md).
+
+      Install the checks the spec's Runtime Invariants section calls for, as real guards. The frozen
+      tests will pass whether or not those guards exist — they were derived from acceptance
+      criteria, which enumerate cases someone anticipated, while an invariant exists for the cases
+      nobody did — so their presence is on you here, not on the test run. Both must HALT: (1)
+      immediately before `queue.dropped.push(message)`, throw unless the record carries its failure
+      (`attempts >= 1` and a non-empty `error` string); (2) at the top of the free-tier branch,
+      throw unless `message.tier === 'free'` literally, guarding a future refactor that loosens the
+      check to case-insensitive or truthy. A guard that logs and continues satisfies the letter of
+      that section and provides none of its value — do not write one.
+
+      Constraints the frozen tests may well not cover, from the spec's Reality Constraints and
+      Codebase Survey: resolve tier with the SAME single expression in both call sites
+      (`message.tier === 'free' ? 'free' : 'paid'` in step()'s catch and in getMetrics), so a future
+      tier value cannot be classified differently by the two; derive getMetrics' counts by scanning
+      queue.done / queue.dropped at call time, never from a separately maintained counter, which
+      would be a second source of truth free to drift; keep the no-handler ("skipped") path strictly
+      ahead of and independent of any tier check, since a free-tier message that merely has no
+      handler yet must never be dropped; and keep the additions additive — do not rename or remove
+      `id`, `status`, `attempts` on results, or `attempts` on messages, or the two existing tests
+      break.
+
+      The spec's Open Items leaves the non-Error-throw case undecided (`err.message` undefined
+      would trip Runtime Invariant #1 and halt). Pick one of the two options the spec names — accept
+      the halt as correct, or coerce with a String(err) fallback — and say which, and why, in the
+      commit body. Do not leave it implicit.
+
+      Comment discipline: default to no comments. One only where the *why* is genuinely non-obvious
+      (the invariant guards are the likely candidates, one line each) — never restating a
+      well-named identifier, never a multi-line block where one line does, and never referencing
+      this run, this spec, an AC id, or a copy-provenance path. Every comment line here is
+      re-pasted into every downstream spawn that reads this diff.
+
+      An implementation-focused skill fits this stage well; `karpathy-guidelines` is installed in
+      the session that generated this workflow — try it if available where this runs, proceed
+      directly if not.
+    write_scope: ["src/queue.js"]
+    # model / effort both omitted deliberately. `model`: the user asked for nothing faster or
+    # cheaper, and omitting it inherits the orchestrator's own model, which is the safe default.
+    # `effort`: auto-set to low ONLY under mode: lite — this is mode: full, and full's triggers
+    # describe other stages' complexity, not this one's, so the signal does not transfer.
+    exit_criteria:
+      type: command
+      run: "npm --prefix ../fixture test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+
+  - id: verify-acceptance-criteria
+    depends_on: [implement-tier-retry-policy]
+    brief: >
+      Before doing anything else, check the frozen test suite (now real, unlike when this brief was
+      written) against the spec's AC Coverage Map: does every AC map to an assertion that actually
+      exists and actually runs under exit_criteria.run? If yes for all of them, there is no
+      judgment work here — say so plainly and stop; exit_criteria.run's real exit code IS the
+      verification, and kestra-run can execute it directly without spawning you next time. If one
+      or more ACs are NOT covered by any frozen assertion, name exactly which ones and exercise
+      only those at runtime by hand, reporting what you observed against what the AC requires. Two
+      ACs are the likely gaps to check first, because the Coverage Map defers them: "npm test exits
+      0 with all tests passing" is the exit_criteria itself rather than an assertion, and the
+      non-Error-throw case from Open Items may have been left deliberately unasserted by
+      generate-tests. Do not re-run and re-paste the suite output that exit_criteria.run already
+      produced.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "npm --prefix ../fixture test"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-tier-retry-policy
+
+  # Sibling of verify-acceptance-criteria, NOT its successor — both depend on the implement stage
+  # directly. Neither writes code (write_scope: [] on both), so there is nothing to collide on and
+  # review's diff is already final the moment implement passes; chaining them would buy a whole
+  # extra sequential subagent round-trip for no correctness reason. If BOTH fail at once that is
+  # still ONE fix attempt on implement-tier-retry-policy with both stages' findings combined.
+  - id: review
+    depends_on: [implement-tier-retry-policy]
+    brief: >
+      Review the real diff since the last stage commit for correctness, edge cases, and
+      injection / authn / secrets risk. Passing tests only prove the spec's own acceptance
+      criteria; this stage exists to catch what the spec never thought to test for. Read the diff
+      specifically against the spec's Runtime Invariants section: a missing guard is invisible to
+      the frozen tests by construction (they were derived from anticipated cases), so confirm both
+      guards are present, that each HALTS rather than logging and continuing, and that neither is
+      reachable only on a path the tests never take. Also check the two constraints the tests may
+      not cover: that the tier-resolution expression is literally identical at both call sites, and
+      that getMetrics derives its counts from queue.done / queue.dropped at call time rather than
+      from any maintained counter. Any numeric finding must name the exact quantity measured, the
+      inputs, and the command, with its output pasted — a numeric claim without them is not a
+      finding yet; and any blocking finding that admits a runnable check carries a command whose
+      exit code flips once the finding is addressed, so a fixing retry can confirm it mechanically
+      instead of asking you to re-derive it. Skip that only for genuinely judgment-only findings.
+      Any computation costing more than a moment writes its result AND the exact command that
+      produced it into evidence/, and is only valid for the commit it was computed against.
+      Whatever code-review and security-review skills you have available both fit this stage well;
+      `code-review` and `security-review` are installed in the session that generated this
+      workflow — try them, proceed with a direct review if unavailable. Write the verdict to
+      review-verdict.md: first line exactly "VERDICT: CLEAR" or "VERDICT: CHANGES_REQUESTED"; then
+      a findings table (severity / claim in one line / file:line); then evidence/ paths. A finding
+      needing more than a row gets its row plus a short paragraph below the table — the format cuts
+      narration, never substance.
+    write_scope: []
+    exit_criteria:
+      type: command
+      run: "grep -q '^VERDICT: CLEAR$' review-verdict.md"
+    on_fail:
+      action: fixing
+      max_attempts: 3
+      escalate_at: 2
+      target: implement-tier-retry-policy
+
+  # No deploy-readiness stage and no deploy fold into review's brief: the spec sets
+  # needs_devops: false, and that flag alone decides — never a keyword scan of the spec prose.
+  #
+  # No separate repo-declared pre-merge gate stage either. CLAUDE.md documents exactly one test
+  # command (`npm test` -> `node --test test/*.test.js`), which is the very command verify's
+  # exit_criteria already runs; a sibling stage would re-run an identical command for a second
+  # copy of the same exit code. A distinct declared gate would have earned its own stage.
+
+  - id: done
+    depends_on: [verify-acceptance-criteria, review]
+    brief: >
+      Every upstream stage passed. Write completion-summary.md in this run folder: what shipped,
+      which commits, the spec / test / review verdicts, and the resolution chosen for the spec's
+      non-Error-throw Open Item. Include a per-stage cost table sourced from what the orchestrator
+      already tracked while running this workflow — do not re-derive it and do not spawn anything
+      to measure it. Columns: stage id, subagent tokens, wall time, attempt count, and spawn type
+      (fresh / resumed / none). Populate spawn type only for a stage whose attempts all happened
+      inside one session; across a pause/resume write "N/A — multi-session resume, not tracked"
+      for that row rather than reconstructing a guess. A missing metric is an absent cell, never a
+      stage failure. This table is the only place a reader can see this run's mode-versus-cost
+      trade-off: mode: full was chosen here, so record what the extra gated stages actually cost.
+    write_scope: ["completion-summary.md"]
+    exit_criteria:
+      type: artifact_exists
+      artifact: "completion-summary.md"
+    on_fail:
+      action: fixing
+      max_attempts: 2
+      escalate_at: 2

@@ -1,0 +1,13 @@
+=== leg 4 — partial anchor (surface_hash deleted): run-side MISMATCH + validator FAIL ===
+MISMATCH: partial anchor — surface_hash missing or malformed
+exit=1
+ASSERT OK: partial anchor is a MISMATCH before any command runs (exit 1)
+$ python3 /tmp/kx38/partial-run/validate_workflow.py /tmp/kx38/partial-run   # the fold-side view of the same defect
+WARN: stage 'implement-csv-writer' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-export-endpoint' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+WARN: stage 'implement-streaming' embedded ticket body contains ' #', which this repo's YAML-subset parser strips from the *parsed* brief — consumers must read the brief from the raw file
+FAIL: spec_anchor is partial — 'surface_hash' is missing; a partial anchor is a FAIL (an absent anchor is a WARN)
+
+1 problem(s) found — fix before treating this workflow as frozen.
+exit=1
+ASSERT OK: validate_workflow.py FAILs the partial anchor (exit 1)
